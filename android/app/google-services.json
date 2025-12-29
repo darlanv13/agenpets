@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "936955635480",
+    "project_id": "agenpets",
+    "storage_bucket": "agenpets.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:936955635480:android:dad2a038ccd3cf2286e06d",
+        "android_client_info": {
+          "package_name": "com.example.agenpet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDd4yk9yjyEIA1vVlBuFyDMmfyY_-ti96k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
