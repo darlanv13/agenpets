@@ -1,3 +1,4 @@
+import 'package:agenpet/admin_web/views/configuracao_agenda_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 // Importe as novas telas
@@ -22,6 +23,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     HotelView(),
     GestaoPrecosView(), // Índice 3
     EquipeView(), // Índice 4
+    ConfiguracaoAgendaView(),
   ];
 
   @override
@@ -98,6 +100,8 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                   FontAwesomeIcons.moneyBillWave,
                 ),
                 _buildMenuItem(4, "Equipe & RH", FontAwesomeIcons.users),
+
+                _buildMenuItem(5, "Config. Agenda", FontAwesomeIcons.clock),
 
                 Spacer(),
                 ListTile(
