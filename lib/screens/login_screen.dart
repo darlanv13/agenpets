@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:cpf_cnpj_validator/cpf_validator.dart';
@@ -30,23 +31,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _verificarAcesso() async {
-    // 1. Pega o CPF limpo (só números)
-    String cpfLimpo = maskCpf.getUnmaskedText();
+    // 1. Pega os dois formatos
+    String cpfLimpo = maskCpf.getUnmaskedText(); // 11122233344
+    String cpfFormatado = _cpfController.text; // 111.222.333-44
 
-    // 2. Validação Matemática do CPF
+    // 2. Validação
     if (!CPFValidator.isValid(cpfLimpo)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.error, color: Colors.white),
-              SizedBox(width: 10),
-              Text("CPF Inválido. Verifique os números."),
-            ],
-          ),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text("CPF Inválido."), backgroundColor: Colors.red),
       );
       return;
     }
@@ -54,25 +46,41 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 3. Verifica se é PROFISSIONAL
-      // Procura na coleção 'profissionais' se existe algum documento com o campo 'cpf' igual
+      // --- LÓGICA DE ADMIN (MASTER) ---
+      // Se o CPF for o do "Chefe", manda direto para o painel de gestão
+      if (cpfFormatado == "069.125.303-03") {
+        // Defina o CPF do dono aqui
+        if (kIsWeb) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/admin_web',
+          ); // Versão Desktop
+        } else {
+          Navigator.pushNamed(
+            context,
+            '/admin',
+          ); // Versão Mobile (Dashboard simplificado)
+        }
+        return;
+      }
+      // 3. Verifica se é PROFISSIONAL (Busca com CPF Formatado)
       final proQuery = await _db
           .collection('profissionais')
-          .where('cpf', isEqualTo: cpfLimpo)
+          .where('cpf', isEqualTo: cpfFormatado)
           .limit(1)
           .get();
 
       if (proQuery.docs.isNotEmpty) {
-        // É UM PROFISSIONAL! Pergunta como quer entrar.
-        _mostrarOpcoesDeAcesso(cpfLimpo);
+        // CORREÇÃO: Passamos o Formatado para o menu funcionar
+        _mostrarOpcoesDeAcesso(cpfFormatado);
       } else {
-        // NÃO É PROFISSIONAL. Segue fluxo de cliente normal.
+        // Cliente usa CPF Limpo
         await _loginComoCliente(cpfLimpo);
       }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Erro de conexão: $e")));
+      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -96,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // Modal para escolher perfil (UX Diferenciada)
-  void _mostrarOpcoesDeAcesso(String cpf) {
+  void _mostrarOpcoesDeAcesso(String cpfFormatado) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -123,21 +131,38 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               SizedBox(height: 30),
 
-              // Opção 1: Entrar como Profissional
+              // OPÇÃO 1: PROFISSIONAL (Usa CPF Formatado)
               _buildOpcaoAcesso(
                 icon: FontAwesomeIcons.briefcase,
                 color: Colors.green,
                 titulo: "Acessar como Profissional",
                 subtitulo: "Ver minha agenda e atender pets",
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.pushNamed(context, '/profissional');
+
+                  // Agora a busca vai funcionar pois 'cpfFormatado' tem pontos e traço
+                  final proSnapshot = await _db
+                      .collection('profissionais')
+                      .where('cpf', isEqualTo: cpfFormatado)
+                      .limit(1)
+                      .get();
+
+                  if (proSnapshot.docs.isNotEmpty) {
+                    final doc = proSnapshot.docs.first;
+                    final proData = doc.data();
+                    proData['id'] = doc.id;
+                    Navigator.pushNamed(
+                      context,
+                      '/profissional',
+                      arguments: proData,
+                    );
+                  }
                 },
               ),
 
               SizedBox(height: 15),
 
-              // Opção 2: Entrar como Cliente
+              // OPÇÃO 2: CLIENTE (Usa CPF Limpo)
               _buildOpcaoAcesso(
                 icon: FontAwesomeIcons.user,
                 color: Colors.blue,
@@ -145,7 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 subtitulo: "Agendar serviços para meus pets",
                 onTap: () {
                   Navigator.pop(context);
-                  _loginComoCliente(cpf); // Segue fluxo normal
+                  // CORREÇÃO: Garante que o cliente logue com apenas números
+                  _loginComoCliente(maskCpf.getUnmaskedText());
                 },
               ),
             ],

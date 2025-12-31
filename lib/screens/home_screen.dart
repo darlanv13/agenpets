@@ -203,14 +203,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () => _navegar('/agendamento'),
                         ),
                         _buildCard(
-                          icon: FontAwesomeIcons.bed,
-                          color: Colors.orange,
+                          icon: FontAwesomeIcons.hotel,
+                          color: Colors.orange, // Laranja combina com hotel
                           label: "Hotelzinho",
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Em breve!")),
-                            );
-                          },
+                          onTap: () => _navegar('/hotel'),
                         ),
                         _buildCard(
                           icon: FontAwesomeIcons.paw,
@@ -219,14 +215,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () => _navegar('/meus_pets'),
                         ),
                         _buildCard(
+                          icon: FontAwesomeIcons.crown,
+                          color: Colors.amber, // Dourado
+                          label: "Clube AgenPet",
+                          onTap: () => _navegar('/assinatura'),
+                        ),
+                        _buildCard(
                           icon: FontAwesomeIcons.fileInvoiceDollar,
                           color: Colors.green,
                           label: "Histórico",
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Em breve!")),
-                            );
-                          },
+                          onTap: () =>
+                              _navegar('/historico'), // AGORA CONECTADO
                         ),
                       ],
                     ),

@@ -1,10 +1,8 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/firebase_service.dart'; // Certifique-se que o service usa o banco 'agenpets'
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ProfissionalScreen extends StatefulWidget {
   @override
@@ -12,200 +10,258 @@ class ProfissionalScreen extends StatefulWidget {
 }
 
 class _ProfissionalScreenState extends State<ProfissionalScreen> {
-  // Conexão direta com banco agenpets (conforme configuramos no service)
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
-  // Função para abrir WhatsApp
-  Future<void> _abrirWhatsApp(
-    String telefone,
-    String nomePet,
-    String nomeDono,
-  ) async {
-    // Limpa caracteres não numéricos
-    final numero = telefone.replaceAll(RegExp(r'[^0-9]'), '');
-    final mensagem = Uri.encodeComponent(
-      "Olá $nomeDono! 🐶 O banho/tosa do *$nomePet* foi finalizado. Ele já está pronto para ir para casa! 🏠",
-    );
+  Map<String, dynamic>? _dadosPro;
+  DateTime _dataFiltro = DateTime.now();
 
-    final url = Uri.parse("https://wa.me/55$numero?text=$mensagem");
-
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Não foi possível abrir o WhatsApp")),
-      );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_dadosPro == null) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      _dadosPro = args;
     }
   }
 
-  // Função para mudar status
-  Future<void> _atualizarStatus(String docId, String novoStatus) async {
-    await _db.collection('agendamentos').doc(docId).update({
-      'status': novoStatus,
-    });
+  // Função para marcar como concluído
+  Future<void> _concluirServico(String agendamentoId) async {
+    try {
+      await _db.collection('agendamentos').doc(agendamentoId).update({
+        'status': 'concluido',
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Serviço concluído! 🛁")));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro ao atualizar.")));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Filtra agendamentos de HOJE
-    final hoje = DateTime.now();
-    final inicioDia = DateTime(hoje.year, hoje.month, hoje.day);
-    final fimDia = DateTime(hoje.year, hoje.month, hoje.day, 23, 59, 59);
+    if (_dadosPro == null)
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    // Filtros de Data
+    final inicioDia = DateTime(
+      _dataFiltro.year,
+      _dataFiltro.month,
+      _dataFiltro.day,
+    );
+    final fimDia = DateTime(
+      _dataFiltro.year,
+      _dataFiltro.month,
+      _dataFiltro.day,
+      23,
+      59,
+      59,
+    );
 
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text("Agenda do Dia ✂️"),
-        backgroundColor:
-            Colors.green[700], // Cor diferente para diferenciar do app cliente
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Área do Profissional", style: TextStyle(fontSize: 14)),
+            Text(
+              "Olá, ${_dadosPro!['nome']}",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green[700],
+        elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () => setState(() {}),
+            icon: Icon(Icons.calendar_today),
+            onPressed: () async {
+              final data = await showDatePicker(
+                context: context,
+                initialDate: _dataFiltro,
+                firstDate: DateTime.now().subtract(Duration(days: 30)),
+                lastDate: DateTime.now().add(Duration(days: 30)),
+              );
+              if (data != null) setState(() => _dataFiltro = data);
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.exit_to_app),
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _db
-            .collection('agendamentos')
-            .where(
-              'data_inicio',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(inicioDia),
-            )
-            .where(
-              'data_inicio',
-              isLessThanOrEqualTo: Timestamp.fromDate(fimDia),
-            )
-            .orderBy('data_inicio')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData)
-            return Center(child: CircularProgressIndicator());
+      body: Column(
+        children: [
+          // Cabeçalho de Data
+          Container(
+            padding: EdgeInsets.all(15),
+            color: Colors.green[600],
+            width: double.infinity,
+            child: Text(
+              "Agenda de ${DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR').format(_dataFiltro)}",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
 
-          final docs = snapshot.data!.docs;
+          // Lista de Agendamentos
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _db
+                  .collection('agendamentos')
+                  .where('profissional_id', isEqualTo: _dadosPro!['id'])
+                  .where(
+                    'data_inicio',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(inicioDia),
+                  )
+                  .where(
+                    'data_inicio',
+                    isLessThanOrEqualTo: Timestamp.fromDate(fimDia),
+                  )
+                  .orderBy('data_inicio', descending: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator());
+                }
 
-          if (docs.isEmpty) {
-            return Center(
-              child: Text("Sem agendamentos para hoje. Aproveite o café! ☕"),
-            );
-          }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.event_busy, size: 50, color: Colors.grey),
+                        SizedBox(height: 10),
+                        Text(
+                          "Agenda livre para hoje!",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final docId = docs[index].id;
-              final DateTime horario = (data['data_inicio'] as Timestamp)
-                  .toDate();
-              final String status = data['status'] ?? 'agendado';
+                return ListView.builder(
+                  padding: EdgeInsets.all(15),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (ctx, index) {
+                    final doc = snapshot.data!.docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final hora = (data['data_inicio'] as Timestamp).toDate();
+                    final status = data['status'] ?? 'agendado';
 
-              // Buscamos dados do usuário (precisamos do telefone para o Zap)
-              // Nota: Em um app real, seria melhor salvar o telefone dentro do agendamento para economizar leitura
+                    // Se não for 'agendado' (ex: concluido, cancelado), mostra diferente
+                    bool isAtivo =
+                        status == 'agendado' ||
+                        status == 'aguardando_pagamento';
 
-              return Card(
-                margin: EdgeInsets.all(10),
-                color: status == 'pronto_retirada'
-                    ? Colors.green[100]
-                    : Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            DateFormat('HH:mm').format(horario),
+                    return Card(
+                      color: isAtivo ? Colors.white : Colors.grey[200],
+                      margin: EdgeInsets.only(bottom: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.all(15),
+                        leading: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.green),
+                          ),
+                          child: Text(
+                            DateFormat('HH:mm').format(hora),
                             style: TextStyle(
-                              fontSize: 24,
                               fontWeight: FontWeight.bold,
+                              color: Colors.green[800],
                             ),
                           ),
-                          Chip(
-                            label: Text(status.toUpperCase()),
-                            backgroundColor: _getCorStatus(status),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        "Pet: ${data['pet_id']} (Nome Pendente)",
-                        style: TextStyle(fontSize: 18),
-                      ),
-                      Text("Serviço: ${data['servico']}"),
-                      Text("Profissional: ${data['profissional_nome']}"),
-                      Divider(),
-
-                      // BOTOES DE AÇÃO
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (status == 'agendado' ||
-                              status == 'aguardando_pagamento')
-                            ElevatedButton.icon(
-                              icon: Icon(Icons.play_arrow),
-                              label: Text("INICIAR"),
-                              onPressed: () =>
-                                  _atualizarStatus(docId, 'em_andamento'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                              ),
-                            ),
-
-                          if (status == 'em_andamento')
-                            ElevatedButton.icon(
-                              icon: FaIcon(FontAwesomeIcons.whatsapp, size: 18),
-                              label: Text("AVISAR CLIENTE"),
-                              onPressed: () async {
-                                // Primeiro muda o status
-                                await _atualizarStatus(
-                                  docId,
-                                  'pronto_retirada',
-                                );
-
-                                // Busca telefone do dono (Exemplo simples: pegando do documento User)
-                                // Na versão final, traga o telefone junto no agendamentoController.js
-                                final userDoc = await _db
-                                    .collection('users')
-                                    .doc(data['userId'])
-                                    .get();
-                                final telefone =
-                                    userDoc.data()?['telefone'] ?? '';
-                                final nomeDono =
-                                    userDoc.data()?['nome'] ?? 'Cliente';
-
-                                _abrirWhatsApp(telefone, "Seu Pet", nomeDono);
+                        ),
+                        title: Text(
+                          data['servico'].toString().toUpperCase(),
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 5),
+                            // Busca nome do Pet (poderia vir salvo no agendamento para otimizar, mas vamos buscar rapidinho ou mostrar o ID)
+                            // Para simplificar, vou mostrar "Pet do cliente" se não tivermos o nome salvo no agendamento
+                            FutureBuilder<DocumentSnapshot>(
+                              future: _db
+                                  .collection('users')
+                                  .doc(data['userId'])
+                                  .collection('pets')
+                                  .doc(data['pet_id'])
+                                  .get(),
+                              builder: (context, petSnap) {
+                                if (petSnap.hasData && petSnap.data!.exists) {
+                                  final petData = petSnap.data!.data() as Map;
+                                  return Row(
+                                    children: [
+                                      FaIcon(
+                                        petData['tipo'] == 'cao'
+                                            ? FontAwesomeIcons.dog
+                                            : FontAwesomeIcons.cat,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        "${petData['nome']} (${petData['raca']})",
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return Text("Carregando pet...");
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                            ),
+                            SizedBox(height: 5),
+                            Text(
+                              "Status: $status",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
                               ),
                             ),
-                        ],
+                          ],
+                        ),
+                        trailing: isAtivo
+                            ? ElevatedButton(
+                                onPressed: () => _concluirServico(doc.id),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  shape: CircleBorder(),
+                                  padding: EdgeInsets.all(10),
+                                ),
+                                child: Icon(Icons.check, color: Colors.white),
+                              )
+                            : Icon(Icons.check_circle, color: Colors.grey),
                       ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  Color _getCorStatus(String status) {
-    switch (status) {
-      case 'agendado':
-        return Colors.orange[100]!;
-      case 'em_andamento':
-        return Colors.blue[100]!;
-      case 'pronto_retirada':
-        return Colors.green[200]!;
-      default:
-        return Colors.grey[200]!;
-    }
   }
 }

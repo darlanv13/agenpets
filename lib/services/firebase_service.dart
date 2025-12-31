@@ -13,8 +13,10 @@ class FirebaseService {
     databaseId: 'agenpets',
   );
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    app: Firebase.app(),
+    region: 'southamerica-east1',
+  );
   // --- USUÁRIOS ---
 
   Future<UserModel?> getUser(String cpf) async {
@@ -95,6 +97,113 @@ class FirebaseService {
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       throw Exception("Falha ao agendar: $e");
+    }
+  }
+
+  // Busca saldo de vouchers em tempo real
+  Stream<Map<String, int>> getSaldoVouchers(String cpf) {
+    return _db.collection('users').doc(cpf).snapshots().map((doc) {
+      final data = doc.data();
+      if (data == null) return {'banho': 0, 'tosa': 0};
+
+      return {
+        'banho': (data['vouchers_banho'] ?? 0) as int,
+        'tosa': (data['vouchers_tosa'] ?? 0) as int,
+      };
+    });
+  }
+
+  // Comprar Assinatura
+  Future<Map<String, dynamic>> comprarAssinatura(
+    String cpf,
+    String tipoPlano,
+  ) async {
+    try {
+      final result = await _functions.httpsCallable('comprarAssinatura').call({
+        'cpf_user': cpf,
+        'tipo_plano': tipoPlano,
+      });
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      throw Exception("Erro ao processar assinatura: $e");
+    }
+  }
+
+  // --- HOTEL ---
+  Future<Map<String, dynamic>> reservarHotel({
+    required String petId,
+    required String cpfUser,
+    required DateTime checkIn,
+    required DateTime checkOut,
+  }) async {
+    try {
+      final result = await _functions.httpsCallable('reservarHotel').call({
+        'pet_id': petId,
+        'cpf_user': cpfUser,
+        'check_in': checkIn.toIso8601String(),
+        'check_out': checkOut.toIso8601String(),
+      });
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      // Isso ajuda a ver o erro real no console do Flutter
+      print("Erro detalhado reservarHotel: $e");
+
+      if (e is FirebaseFunctionsException) {
+        throw Exception(e.message);
+      }
+      throw Exception("Erro ao reservar: $e");
+    }
+  }
+
+  // --- ÁREA ADMINISTRATIVA ---
+
+  // 1. Atualizar Preços e Configurações
+  Future<void> updateConfiguracoes(Map<String, dynamic> novosDados) async {
+    await _db.collection('config').doc('parametros').update(novosDados);
+  }
+
+  // 2. Cadastrar Novo Profissional
+  Future<void> addProfissional(
+    String nome,
+    String cpf,
+    List<String> habilidades,
+  ) async {
+    await _db.collection('profissionais').add({
+      'nome': nome,
+      'cpf': cpf, // Importante salvar formatado: 000.000.000-00
+      'habilidades': habilidades,
+      'ativo': true,
+      'peso_prioridade': 5, // Valor padrão
+    });
+  }
+
+  // 3. Atualizar Dados do Cliente (CRM)
+  Future<void> updateDadosCliente(
+    String cpf,
+    Map<String, dynamic> dados,
+  ) async {
+    await _db.collection('users').doc(cpf).update(dados);
+  }
+
+  // 4. Buscar Configurações Atuais
+  Future<Map<String, dynamic>> getConfiguracoes() async {
+    final doc = await _db.collection('config').doc('parametros').get();
+    return doc.data() ?? {};
+  }
+
+  // ... dentro da classe FirebaseService ...
+
+  // Buscar dias sem vaga no hotel
+  Future<List<DateTime>> buscarDiasLotadosHotel() async {
+    try {
+      final result = await _functions.httpsCallable('obterDiasLotados').call();
+      final List<dynamic> datasStrings = result.data['dias_lotados'] ?? [];
+
+      // Converte strings '2023-10-25' para DateTime
+      return datasStrings.map((s) => DateTime.parse(s)).toList();
+    } catch (e) {
+      print("Erro ao buscar lotação: $e");
+      return []; // Se der erro, não bloqueia nada (melhor que travar)
     }
   }
 }

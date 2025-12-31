@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../services/firebase_service.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   @override
@@ -11,18 +12,25 @@ class AgendamentoScreen extends StatefulWidget {
 }
 
 class _AgendamentoScreenState extends State<AgendamentoScreen> {
+  // Conexão com o Banco de Dados
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  // Conexão com Funções (Região SP - Brasil)
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'southamerica-east1',
+  );
 
-  // --- VALORES DOS SERVIÇOS ---
-  // (Futuramente você pode carregar isso de uma coleção 'config' do Firebase)
-  double _precoBanho = 49.90;
-  double _precoTosa = 119.90;
+  // Instância do nosso Serviço para lógicas extras
+  final _firebaseService = FirebaseService();
 
+  // --- PREÇOS ---
+  double _precoBanho = 0.0;
+  double _precoTosa = 0.0;
+
+  // Variáveis de Estado
   String? _userCpf;
   DateTime _dataSelecionada = DateTime.now();
   String _servicoSelecionado = 'Banho';
@@ -43,9 +51,10 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   @override
   void initState() {
     super.initState();
+    _carregarPrecosAtualizados();
     _gerarListaDias();
 
-    // Ajuste inicial de data para não cair em domingo
+    // Garante que a data inicial não seja domingo
     if (_dataSelecionada.weekday == DateTime.sunday) {
       _dataSelecionada = _dataSelecionada.add(Duration(days: 1));
     }
@@ -62,6 +71,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
     while (diasAdicionados < 30) {
       DateTime data = dataBase.add(Duration(days: diasPercorridos));
+      // Pula domingos
       if (data.weekday != DateTime.sunday) {
         _listaDias.add(data);
         diasAdicionados++;
@@ -77,6 +87,27 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     if (args != null && _userCpf == null) {
       _userCpf = args['cpf'];
       _carregarDadosIniciais();
+    }
+  }
+
+  Future<void> _carregarPrecosAtualizados() async {
+    try {
+      final doc = await _db.collection('config').doc('parametros').get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          // Usa toDouble() para evitar erros se vier int do banco
+          _precoBanho = (data['preco_banho'] ?? 49.90).toDouble();
+          _precoTosa = (data['preco_tosa'] ?? 119.90).toDouble();
+        });
+      }
+    } catch (e) {
+      print("Erro ao carregar preços: $e");
+      // Fallback seguro
+      setState(() {
+        _precoBanho = 49.90;
+        _precoTosa = 119.90;
+      });
     }
   }
 
@@ -136,6 +167,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       return;
     }
 
+    // Pega o primeiro disponível (lógica simples de fila)
     final escolhido = candidatos.first;
     setState(() {
       _profissionalIdSelecionadoPeloSistema = escolhido['id'];
@@ -146,7 +178,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   }
 
   Future<void> _buscarHorarios() async {
-    // Se o sistema ainda não escolheu ninguém, não busca
     if (_profissionalIdSelecionadoPeloSistema == null) return;
 
     setState(() {
@@ -158,32 +189,164 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
 
-      print("Buscando horários para: $dataString"); // Log para debug
-
-      // --- A CORREÇÃO É AQUI ---
+      // Chamada Cloud Function (Região SP)
       final result = await _functions.httpsCallable('buscarHorarios').call({
-        'dataConsulta': dataString, // MUDOU DE 'data' PARA 'dataConsulta'
+        'dataConsulta': dataString,
         'profissionalId': _profissionalIdSelecionadoPeloSistema,
         'servico': _servicoSelecionado.toLowerCase(),
       });
 
       if (mounted) {
         setState(() {
-          // O backend retorna { "horarios": ["08:00", "09:00"] }
           _horariosDisponiveis = List<String>.from(result.data['horarios']);
         });
       }
     } catch (e) {
       print("Erro cloud: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- LÓGICA DE PAGAMENTO E FINALIZAÇÃO ---
+
+  void _mostrarOpcoesPagamento(int saldoVouchers) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: EdgeInsets.all(25),
+          height: 380,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Como deseja pagar?",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 5),
+              Text(
+                "Escolha a melhor forma para você.",
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              SizedBox(height: 25),
+
+              // OPÇÃO 1: VOUCHER (Condicional)
+              if (saldoVouchers > 0) ...[
+                _buildBotaoPagamento(
+                  icon: FontAwesomeIcons.ticket,
+                  cor: Colors.purple,
+                  titulo: "USAR MEU VOUCHER",
+                  subtitulo: "Você tem $saldoVouchers disponíveis",
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _finalizarAgendamento('voucher');
+                  },
+                ),
+                SizedBox(height: 15),
+              ],
+
+              // OPÇÃO 2: PIX
+              _buildBotaoPagamento(
+                icon: FontAwesomeIcons.pix,
+                cor: Color(0xFF32BCAD),
+                titulo: "PAGAR COM PIX",
+                subtitulo: "Liberação imediata",
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _finalizarAgendamento('pix');
+                },
+              ),
+
+              SizedBox(height: 15),
+
+              // OPÇÃO 3: BALCÃO
+              _buildBotaoPagamento(
+                icon: FontAwesomeIcons.store,
+                cor: Colors.orange,
+                titulo: "PAGAR NO BALCÃO",
+                subtitulo: "Dinheiro ou Cartão na loja",
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _finalizarAgendamento('dinheiro');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _finalizarAgendamento(String metodo) async {
+    setState(() => _isLoading = true);
+
+    try {
+      // Prepara os dados
+      final dataHoraString =
+          "${DateFormat('yyyy-MM-dd').format(_dataSelecionada)} $_horarioSelecionado";
+      final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
+      double valorFinal = _servicoSelecionado == 'Banho'
+          ? _precoBanho
+          : _precoTosa;
+
+      // Chama o Backend via Service
+      final result = await _firebaseService.criarAgendamento(
+        servico: _servicoSelecionado,
+        dataHora: dataInicio,
+        cpfUser: _userCpf!,
+        petId: _petId!,
+        metodoPagamento: metodo,
+        valor: valorFinal,
+      );
+
+      // Tratamento do Resultado
+      if (metodo == 'voucher') {
+        _mostrarSucesso("Voucher utilizado com sucesso! 🎟️");
+        Navigator.pop(context); // Volta pra Home
+      } else if (metodo == 'pix') {
+        // Vai para tela de pagamento com o QR Code recebido
+        Navigator.pushReplacementNamed(
+          context,
+          '/pagamento',
+          arguments: result,
+        );
+      } else {
+        _mostrarSucesso("Agendado! Pague no balcão.");
+        Navigator.pop(context);
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erro ao buscar horários. Tente outra data.")),
+        SnackBar(
+          content: Text("Erro: ${e.toString().replaceAll('Exception: ', '')}"),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- MODAL ADICIONAR PET ---
+  void _mostrarSucesso(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 10),
+            Text(msg),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // --- MODAL CADASTRO PET ---
   void _abrirModalAdicionarPet() {
     final _nomeController = TextEditingController();
     String _tipo = 'cao';
@@ -202,7 +365,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                   decoration: InputDecoration(
                     labelText: "Nome do Pet",
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.pets),
                   ),
                 ),
                 SizedBox(height: 15),
@@ -255,46 +417,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     );
   }
 
-  Future<void> _salvarAgendamento() async {
-    if (_horarioSelecionado == null || _petId == null) return;
-    setState(() => _isLoading = true);
-
-    try {
-      final dataHoraString =
-          "${DateFormat('yyyy-MM-dd').format(_dataSelecionada)} $_horarioSelecionado";
-      final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
-
-      // Define qual valor salvar
-      double valorFinal = _servicoSelecionado == 'Banho'
-          ? _precoBanho
-          : _precoTosa;
-
-      await _db.collection('agendamentos').add({
-        'userId': _userCpf,
-        'cpf_user': _userCpf,
-        'pet_id': _petId,
-        'profissional_id': _profissionalIdSelecionadoPeloSistema,
-        'profissional_nome': _nomeProfissionalDoSistema,
-        'servico': _servicoSelecionado,
-        'valor': valorFinal, // Salvamos o preço histórico
-        'data_inicio': Timestamp.fromDate(dataInicio),
-        'status': 'agendado',
-        'criado_em': FieldValue.serverTimestamp(),
-      });
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Agendamento Confirmado! 🐶")));
-      Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -312,7 +434,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- 1. SELEÇÃO DE PET ---
+                  // 1. PET
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -331,7 +453,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                     ),
                   ),
 
-                  // --- 2. SERVIÇO (COM PREÇO) ---
+                  // 2. SERVIÇO
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
@@ -394,7 +516,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
                   SizedBox(height: 25),
 
-                  // --- 3. DATA ---
+                  // 3. DIA
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
@@ -489,7 +611,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
                   SizedBox(height: 25),
 
-                  // --- 4. HORÁRIOS ---
+                  // 4. HORÁRIO
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
@@ -574,38 +696,104 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
                   SizedBox(height: 40),
 
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed:
-                            (_horarioSelecionado != null &&
-                                _petId != null &&
-                                !_isLoading)
-                            ? _salvarAgendamento
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
+                  // BOTÃO DE CONFIRMAÇÃO (COM MONITORAMENTO DE VOUCHER)
+                  StreamBuilder<Map<String, int>>(
+                    stream: _userCpf != null
+                        ? _firebaseService.getSaldoVouchers(_userCpf!)
+                        : Stream.value({'banho': 0, 'tosa': 0}), // Fallback
+                    builder: (context, snapshot) {
+                      int saldoVouchers = 0;
+                      if (snapshot.hasData) {
+                        saldoVouchers = _servicoSelecionado == 'Banho'
+                            ? snapshot.data!['banho']!
+                            : snapshot.data!['tosa']!;
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed:
+                                (_horarioSelecionado != null &&
+                                    _petId != null &&
+                                    !_isLoading)
+                                ? () => _mostrarOpcoesPagamento(saldoVouchers)
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[700],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              elevation: 5,
+                            ),
+                            child: Text(
+                              "CONTINUAR PARA PAGAMENTO",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                          elevation: 5,
                         ),
-                        child: Text(
-                          "CONFIRMAR AGENDAMENTO",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ],
               ),
             ),
+    );
+  }
+
+  // --- WIDGETS AUXILIARES DE UI ---
+
+  Widget _buildBotaoPagamento({
+    required IconData icon,
+    required Color cor,
+    required String titulo,
+    required String subtitulo,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: FaIcon(icon, color: cor, size: 20),
+            ),
+            SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Text(
+                    subtitulo,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+          ],
+        ),
+      ),
     );
   }
 
@@ -698,7 +886,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     );
   }
 
-  // ATUALIZADO: Agora aceita o preço
   Widget _buildServicoCard(
     String label,
     IconData icon,
@@ -706,7 +893,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     double preco,
   ) {
     final isSelected = _servicoSelecionado == label;
-    // Formatação de moeda simples
     final precoFormatado =
         "R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}";
 
@@ -738,7 +924,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
               ),
             ),
             SizedBox(height: 4),
-            // Exibição do Preço
             Container(
               padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(

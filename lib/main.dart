@@ -1,3 +1,7 @@
+import 'package:agenpet/admin_web/admin_web_screen.dart';
+import 'package:agenpet/screens/assinatura_screen.dart';
+import 'package:agenpet/screens/historico_screen.dart';
+import 'package:agenpet/screens/hotel_screen.dart';
 import 'package:agenpet/screens/meus_pets_screen.dart';
 import 'package:agenpet/screens/perfil_screen.dart';
 import 'package:agenpet/screens/profissional_screen.dart';
@@ -71,7 +75,10 @@ class MyApp extends StatelessWidget {
         '/profissional': (context) => ProfissionalScreen(),
         '/meus_pets': (context) => MeusPetsScreen(),
         '/perfil': (context) => PerfilScreen(),
-        // '/hotel': (context) => HotelScreen(), // Futuro
+        '/assinatura': (context) => AssinaturaScreen(),
+        '/historico': (context) => HistoricoScreen(),
+        '/hotel': (context) => HotelScreen(),
+        '/admin_web': (context) => AdminWebScreen(), // Futuro
       },
     );
   }

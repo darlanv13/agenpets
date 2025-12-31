@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/services.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; // Para abrir WhatsApp de suporte (opcional)
 
 class PerfilScreen extends StatefulWidget {
   @override
@@ -16,263 +15,182 @@ class _PerfilScreenState extends State<PerfilScreen> {
     databaseId: 'agenpets',
   );
 
-  // Controllers apenas para o que é editável
-  final _enderecoController = TextEditingController();
-  final _nascimentoController = TextEditingController();
-
-  // Variáveis de estado para leitura
-  String _nomeUser = "Carregando...";
-  String? _cpfUser;
+  String? _userCpf;
+  Map<String, dynamic>? _userData;
   bool _isLoading = true;
-
-  var maskData = MaskTextInputFormatter(
-    mask: '##/##/####',
-    filter: {"#": RegExp(r'[0-9]')},
-  );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_cpfUser == null) {
-      final args = ModalRoute.of(context)!.settings.arguments as Map;
-      _cpfUser = args['cpf'];
-      _carregarDados();
+    if (_userCpf == null) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map?;
+      if (args != null) {
+        _userCpf = args['cpf'];
+        _carregarDados();
+      }
     }
   }
 
   Future<void> _carregarDados() async {
     try {
-      final doc = await _db.collection('users').doc(_cpfUser).get();
-      final data = doc.data() as Map<String, dynamic>;
-
-      setState(() {
-        _nomeUser = data['nome'] ?? 'Cliente AgenPet';
-        _enderecoController.text = data['endereco'] ?? '';
-        _nascimentoController.text = data['nascimento'] ?? '';
-      });
+      final doc = await _db.collection('users').doc(_userCpf).get();
+      if (doc.exists) {
+        setState(() {
+          _userData = doc.data();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao carregar perfil")));
-    } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _salvarDados() async {
-    setState(() => _isLoading = true);
-    try {
-      await _db.collection('users').doc(_cpfUser).update({
-        'endereco': _enderecoController.text,
-        'nascimento': _nascimentoController.text,
-      });
+  void _fazerLogout() {
+    // Aqui você limparia dados locais (SharedPreferences) se estivesse usando
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
 
+  void _abrirSuporte() async {
+    // Exemplo de link para WhatsApp
+    final Uri url = Uri.parse(
+      "https://wa.me/5511999999999?text=Preciso+de+ajuda+no+AgenPet",
+    );
+    if (!await launchUrl(url)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Perfil atualizado!"),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text("Não foi possível abrir o WhatsApp")),
       );
-
-      Navigator.pop(context, true);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao salvar: $e")));
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Fundo leve
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text("Editar Perfil"),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black, // Ícone de voltar preto
+        title: Text("Meu Perfil"),
         centerTitle: true,
+        backgroundColor: Color(0xFF0056D2),
+        elevation: 0,
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               child: Column(
                 children: [
-                  SizedBox(height: 20),
-
-                  // --- SEÇÃO DE IDENTIDADE (CABEÇALHO) ---
-                  Center(
+                  // --- CABEÇALHO ---
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.only(bottom: 30),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF0056D2),
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(30),
+                        bottomRight: Radius.circular(30),
+                      ),
+                    ),
                     child: Column(
                       children: [
-                        // Avatar com botão de editar
-                        Stack(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.blue.withOpacity(0.2),
-                                  width: 4,
-                                ),
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: 46,
+                            backgroundColor: Colors.blue[100],
+                            child: Text(
+                              _userData?['nome']?[0].toUpperCase() ?? "U",
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0056D2),
                               ),
-                              child: CircleAvatar(
-                                radius: 65,
-                                backgroundColor: Colors.blue[50],
-                                child: FaIcon(
-                                  FontAwesomeIcons.user,
-                                  size: 50,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 5,
-                                    ),
-                                  ],
-                                ),
-                                child: FaIcon(
-                                  FontAwesomeIcons.camera,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 20),
-
-                        // Nome Grande
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Text(
-                            _nomeUser,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
                             ),
                           ),
                         ),
-
-                        SizedBox(height: 8),
-
-                        // CPF Badge
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
+                        SizedBox(height: 15),
+                        Text(
+                          _userData?['nome'] ?? "Usuário",
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            "CPF: $_cpfUser",
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                        ),
+                        Text(
+                          _userData?['telefone'] ?? "Sem telefone",
+                          style: TextStyle(color: Colors.blue[100]),
                         ),
                       ],
                     ),
                   ),
 
-                  SizedBox(height: 40),
+                  SizedBox(height: 20),
 
-                  // --- SEÇÃO DE FORMULÁRIO (CARD BRANCO) ---
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(25),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(30),
-                        topRight: Radius.circular(30),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 10,
-                          offset: Offset(0, -5),
-                        ),
-                      ],
-                    ),
+                  // --- MENU ---
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _buildMenuItem(
+                          icon: FontAwesomeIcons.userPen,
+                          text: "Meus Dados",
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Em breve: Edição de perfil"),
+                              ),
+                            );
+                          },
+                        ),
+
+                        _buildMenuItem(
+                          icon: FontAwesomeIcons.paw,
+                          text: "Meus Pets",
+                          onTap: () {
+                            // Navega para a tela de pets passando o CPF
+                            Navigator.pushNamed(
+                              context,
+                              '/meus_pets',
+                              arguments: {'cpf': _userCpf},
+                            );
+                          },
+                        ),
+
+                        _buildMenuItem(
+                          icon: FontAwesomeIcons.creditCard,
+                          text: "Minha Assinatura",
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/historico',
+                              arguments: {'cpf': _userCpf},
+                            );
+                          },
+                        ),
+
+                        SizedBox(height: 20),
+                        Divider(),
+                        SizedBox(height: 10),
+
+                        _buildMenuItem(
+                          icon: FontAwesomeIcons.whatsapp,
+                          text: "Suporte / Ajuda",
+                          onTap: _abrirSuporte,
+                          color: Colors.green,
+                        ),
+
+                        _buildMenuItem(
+                          icon: Icons.exit_to_app,
+                          text: "Sair do App",
+                          onTap: _fazerLogout,
+                          color: Colors.red,
+                          isLast: true,
+                        ),
+
+                        SizedBox(height: 20),
                         Text(
-                          "Informações Pessoais",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[800],
-                          ),
+                          "Versão 1.0.0",
+                          style: TextStyle(color: Colors.grey[400]),
                         ),
-                        SizedBox(height: 20),
-
-                        // Data de Nascimento
-                        _buildTextField(
-                          controller: _nascimentoController,
-                          label: "Data de Nascimento",
-                          icon: FontAwesomeIcons.calendar,
-                          mask: maskData,
-                          keyboard: TextInputType.datetime,
-                        ),
-
-                        SizedBox(height: 20),
-
-                        // Endereço
-                        _buildTextField(
-                          controller: _enderecoController,
-                          label: "Endereço Completo",
-                          icon: FontAwesomeIcons.locationDot,
-                          keyboard: TextInputType.streetAddress,
-                        ),
-
-                        SizedBox(height: 40),
-
-                        // Botão Salvar
-                        SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed: _salvarDados,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              elevation: 5,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                            child: Text(
-                              "SALVAR ALTERAÇÕES",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 20), // Espaço extra para scroll
                       ],
                     ),
                   ),
@@ -282,34 +200,42 @@ class _PerfilScreenState extends State<PerfilScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
+  Widget _buildMenuItem({
     required IconData icon,
-    TextInputFormatter? mask,
-    TextInputType? keyboard,
+    required String text,
+    required VoidCallback onTap,
+    Color color = const Color(0xFF424242),
+    bool isLast = false,
   }) {
-    return TextField(
-      controller: controller,
-      inputFormatters: mask != null ? [mask] : [],
-      keyboardType: keyboard ?? TextInputType.text,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.grey[600]),
-        filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
+    return Container(
+      margin: EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10),
+        ],
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          padding: EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: FaIcon(icon, size: 20, color: color),
         ),
-        prefixIcon: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: FaIcon(icon, size: 20, color: Colors.blue[300]),
+        title: Text(
+          text,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide(color: Colors.blue, width: 2),
-        ),
+        trailing: isLast
+            ? null
+            : Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[300]),
       ),
     );
   }
