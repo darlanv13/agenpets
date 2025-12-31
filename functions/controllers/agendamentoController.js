@@ -5,109 +5,122 @@ const EfiPay = require("sdk-node-apis-efi");
 const optionsEfi = require("../config/efipay");
 
 // --- Buscar Horários (Mantido igual) ---
+// --- Função Corrigida: BUSCAR HORÁRIOS ---
 exports.buscarHorarios = onCall(async (request) => {
-    const data = request.data;
-    const { dataConsulta, servico } = data;
+    try {
+        const data = request.data;
+        const { dataConsulta, servico } = data;
 
-    const configDoc = await db.collection("config").doc("parametros").get();
-    const config = configDoc.data();
+        // CORREÇÃO 1: Criamos a variável servicoNorm que o código usa depois
+        const servicoNorm = servico ? servico.toLowerCase() : '';
 
-    // 1. Separa os Profissionais em Grupos
-    const prosSnapshot = await db.collection("profissionais").where("ativo", "==", true).get();
+        const configDoc = await db.collection("config").doc("parametros").get();
+        const config = configDoc.exists ? configDoc.data() : {};
 
-    const banhistas = []; // Só fazem banho
-    const tosadores = []; // Fazem tosa (e banho)
+        // 1. Separa os Profissionais
+        const prosSnapshot = await db.collection("profissionais").where("ativo", "==", true).get();
+        const banhistas = [];
+        const tosadores = [];
 
-    prosSnapshot.forEach(doc => {
-        const p = { id: doc.id, ...doc.data() };
-        if (p.habilidades.includes('tosa')) {
-            tosadores.push(p);
-        } else {
-            banhistas.push(p);
-        }
-    });
+        prosSnapshot.forEach(doc => {
+            const p = { id: doc.id, ...doc.data() };
+            // Garante que habilidades existam e sejam minúsculas
+            const skills = (p.habilidades || []).map(h => h.toLowerCase());
 
-    // Se o serviço for banho, qualquer um serve. Se for tosa, só tosadores.
-    const duracaoServico = servico === 'tosa' ? config.tempo_tosa_min : config.tempo_banho_min;
+            if (skills.includes('tosa')) {
+                tosadores.push(p);
+            } else if (skills.includes('banho')) { // Else if para evitar duplicidade
+                banhistas.push(p);
+            }
+        });
 
-    // 2. Busca agendamentos do dia
-    const startOfDay = new Date(`${dataConsulta}T00:00:00`);
-    const endOfDay = new Date(`${dataConsulta}T23:59:59`);
+        const duracaoServico = servicoNorm === 'tosa' ? (config.tempo_tosa_min || 90) : (config.tempo_banho_min || 60);
 
-    const agendamentosSnapshot = await db.collection("agendamentos")
-        .where("data_inicio", ">=", startOfDay)
-        .where("data_inicio", "<=", endOfDay)
-        .where("status", "!=", "cancelado")
-        .get();
+        // 2. Busca agendamentos do dia
+        const startOfDay = new Date(`${dataConsulta}T00:00:00`);
+        const endOfDay = new Date(`${dataConsulta}T23:59:59`);
 
-    const agendamentos = agendamentosSnapshot.docs.map(doc => doc.data());
+        const agendamentosSnapshot = await db.collection("agendamentos")
+            .where("data_inicio", ">=", startOfDay)
+            .where("data_inicio", "<=", endOfDay)
+            .where("status", "!=", "cancelado")
+            .get();
 
-    // 3. Loop de Horários
-    let horariosDisponiveis = [];
-    let horaAtual = parse(config.horario_abertura, 'HH:mm', new Date(`${dataConsulta}T00:00:00`));
-    const horaFechamento = parse(config.horario_fechamento, 'HH:mm', new Date(`${dataConsulta}T00:00:00`));
+        const agendamentos = agendamentosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
-    while (addMinutes(horaAtual, duracaoServico) <= horaFechamento) {
-        const slotInicio = horaAtual;
-        const slotFim = addMinutes(horaAtual, duracaoServico);
+        // 3. Loop de Horários
+        let gradeHorarios = [];
 
-        // Função auxiliar para checar se UM profissional está ocupado neste slot
-        const isOcupado = (proId) => {
-            return agendamentos.find(ag => {
-                const agInicio = ag.data_inicio.toDate();
-                const agFim = ag.data_fim.toDate();
-                return ag.profissional_id === proId && (
-                    (slotInicio >= agInicio && slotInicio < agFim) ||
-                    (slotFim > agInicio && slotFim <= agFim) ||
-                    (slotInicio <= agInicio && slotFim >= agFim)
-                );
-            });
-        };
+        // CORREÇÃO 2: Parse manual seguro das horas (para evitar erros do date-fns parse string)
+        const [hAbre, mAbre] = (config.horario_abertura || "08:00").split(':').map(Number);
+        const [hFecha, mFecha] = (config.horario_fechamento || "18:00").split(':').map(Number);
 
-        let temVaga = false;
+        // Define horaAtual
+        let horaAtual = new Date(`${dataConsulta}T00:00:00`);
+        horaAtual.setHours(hAbre, mAbre, 0, 0);
 
-        if (servico === 'banho') {
-            // Lógica Simples: Tem algum banhista livre? OU Tem algum tosador livre?
-            const banhistaLivre = banhistas.some(b => !isOcupado(b.id));
-            const tosadorLivre = tosadores.some(t => !isOcupado(t.id));
-            if (banhistaLivre || tosadorLivre) temVaga = true;
+        // Define horaLimite (agora sim a variável existe!)
+        const horaLimite = new Date(`${dataConsulta}T00:00:00`);
+        horaLimite.setHours(hFecha, mFecha, 0, 0);
 
-        } else if (servico === 'tosa') {
-            // --- AQUI ESTÁ A MÁGICA DA REALOCAÇÃO ---
+        // Agora o loop usa a variável certa: horaLimite
+        while (addMinutes(horaAtual, duracaoServico) <= horaLimite) {
+            const slotInicio = new Date(horaAtual); // Clona data para não bugar referência
+            const slotFim = addMinutes(horaAtual, duracaoServico);
 
-            // 1. Tem Tosador 100% livre?
-            const tosadorTotalmenteLivre = tosadores.some(t => !isOcupado(t.id));
+            // Verifica ocupação
+            const isOcupado = (proId) => {
+                return agendamentos.find(ag => {
+                    const agInicio = ag.data_inicio.toDate();
+                    const agFim = ag.data_fim.toDate();
+                    return ag.profissional_id === proId && (
+                        (slotInicio < agFim && slotFim > agInicio)
+                    );
+                });
+            };
 
-            if (tosadorTotalmenteLivre) {
-                temVaga = true;
-            } else {
-                // 2. Não tem livre. Mas tem Tosador fazendo BANHO que pode passar pro Banhista?
+            let temVaga = false;
 
-                // Quantos banhistas estão livres neste horário?
-                const qtdBanhistasLivres = banhistas.filter(b => !isOcupado(b.id)).length;
-
-                if (qtdBanhistasLivres > 0) {
-                    // Se tem banhista livre, verificamos se algum tosador está ocupado APENAS com banho
-                    const tosadorOcupadoComBanho = tosadores.some(t => {
-                        const agendamento = isOcupado(t.id);
-                        // Se ele está ocupado E o serviço que ele está fazendo é 'banho'
-                        return agendamento && agendamento.servico === 'banho';
-                    });
-
-                    // Se o tosador está lavando cachorro, e tem banhista coçando, PODEMOS TROCAR!
-                    if (tosadorOcupadoComBanho) temVaga = true;
+            // --- LÓGICA DE VAGA (Agora usando servicoNorm que existe) ---
+            if (servicoNorm === 'banho') {
+                if (banhistas.some(b => !isOcupado(b.id))) temVaga = true;
+                else if (tosadores.some(t => !isOcupado(t.id))) temVaga = true;
+            } else if (servicoNorm === 'tosa') {
+                if (tosadores.some(t => !isOcupado(t.id))) {
+                    temVaga = true;
+                } else {
+                    const banhistasLivres = banhistas.filter(b => !isOcupado(b.id));
+                    if (banhistasLivres.length > 0) {
+                        const podeTrocar = tosadores.some(t => {
+                            const ag = isOcupado(t.id);
+                            // Verifica se o serviço no agendamento conflituoso é banho
+                            const servicoDoConflito = (ag.servico || ag.servicoNorm || '').toLowerCase();
+                            return ag && servicoDoConflito === 'banho';
+                        });
+                        if (podeTrocar) temVaga = true;
+                    }
                 }
             }
+
+            // Formata e adiciona na grade
+            const hStr = horaAtual.getHours().toString().padStart(2, '0');
+            const mStr = horaAtual.getMinutes().toString().padStart(2, '0');
+
+            gradeHorarios.push({
+                hora: `${hStr}:${mStr}`,
+                livre: temVaga
+            });
+
+            horaAtual = addMinutes(horaAtual, config.intervalo_agenda || 30);
         }
 
-        if (temVaga) {
-            horariosDisponiveis.push(format(horaAtual, "HH:mm"));
-        }
+        return { grade: gradeHorarios };
 
-        horaAtual = addMinutes(horaAtual, config.intervalo_agenda || 30); // Pula de 30 em 30 min (ou duração)
+    } catch (e) {
+        console.error("Erro CRÍTICO buscarHorarios:", e);
+        // Retorna lista vazia para o app não travar, mas loga o erro no console
+        return { grade: [] };
     }
-
-    return { horarios: horariosDisponiveis };
 });
 
 // --- NOVA FUNÇÃO: Comprar Assinatura ---
@@ -168,7 +181,7 @@ exports.comprarAssinatura = onCall(async (request) => {
 // --- ATUALIZADO: Criar Agendamento (Aceita Voucher) ---
 exports.criarAgendamento = onCall(async (request) => {
     const { servico, data_hora, cpf_user, pet_id, metodo_pagamento, valor } = request.data;
-
+    const servicoNorm = servico.toLowerCase();
     // --- LÓGICA DE VOUCHER ---
     if (metodo_pagamento === 'voucher') {
         const userRef = db.collection('users').doc(cpf_user);
@@ -192,7 +205,7 @@ exports.criarAgendamento = onCall(async (request) => {
 
     const configDoc = await db.collection("config").doc("parametros").get();
     const config = configDoc.data();
-    const duracao = servico === 'tosa' ? config.tempo_tosa_min : config.tempo_banho_min;
+    const duracao = servicoNorm === 'tosa' ? config.tempo_tosa_min : config.tempo_banho_min;
 
     const inicio = new Date(data_hora);
     const fim = addMinutes(inicio, duracao);
@@ -218,7 +231,7 @@ exports.criarAgendamento = onCall(async (request) => {
 
     let profissionalEscolhido = null;
 
-    if (servico === 'banho') {
+    if (servicoNorm === 'banho') {
         // Prioridade 1: Banhista Livre
         profissionalEscolhido = banhistas.find(b => !agendamentosNoHorario.find(ag => ag.profissional_id === b.id));
 
@@ -227,7 +240,7 @@ exports.criarAgendamento = onCall(async (request) => {
             profissionalEscolhido = tosadores.find(t => !agendamentosNoHorario.find(ag => ag.profissional_id === t.id));
         }
 
-    } else if (servico === 'tosa') {
+    } else if (servicoNorm === 'tosa') {
         // Prioridade 1: Tosador 100% Livre
         profissionalEscolhido = tosadores.find(t => !agendamentosNoHorario.find(ag => ag.profissional_id === t.id));
 
@@ -235,7 +248,7 @@ exports.criarAgendamento = onCall(async (request) => {
         if (!profissionalEscolhido) {
             // Procura um Tosador que esteja fazendo BANHO
             const agendamentoParaMover = agendamentosNoHorario.find(ag =>
-                ag.servico === 'banho' && tosadores.some(t => t.id === ag.profissional_id)
+                ag.servicoNorm === 'banho' && tosadores.some(t => t.id === ag.profissional_id)
             );
 
             if (agendamentoParaMover) {
@@ -269,7 +282,7 @@ exports.criarAgendamento = onCall(async (request) => {
         pet_id,
         profissional_id: profissionalEscolhido.id, // Aqui já vai o Tosador (que pode ter sido liberado agora)
         profissional_nome: profissionalEscolhido.nome,
-        servico,
+        servicoNorm,
         data_inicio: admin.firestore.Timestamp.fromDate(inicio),
         data_fim: admin.firestore.Timestamp.fromDate(fim),
         created_at: admin.firestore.FieldValue.serverTimestamp(),
