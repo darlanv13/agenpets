@@ -42,7 +42,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   String? _horarioSelecionado;
 
   bool _isLoading = false;
-  List<String> _horariosDisponiveis = [];
+  List<Map<String, dynamic>> _gradeHorarios = []; // Nova estrutura
   List<Map<String, dynamic>> _pets = [];
   List<Map<String, dynamic>> _profissionais = [];
 
@@ -162,7 +162,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       );
       setState(() {
         _profissionalIdSelecionadoPeloSistema = null;
-        _horariosDisponiveis = [];
+        _gradeHorarios = [];
       });
       return;
     }
@@ -178,31 +178,39 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   }
 
   Future<void> _buscarHorarios() async {
-    if (_profissionalIdSelecionadoPeloSistema == null) return;
+    if (_servicoSelecionado == null) return;
 
     setState(() {
       _isLoading = true;
-      _horariosDisponiveis = [];
+      _gradeHorarios = []; // Limpa a lista nova
       _horarioSelecionado = null;
     });
 
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
+      final servicoEnvio = _servicoSelecionado.toLowerCase();
 
-      // Chamada Cloud Function (Região SP)
       final result = await _functions.httpsCallable('buscarHorarios').call({
         'dataConsulta': dataString,
-        'profissionalId': _profissionalIdSelecionadoPeloSistema,
-        'servico': _servicoSelecionado.toLowerCase(),
+        'servico': servicoEnvio,
       });
 
       if (mounted) {
         setState(() {
-          _horariosDisponiveis = List<String>.from(result.data['horarios']);
+          // Agora lemos 'grade' e convertemos para Lista de Mapas
+          List<dynamic> dados = result.data['grade'];
+          _gradeHorarios = dados
+              .map(
+                (item) => {
+                  "hora": item['hora'].toString(),
+                  "livre": item['livre'] as bool,
+                },
+              )
+              .toList();
         });
       }
     } catch (e) {
-      print("Erro cloud: $e");
+      // ... (tratamento de erro igual) ...
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -626,7 +634,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _horariosDisponiveis.isEmpty
+                    child: _gradeHorarios.isEmpty
                         ? Container(
                             padding: EdgeInsets.all(20),
                             width: double.infinity,
@@ -647,25 +655,47 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                         : Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: _horariosDisponiveis.map((horario) {
+                            children: _gradeHorarios.map((item) {
+                              final horario = item['hora'];
+                              final isLivre = item['livre'];
                               final isSelected = _horarioSelecionado == horario;
+
+                              // Define as cores baseadas no estado
+                              Color corFundo;
+                              Color corBorda;
+                              Color corTexto;
+
+                              if (!isLivre) {
+                                // OCUPADO (Cinza e Opaco)
+                                corFundo = Colors.grey[200]!;
+                                corBorda = Colors.grey[300]!;
+                                corTexto = Colors.grey[400]!;
+                              } else if (isSelected) {
+                                // SELECIONADO (Azul)
+                                corFundo = Color(0xFF0056D2);
+                                corBorda = Color(0xFF0056D2);
+                                corTexto = Colors.white;
+                              } else {
+                                // LIVRE (Branco)
+                                corFundo = Colors.white;
+                                corBorda = Colors.grey[300]!;
+                                corTexto = Colors.grey[800]!;
+                              }
+
                               return GestureDetector(
-                                onTap: () => setState(
-                                  () => _horarioSelecionado = horario,
-                                ),
+                                onTap: isLivre
+                                    ? () => setState(
+                                        () => _horarioSelecionado = horario,
+                                      )
+                                    : null, // Se não for livre, onTap é nulo (não clica)
                                 child: Container(
                                   width: 80,
                                   padding: EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? Color(0xFF0056D2)
-                                        : Colors.white,
+                                    color: corFundo,
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Color(0xFF0056D2)
-                                          : Colors.grey[300]!,
-                                    ),
+                                    border: Border.all(color: corBorda),
+                                    // Só mostra sombra se estiver selecionado
                                     boxShadow: isSelected
                                         ? [
                                             BoxShadow(
@@ -681,10 +711,11 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                                     child: Text(
                                       horario,
                                       style: TextStyle(
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.grey[800],
+                                        color: corTexto,
                                         fontWeight: FontWeight.bold,
+                                        decoration: !isLivre
+                                            ? TextDecoration.lineThrough
+                                            : null, // Opcional: riscar o texto
                                       ),
                                     ),
                                   ),

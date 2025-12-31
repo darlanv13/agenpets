@@ -1,9 +1,9 @@
+import 'package:agenpet/admin_web/views/agenda_view.dart';
 import 'package:agenpet/admin_web/views/configuracao_agenda_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 // Importe as novas telas
 import 'views/dashboard_view.dart';
-import 'views/agenda_view.dart';
 import 'views/hotel_view.dart';
 import 'views/gestao_precos_view.dart'; // <--- Nova
 import 'views/equipe_view.dart'; // <--- Nova
@@ -69,11 +69,8 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
 
                 // ITENS DO MENU
                 _buildMenuItem(0, "Dashboard", FontAwesomeIcons.chartPie),
-                _buildMenuItem(
-                  1,
-                  "Agenda & Caixa",
-                  FontAwesomeIcons.calendarDay,
-                ),
+
+                _buildMenuItem(1, "Agenda", FontAwesomeIcons.calendarDay),
                 _buildMenuItem(2, "Hotelzinho", FontAwesomeIcons.hotel),
 
                 Padding(

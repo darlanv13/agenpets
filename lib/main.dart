@@ -78,7 +78,7 @@ class MyApp extends StatelessWidget {
         '/assinatura': (context) => AssinaturaScreen(),
         '/historico': (context) => HistoricoScreen(),
         '/hotel': (context) => HotelScreen(),
-        '/admin_web': (context) => AdminWebScreen(), // Futuro
+        '/admin_web': (context) => AdminWebScreen(),
       },
     );
   }
