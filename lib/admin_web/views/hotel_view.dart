@@ -16,13 +16,17 @@ class _HotelViewState extends State<HotelView> {
   );
 
   // --- CORES AÇAÍ & LILÁS ---
-  final Color _corAcai = Color(0xFF4A148C); // Roxo Escuro
-  final Color _corLavanda = Color(0xFFAB47BC); // Roxo Médio
-  final Color _corLilas = Color(0xFFF3E5F5); // Roxo Claríssimo
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corLavanda = Color(0xFFAB47BC);
+  final Color _corLilas = Color(0xFFF3E5F5);
   final Color _corFundo = Color(0xFFFAFAFA);
 
   final int _capacidadeTotal = 60;
   final double _valorDiaria = 80.00;
+
+  // Variáveis para controlar o painel lateral (Master-Detail)
+  String? _selectedReservaId;
+  Map<String, dynamic>? _selectedReservaData;
 
   // --- CÁLCULO FINANCEIRO INTELIGENTE ---
   Map<String, dynamic> _calcularSituacaoFinanceira(Map<String, dynamic> data) {
@@ -39,15 +43,19 @@ class _HotelViewState extends State<HotelView> {
     // 3. Verifica quanto JÁ FOI PAGO
     double valorJaPago = 0.0;
     if (data['payment_status'] == 'paid') {
-      // Se pagou pelo app, assumimos que pagou o previsto na reserva original
-      valorJaPago = (data['valor_previsto'] ?? valorDevidoAtual).toDouble();
+      // Se já marcou como pago no passado, consideramos o valor total previsto original ou o calculado
+      // Se houver campo 'valor_total_final', usamos ele.
+      valorJaPago =
+          (data['valor_total_final'] ??
+                  data['valor_previsto'] ??
+                  valorDevidoAtual)
+              .toDouble();
     }
-    // Se tiver pagamentos parciais no futuro, somaria aqui.
 
     // 4. Calcula Diferença
     double saldoDevedor = valorDevidoAtual - valorJaPago;
 
-    // Margem de erro pequena para evitar float points (ex: 0.000001)
+    // Margem de erro para evitar problemas de ponto flutuante
     if (saldoDevedor < 0.1) saldoDevedor = 0;
 
     return {
@@ -55,9 +63,7 @@ class _HotelViewState extends State<HotelView> {
       'valor_total_atual': valorDevidoAtual,
       'valor_ja_pago': valorJaPago,
       'saldo_devedor': saldoDevedor,
-      'tem_excedente': saldoDevedor > 0,
-      'esta_totalmente_pago':
-          saldoDevedor == 0 && data['payment_status'] == 'paid',
+      'esta_pago': saldoDevedor <= 0, // Regra para liberar check-out
     };
   }
 
@@ -68,25 +74,18 @@ class _HotelViewState extends State<HotelView> {
       'status': 'hospedado',
       'check_in_real': FieldValue.serverTimestamp(),
     });
+
+    // Atualiza o painel lateral se estiver aberto no mesmo item
+    if (_selectedReservaId == docId) {
+      final doc = await _db.collection('reservas_hotel').doc(docId).get();
+      setState(() {
+        _selectedReservaData = doc.data();
+      });
+    }
+
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text("Check-in realizado! 🏠")));
-  }
-
-  void _processarSaida(String docId, Map<String, dynamic> data) {
-    final fin = _calcularSituacaoFinanceira(data);
-
-    if (fin['tem_excedente']) {
-      // CASO 1: Tem que pagar diferença (Excedente ou Total)
-      _abrirCaixa(
-        docId,
-        fin['saldo_devedor'],
-        isExcedente: data['payment_status'] == 'paid',
-      );
-    } else {
-      // CASO 2: Tudo pago, só sair
-      _confirmarSaidaSimples(docId);
-    }
   }
 
   void _confirmarSaidaSimples(String docId) {
@@ -122,7 +121,11 @@ class _HotelViewState extends State<HotelView> {
                 'status': 'concluido',
                 'check_out_real': FieldValue.serverTimestamp(),
               });
-              Navigator.pop(ctx);
+              Navigator.pop(ctx); // Fecha Dialog
+              setState(() {
+                _selectedReservaId = null; // Fecha painel lateral
+                _selectedReservaData = null;
+              });
             },
             child: Text("FINALIZAR ESTADIA"),
           ),
@@ -131,11 +134,7 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  void _abrirCaixa(
-    String docId,
-    double valorCobrar, {
-    required bool isExcedente,
-  }) {
+  void _abrirCaixa(String docId, double valorCobrar) {
     String metodo = 'dinheiro';
 
     showDialog(
@@ -147,35 +146,13 @@ class _HotelViewState extends State<HotelView> {
               borderRadius: BorderRadius.circular(20),
             ),
             title: Text(
-              isExcedente ? "Cobrar Diárias Extras 🕒" : "Receber Pagamento 💰",
+              "Receber Pagamento 💰",
               style: TextStyle(color: _corAcai, fontWeight: FontWeight.bold),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (isExcedente)
-                  Container(
-                    padding: EdgeInsets.all(10),
-                    margin: EdgeInsets.only(bottom: 15),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.orange),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            "O cliente excedeu o tempo original. Cobre a diferença.",
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
                 Text(
                   "Valor a Receber:",
                   style: TextStyle(fontSize: 14, color: Colors.grey),
@@ -188,7 +165,6 @@ class _HotelViewState extends State<HotelView> {
                     color: _corAcai,
                   ),
                 ),
-
                 SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: metodo,
@@ -233,19 +209,28 @@ class _HotelViewState extends State<HotelView> {
                 ),
                 onPressed: () async {
                   await _db.collection('reservas_hotel').doc(docId).update({
-                    'status': 'concluido',
-                    'check_out_real': FieldValue.serverTimestamp(),
                     'payment_status': 'paid',
                     'metodo_pagamento_final': metodo,
-                    'valor_total_final':
-                        valorCobrar, // Salva quanto foi cobrado no final
+                    'valor_total_final': valorCobrar, // Registra quanto pagou
                   });
+
+                  // Atualiza painel lateral
+                  if (_selectedReservaId == docId) {
+                    final doc = await _db
+                        .collection('reservas_hotel')
+                        .doc(docId)
+                        .get();
+                    setState(() {
+                      _selectedReservaData = doc.data();
+                    });
+                  }
+
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Recebido com sucesso!")),
+                    SnackBar(content: Text("Pagamento registrado!")),
                   );
                 },
-                child: Text("RECEBER & CHECK-OUT"),
+                child: Text("CONFIRMAR PAGAMENTO"),
               ),
             ],
           );
@@ -254,12 +239,18 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  // --- CADASTRO RÁPIDO (BALCÃO) - TEMA AÇAÍ ---
+  // --- CADASTRO RÁPIDO E NOVA HOSPEDAGEM (Mantidos do código original) ---
+  // (Omiti o código interno dessas funções para brevidade,
+  // mas assuma que são EXATAMENTE as mesmas funções _abrirCadastroRapido e _novaHospedagemManual
+  // que você já tinha no arquivo. Vou colocar apenas a assinatura para compilar,
+  // mas no seu arquivo final mantenha o corpo delas completo conforme seu upload).
+
   Future<void> _abrirCadastroRapido(
     BuildContext context,
-    String cpfPreenchido,
+    String cpf,
     Function(String, List<Map<String, dynamic>>) onSucesso,
   ) async {
+    // ... MANTENHA SEU CÓDIGO ORIGINAL AQUI ...
     final _nomeController = TextEditingController();
     final _telController = TextEditingController();
     final _petNomeController = TextEditingController();
@@ -287,7 +278,7 @@ class _HotelViewState extends State<HotelView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Dados do Cliente (CPF: $cpfPreenchido)",
+                      "Dados do Cliente (CPF: $cpf)",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.grey[700],
@@ -391,8 +382,8 @@ class _HotelViewState extends State<HotelView> {
 
                         try {
                           // 1. Criar Usuário
-                          await _db.collection('users').doc(cpfPreenchido).set({
-                            'cpf': cpfPreenchido,
+                          await _db.collection('users').doc(cpf).set({
+                            'cpf': cpf,
                             'nome': _nomeController.text,
                             'telefone': _telController.text,
                             'criado_em': FieldValue.serverTimestamp(),
@@ -401,7 +392,7 @@ class _HotelViewState extends State<HotelView> {
                           // 2. Criar Pet
                           final petRef = await _db
                               .collection('users')
-                              .doc(cpfPreenchido)
+                              .doc(cpf)
                               .collection('pets')
                               .add({
                                 'nome': _petNomeController.text,
@@ -409,7 +400,7 @@ class _HotelViewState extends State<HotelView> {
                                     ? 'SRD'
                                     : _petRacaController.text,
                                 'tipo': _petTipo,
-                                'donoCpf': cpfPreenchido,
+                                'donoCpf': cpf,
                               });
 
                           // 3. Retornar
@@ -443,8 +434,8 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  // --- NOVA HOSPEDAGEM (BALCÃO) - TEMA AÇAÍ ---
   void _novaHospedagemManual() {
+    // ... MANTENHA SEU CÓDIGO ORIGINAL AQUI ...
     String? _cpfBusca;
     String? _petIdSelecionado;
     List<Map<String, dynamic>> _petsEncontrados = [];
@@ -457,7 +448,6 @@ class _HotelViewState extends State<HotelView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateModal) {
-          // Calcula valor em tempo real
           double valorEstimado = 0;
           if (_datas != null) {
             int dias = _datas!.duration.inDays;
@@ -587,7 +577,6 @@ class _HotelViewState extends State<HotelView> {
                       ],
                     ),
 
-                    // FEEDBACK DA BUSCA
                     if (_nomeCliente != null)
                       Container(
                         margin: EdgeInsets.only(top: 10),
@@ -667,8 +656,6 @@ class _HotelViewState extends State<HotelView> {
                       ),
 
                     SizedBox(height: 20),
-
-                    // 2. SELEÇÃO DE PET
                     Text(
                       "2. Selecionar Pet",
                       style: TextStyle(
@@ -713,7 +700,6 @@ class _HotelViewState extends State<HotelView> {
 
                     SizedBox(height: 20),
 
-                    // 3. DATAS
                     Text(
                       "3. Período da Estadia",
                       style: TextStyle(
@@ -852,443 +838,575 @@ class _HotelViewState extends State<HotelView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _corFundo,
-      body: Padding(
-        padding: const EdgeInsets.all(0), // O padding vem do parent
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- HEADER ---
-            Container(
-              padding: EdgeInsets.symmetric(vertical: 20, horizontal: 5),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Hotelzinho AgenPet 💜",
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: _corAcai,
-                        ),
-                      ),
-                      Text(
-                        "Painel de Controle de Estadias",
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                  ElevatedButton.icon(
-                    icon: Icon(Icons.add_circle),
-                    label: Text("NOVA RESERVA"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 25,
-                        vertical: 20,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 5,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // --- HEADER & KPI (Fixo no topo) ---
+          _buildHeaderAndKPIs(),
+
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- ESQUERDA: LISTA (MASTER) ---
+                Expanded(
+                  flex: 6,
+                  child: Container(
+                    margin: EdgeInsets.only(
+                      left: 20,
+                      top: 10,
+                      bottom: 20,
+                      right: _selectedReservaId != null ? 10 : 20,
                     ),
-                    onPressed: _novaHospedagemManual,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            "Quadro de Hóspedes",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _corAcai,
+                            ),
+                          ),
+                        ),
+                        Expanded(child: _buildListaHospedes()),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // --- DIREITA: DETALHES (DETAIL) ---
+                if (_selectedReservaId != null)
+                  Expanded(flex: 4, child: _buildPainelDetalhes()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderAndKPIs() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Hotelzinho AgenPet 💜",
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                  Text(
+                    "Gestão de Estadias",
+                    style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
               ),
-            ),
-
-            SizedBox(height: 30),
-
-            // --- CARDS ---
-            StreamBuilder<QuerySnapshot>(
-              stream: _db
-                  .collection('reservas_hotel')
-                  .where('status', whereIn: ['reservado', 'hospedado'])
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return SizedBox(height: 100);
-                int hospedados = 0;
-                int reservado = 0;
-                for (var doc in snapshot.data!.docs) {
-                  if (doc['status'] == 'hospedado')
-                    hospedados++;
-                  else
-                    reservado++;
-                }
-                return Row(
-                  children: [
-                    _buildCardKPI(
-                      "Hóspedes Ativos",
-                      "$hospedados",
-                      FontAwesomeIcons.dog,
-                      _corAcai,
-                    ),
-                    SizedBox(width: 20),
-                    _buildCardKPI(
-                      "Vagas Livres",
-                      "${_capacidadeTotal - hospedados}",
-                      FontAwesomeIcons.doorOpen,
-                      Colors.green,
-                    ),
-                    SizedBox(width: 20),
-                    _buildCardKPI(
-                      "Chegando Hoje",
-                      "$reservado",
-                      FontAwesomeIcons.clock,
-                      _corLavanda,
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            SizedBox(height: 30),
-
-            // --- TABELA ESTILIZADA ---
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.purple.withOpacity(0.05),
-                      blurRadius: 20,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
+              ElevatedButton.icon(
+                icon: Icon(Icons.add_circle),
+                label: Text("NOVA RESERVA"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Quadro de Hóspedes",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _corAcai,
-                      ),
+                onPressed: _novaHospedagemManual,
+              ),
+            ],
+          ),
+          SizedBox(height: 20),
+          // KPIs simplificados
+          StreamBuilder<QuerySnapshot>(
+            stream: _db
+                .collection('reservas_hotel')
+                .where('status', whereIn: ['reservado', 'hospedado'])
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return SizedBox();
+              int hospedados = 0;
+              int reservado = 0;
+              for (var doc in snapshot.data!.docs) {
+                if (doc['status'] == 'hospedado')
+                  hospedados++;
+                else
+                  reservado++;
+              }
+              return Row(
+                children: [
+                  _buildCardKPI(
+                    "Ativos",
+                    "$hospedados",
+                    FontAwesomeIcons.dog,
+                    _corAcai,
+                  ),
+                  SizedBox(width: 15),
+                  _buildCardKPI(
+                    "Livres",
+                    "${_capacidadeTotal - hospedados}",
+                    FontAwesomeIcons.doorOpen,
+                    Colors.green,
+                  ),
+                  SizedBox(width: 15),
+                  _buildCardKPI(
+                    "Chegando",
+                    "$reservado",
+                    FontAwesomeIcons.clock,
+                    _corLavanda,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListaHospedes() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _db.collection('reservas_hotel').orderBy('check_in').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData)
+          return Center(child: CircularProgressIndicator(color: _corAcai));
+
+        final docs = snapshot.data!.docs
+            .where((d) => d['status'] != 'cancelado')
+            .toList();
+
+        if (docs.isEmpty)
+          return Center(child: Text("Nenhuma reserva encontrada."));
+
+        return Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: SingleChildScrollView(
+            child: DataTable(
+              showCheckboxColumn: false,
+              headingRowColor: MaterialStateProperty.all(_corLilas),
+              dataRowColor: MaterialStateProperty.resolveWith<Color?>((
+                Set<MaterialState> states,
+              ) {
+                if (states.contains(MaterialState.selected))
+                  return _corAcai.withOpacity(0.1);
+                return Colors.white;
+              }),
+              columns: [
+                DataColumn(
+                  label: Text(
+                    "PET",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
                     ),
-                    SizedBox(height: 15),
-                    Expanded(
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: _db
-                            .collection('reservas_hotel')
-                            .orderBy('check_in')
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData)
-                            return Center(
-                              child: CircularProgressIndicator(color: _corAcai),
-                            );
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "STATUS",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "PERÍODO",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                ),
+                DataColumn(
+                  label: Text(
+                    "AÇÃO",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                ),
+              ],
+              rows: docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final status = data['status'] ?? 'reservado';
+                final isSelected = _selectedReservaId == doc.id;
 
-                          final docs = snapshot.data!.docs;
-
-                          return Theme(
-                            data: Theme.of(
-                              context,
-                            ).copyWith(dividerColor: Colors.transparent),
-                            child: SingleChildScrollView(
-                              child: DataTable(
-                                headingRowColor: MaterialStateProperty.all(
-                                  _corLilas,
+                return DataRow(
+                  selected: isSelected,
+                  onSelectChanged: (selected) {
+                    if (selected == true) {
+                      setState(() {
+                        _selectedReservaId = doc.id;
+                        _selectedReservaData = data;
+                      });
+                    }
+                  },
+                  cells: [
+                    DataCell(
+                      // Nome do Pet (Fetch rápido)
+                      FutureBuilder<DocumentSnapshot>(
+                        future: _db
+                            .collection('users')
+                            .doc(data['cpf_user'])
+                            .collection('pets')
+                            .doc(data['pet_id'])
+                            .get(),
+                        builder: (c, s) {
+                          if (!s.hasData) return Text("...");
+                          final pet =
+                              s.data!.data() as Map? ??
+                              {'nome': 'Desconhecido'};
+                          return Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: _corLilas,
+                                radius: 12,
+                                child: FaIcon(
+                                  pet['tipo'] == 'gato'
+                                      ? FontAwesomeIcons.cat
+                                      : FontAwesomeIcons.dog,
+                                  size: 12,
+                                  color: _corAcai,
                                 ),
-                                dataRowColor: MaterialStateProperty.resolveWith(
-                                  (states) => Colors.white,
-                                ),
-                                columnSpacing: 20,
-                                columns: [
-                                  DataColumn(
-                                    label: Text(
-                                      "PET / TUTOR",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _corAcai,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      "PERÍODO",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _corAcai,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      "FINANCEIRO",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _corAcai,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      "STATUS",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _corAcai,
-                                      ),
-                                    ),
-                                  ),
-                                  DataColumn(
-                                    label: Text(
-                                      "AÇÃO",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: _corAcai,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                rows: docs
-                                    .map((doc) {
-                                      final data =
-                                          doc.data() as Map<String, dynamic>;
-                                      final status =
-                                          data['status'] ?? 'reservado';
-                                      if (status == 'cancelado') return null;
-
-                                      final fin = _calcularSituacaoFinanceira(
-                                        data,
-                                      );
-
-                                      return DataRow(
-                                        cells: [
-                                          DataCell(
-                                            FutureBuilder<DocumentSnapshot>(
-                                              future: _db
-                                                  .collection('users')
-                                                  .doc(data['cpf_user'])
-                                                  .collection('pets')
-                                                  .doc(data['pet_id'])
-                                                  .get(),
-                                              builder: (c, s) {
-                                                if (!s.hasData)
-                                                  return Text("...");
-                                                final pet =
-                                                    s.data!.data() as Map;
-                                                return Row(
-                                                  children: [
-                                                    CircleAvatar(
-                                                      backgroundColor:
-                                                          _corLilas,
-                                                      child: FaIcon(
-                                                        pet['tipo'] == 'cao'
-                                                            ? FontAwesomeIcons
-                                                                  .dog
-                                                            : FontAwesomeIcons
-                                                                  .cat,
-                                                        size: 16,
-                                                        color: _corAcai,
-                                                      ),
-                                                      radius: 18,
-                                                    ),
-                                                    SizedBox(width: 10),
-                                                    Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment
-                                                              .center,
-                                                      children: [
-                                                        Text(
-                                                          pet['nome'],
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                        Text(
-                                                          data['cpf_user'],
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: Colors.grey,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                          DataCell(
-                                            Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  "Ent: ${DateFormat('dd/MM HH:mm').format((data['check_in'] as Timestamp).toDate())}",
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  "Sai: ${DateFormat('dd/MM HH:mm').format((data['check_out'] as Timestamp).toDate())}",
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-
-                                          // CÉLULA FINANCEIRA
-                                          DataCell(
-                                            fin['saldo_devedor'] > 0
-                                                ? Container(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 5,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.orange[50],
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      border: Border.all(
-                                                        color:
-                                                            Colors.orange[200]!,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      "Falta R\$ ${fin['saldo_devedor'].toStringAsFixed(2)}",
-                                                      style: TextStyle(
-                                                        color:
-                                                            Colors.orange[900],
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 11,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Container(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 5,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.green[50],
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.check,
-                                                          size: 12,
-                                                          color: Colors.green,
-                                                        ),
-                                                        SizedBox(width: 5),
-                                                        Text(
-                                                          "PAGO",
-                                                          style: TextStyle(
-                                                            color: Colors
-                                                                .green[800],
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: 11,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                          ),
-
-                                          DataCell(_buildStatusBadge(status)),
-
-                                          // BOTÕES DE AÇÃO LÓGICA
-                                          DataCell(
-                                            status == 'reservado'
-                                                ? ElevatedButton(
-                                                    onPressed: () =>
-                                                        _fazerCheckIn(doc.id),
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor:
-                                                          Colors.green,
-                                                      padding:
-                                                          EdgeInsets.symmetric(
-                                                            horizontal: 15,
-                                                          ),
-                                                    ),
-                                                    child: Text("Entrada"),
-                                                  )
-                                                : (status == 'hospedado'
-                                                      ? ElevatedButton.icon(
-                                                          onPressed: () =>
-                                                              _processarSaida(
-                                                                doc.id,
-                                                                data,
-                                                              ),
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor:
-                                                                fin['tem_excedente']
-                                                                ? Colors
-                                                                      .orange[800]
-                                                                : _corAcai,
-                                                            padding:
-                                                                EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      15,
-                                                                ),
-                                                          ),
-                                                          icon: Icon(
-                                                            fin['tem_excedente']
-                                                                ? Icons
-                                                                      .attach_money
-                                                                : Icons
-                                                                      .exit_to_app,
-                                                            size: 16,
-                                                          ),
-                                                          label: Text(
-                                                            fin['tem_excedente']
-                                                                ? "Pagar & Sair"
-                                                                : "Saída",
-                                                          ),
-                                                        )
-                                                      : Icon(
-                                                          Icons.check_circle,
-                                                          color:
-                                                              Colors.grey[300],
-                                                        )),
-                                          ),
-                                        ],
-                                      );
-                                    })
-                                    .where((e) => e != null)
-                                    .cast<DataRow>()
-                                    .toList(),
                               ),
-                            ),
+                              SizedBox(width: 8),
+                              Text(
+                                pet['nome'],
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           );
                         },
                       ),
                     ),
+                    DataCell(_buildStatusBadge(status)),
+                    DataCell(
+                      Text(
+                        "${DateFormat('dd/MM').format((data['check_in'] as Timestamp).toDate())} - ${DateFormat('dd/MM').format((data['check_out'] as Timestamp).toDate())}",
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    DataCell(
+                      Text(
+                        "Ver Detalhes >",
+                        style: TextStyle(
+                          color: _corAcai,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // --- O NOVO PAINEL LATERAL ---
+  Widget _buildPainelDetalhes() {
+    if (_selectedReservaData == null) return SizedBox();
+
+    final data = _selectedReservaData!;
+    final docId = _selectedReservaId!;
+    final fin = _calcularSituacaoFinanceira(data);
+    final status = data['status'] ?? 'reservado';
+
+    return Container(
+      margin: EdgeInsets.only(top: 10, bottom: 20, right: 20),
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Detalhes da Reserva",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _corAcai,
                 ),
               ),
+              IconButton(
+                icon: Icon(Icons.close),
+                onPressed: () => setState(() {
+                  _selectedReservaId = null;
+                  _selectedReservaData = null;
+                }),
+              ),
+            ],
+          ),
+          Divider(),
+
+          // Dados Assíncronos (Tutor e Pet Completos)
+          Expanded(
+            child: FutureBuilder(
+              future: Future.wait([
+                _db.collection('users').doc(data['cpf_user']).get(),
+                _db
+                    .collection('users')
+                    .doc(data['cpf_user'])
+                    .collection('pets')
+                    .doc(data['pet_id'])
+                    .get(),
+              ]),
+              builder: (context, AsyncSnapshot<List<DocumentSnapshot>> snapshot) {
+                if (!snapshot.hasData)
+                  return Center(child: CircularProgressIndicator());
+
+                final user =
+                    snapshot.data![0].data() as Map? ??
+                    {'nome': 'N/A', 'telefone': 'N/A'};
+                final pet =
+                    snapshot.data![1].data() as Map? ??
+                    {'nome': 'N/A', 'raca': 'N/A'};
+
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // INFO BASICA
+                      _infoLabel("Tutor", user['nome']),
+                      _infoLabel("Telefone", user['telefone']),
+                      SizedBox(height: 10),
+                      _infoLabel("Pet", pet['nome']),
+                      _infoLabel("Raça", pet['raca']),
+
+                      Divider(height: 30),
+
+                      // FINANCEIRO
+                      Text(
+                        "Financeiro",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Container(
+                        padding: EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: fin['esta_pago']
+                              ? Colors.green[50]
+                              : Colors.orange[50],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: fin['esta_pago']
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Total Atual:"),
+                                Text(
+                                  "R\$ ${fin['valor_total_atual'].toStringAsFixed(2)}",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Pago:"),
+                                Text(
+                                  "R\$ ${fin['valor_ja_pago'].toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Divider(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "A Pagar:",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  "R\$ ${fin['saldo_devedor'].toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    color: fin['esta_pago']
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 5),
+                            if (fin['esta_pago'])
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 14,
+                                    color: Colors.green,
+                                  ),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    "Conta Quitada",
+                                    style: TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 30),
+
+                      // --- BOTÕES DE AÇÃO ---
+
+                      // 1. CHECK-IN (Só se estiver reservado)
+                      if (status == 'reservado')
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: EdgeInsets.all(15),
+                          ),
+                          icon: Icon(Icons.login),
+                          label: Text("REALIZAR CHECK-IN"),
+                          onPressed: () => _fazerCheckIn(docId),
+                        ),
+
+                      // 2. REGISTRAR PAGAMENTO (Só se dever algo e NÃO estiver concluído)
+                      if (!fin['esta_pago'] &&
+                          status != 'concluido' &&
+                          status != 'cancelado') ...[
+                        SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _corAcai,
+                            padding: EdgeInsets.all(15),
+                          ),
+                          icon: Icon(Icons.attach_money),
+                          label: Text("REGISTRAR PAGAMENTO"),
+                          onPressed: () =>
+                              _abrirCaixa(docId, fin['saldo_devedor']),
+                        ),
+                      ],
+
+                      // 3. CHECK-OUT (Só se estiver hospedado E pago)
+                      if (status == 'hospedado') ...[
+                        SizedBox(height: 10),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            padding: EdgeInsets.all(15),
+                            // Desabilita visualmente se não estiver pago
+                            disabledBackgroundColor: Colors.grey[300],
+                            disabledForegroundColor: Colors.grey[600],
+                          ),
+                          icon: Icon(Icons.exit_to_app),
+                          label: Text("REALIZAR CHECK-OUT"),
+                          // Lógica solicitada: Botão só disponível se pago
+                          onPressed: fin['esta_pago']
+                              ? () => _confirmarSaidaSimples(docId)
+                              : null,
+                        ),
+                        if (!fin['esta_pago'])
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "⚠️ Regularize o pagamento para liberar a saída.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.red, fontSize: 11),
+                            ),
+                          ),
+                      ],
+
+                      if (status == 'concluido')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 20),
+                          child: Center(
+                            child: Text(
+                              "Hospedagem Finalizada",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoLabel(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1296,40 +1414,27 @@ class _HotelViewState extends State<HotelView> {
   Widget _buildCardKPI(String title, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: EdgeInsets.all(25),
+        padding: EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 15,
-              offset: Offset(0, 5),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 10)],
         ),
         child: Row(
           children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: FaIcon(icon, color: color, size: 28),
-            ),
-            SizedBox(width: 15),
+            FaIcon(icon, color: color, size: 20),
+            SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 26,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
@@ -1343,8 +1448,8 @@ class _HotelViewState extends State<HotelView> {
   }
 
   Widget _buildStatusBadge(String status) {
-    Color bg;
-    Color text;
+    Color bg = Colors.grey;
+    Color text = Colors.white;
     switch (status) {
       case 'reservado':
         bg = Colors.blue[50]!;
@@ -1358,23 +1463,16 @@ class _HotelViewState extends State<HotelView> {
         bg = Colors.grey[100]!;
         text = Colors.grey;
         break;
-      default:
-        bg = Colors.grey;
-        text = Colors.white;
     }
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(
-          color: text,
-          fontWeight: FontWeight.bold,
-          fontSize: 10,
-        ),
+        style: TextStyle(color: text, fontWeight: FontWeight.bold, fontSize: 9),
       ),
     );
   }

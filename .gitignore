@@ -57,3 +57,4 @@ functions/serviceAccountKey.json
 functions/serviceAccountKey.json
 setup_banco/serviceAccountKey.json
 setup_banco/chave-firebase.json
+lib/firebase_options.dart
