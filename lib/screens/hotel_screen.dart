@@ -79,7 +79,7 @@ class _HotelScreenState extends State<HotelScreen> {
       final doc = await _db.collection('config').doc('parametros').get();
       if (doc.exists) {
         setState(() {
-          _valorDiaria = (doc.data()!['preco_hotel_diaria'] ?? 80.00)
+          _valorDiaria = (doc.data()!['preco_hotel_diaria_diaria'] ?? 80.00)
               .toDouble();
         });
       }

@@ -17,9 +17,13 @@ const hotelController = require('./controllers/hotelController');
 // --- Módulo de Agendamento ---
 exports.buscarHorarios = agendamentoController.buscarHorarios;
 exports.criarAgendamento = agendamentoController.criarAgendamento;
-exports.comprarAssinatura = agendamentoController.comprarAssinatura; // <--- Importante! Faltava essa.
+exports.comprarAssinatura = agendamentoController.comprarAssinatura;
 exports.webhookPix = agendamentoController.webhookPix;
+exports.realizarCheckout = agendamentoController.realizarCheckout;
+exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;
 
 // --- Módulo de Hotelzinho ---
 exports.reservarHotel = hotelController.reservarHotel;
 exports.obterDiasLotados = hotelController.obterDiasLotados;
+exports.realizarCheckoutHotel = hotelController.realizarCheckoutHotel;
+exports.registrarPagamentoHotel = hotelController.registrarPagamentoHotel;

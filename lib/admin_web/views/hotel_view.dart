@@ -1,5 +1,9 @@
+import 'package:agenpet/admin_web/views/components/checkout_hotel_dialog.dart';
+import 'package:agenpet/admin_web/views/components/nova_reserva_dialog.dart';
+import 'package:agenpet/admin_web/views/components/registrar_pagamento_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -15,419 +19,90 @@ class _HotelViewState extends State<HotelView> {
     databaseId: 'agenpets',
   );
 
-  // --- CORES AÇAÍ & LILÁS ---
+  // Cores
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corLavanda = Color(0xFFAB47BC);
   final Color _corLilas = Color(0xFFF3E5F5);
-  final Color _corFundo = Color(0xFFFAFAFA);
+  final Color _corFundo = Color(0xFFF5F7FA);
 
-  final int _capacidadeTotal = 60;
-  final double _valorDiaria = 80.00;
-
-  // Variáveis para controlar o painel lateral (Master-Detail)
+  // Variáveis de Controle
   String? _selectedReservaId;
   Map<String, dynamic>? _selectedReservaData;
+  double _precoDiariaCache = 0.0;
 
-  // --- CÁLCULO FINANCEIRO INTELIGENTE ---
-  Map<String, dynamic> _calcularSituacaoFinanceira(Map<String, dynamic> data) {
-    final checkIn = (data['check_in'] as Timestamp).toDate();
-    final agora = DateTime.now();
+  // Controle de Busca
+  TextEditingController _searchController = TextEditingController();
+  String _filtroTexto = "";
 
-    // 1. Calcula dias REAIS até agora (mínimo 1 dia)
-    int diasReais = agora.difference(checkIn).inDays;
-    if (diasReais < 1) diasReais = 1;
-
-    // 2. Calcula valor que DEVERIA ser pago até agora
-    double valorDevidoAtual = diasReais * _valorDiaria;
-
-    // 3. Verifica quanto JÁ FOI PAGO
-    double valorJaPago = 0.0;
-    if (data['payment_status'] == 'paid') {
-      // Se já marcou como pago no passado, consideramos o valor total previsto original ou o calculado
-      // Se houver campo 'valor_total_final', usamos ele.
-      valorJaPago =
-          (data['valor_total_final'] ??
-                  data['valor_previsto'] ??
-                  valorDevidoAtual)
-              .toDouble();
-    }
-
-    // 4. Calcula Diferença
-    double saldoDevedor = valorDevidoAtual - valorJaPago;
-
-    // Margem de erro para evitar problemas de ponto flutuante
-    if (saldoDevedor < 0.1) saldoDevedor = 0;
-
-    return {
-      'dias_ficados': diasReais,
-      'valor_total_atual': valorDevidoAtual,
-      'valor_ja_pago': valorJaPago,
-      'saldo_devedor': saldoDevedor,
-      'esta_pago': saldoDevedor <= 0, // Regra para liberar check-out
-    };
+  @override
+  void initState() {
+    super.initState();
+    _carregarPrecoDiaria();
   }
 
-  // --- AÇÕES ---
+  void _carregarPrecoDiaria() async {
+    final doc = await _db.collection('config').doc('parametros').get();
+    if (doc.exists) {
+      setState(() {
+        _precoDiariaCache = (doc.data()?['preco_hotel_diaria'] ?? 0).toDouble();
+      });
+    }
+  }
 
   void _fazerCheckIn(String docId) async {
     await _db.collection('reservas_hotel').doc(docId).update({
       'status': 'hospedado',
       'check_in_real': FieldValue.serverTimestamp(),
     });
+    _refreshSelection(docId);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Check-in realizado! Bem-vindo! 🐶")),
+    );
+  }
 
-    // Atualiza o painel lateral se estiver aberto no mesmo item
-    if (_selectedReservaId == docId) {
-      final doc = await _db.collection('reservas_hotel').doc(docId).get();
+  void _refreshSelection(String docId) async {
+    final doc = await _db.collection('reservas_hotel').doc(docId).get();
+    if (doc.exists) {
       setState(() {
         _selectedReservaData = doc.data();
       });
     }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("Check-in realizado! 🏠")));
   }
 
-  void _confirmarSaidaSimples(String docId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text("Check-out Liberado ✨", style: TextStyle(color: _corAcai)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 60),
-            SizedBox(height: 15),
-            Text(
-              "A conta está em dia.",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text("Deseja finalizar a hospedagem?"),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Voltar"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              padding: EdgeInsets.symmetric(horizontal: 20),
-            ),
-            onPressed: () async {
-              await _db.collection('reservas_hotel').doc(docId).update({
-                'status': 'concluido',
-                'check_out_real': FieldValue.serverTimestamp(),
-              });
-              Navigator.pop(ctx); // Fecha Dialog
-              setState(() {
-                _selectedReservaId = null; // Fecha painel lateral
-                _selectedReservaData = null;
-              });
-            },
-            child: Text("FINALIZAR ESTADIA"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _abrirCaixa(String docId, double valorCobrar) {
-    String metodo = 'dinheiro';
+  void _abrirCheckoutHotel(String docId, Map<String, dynamic> data) async {
+    final extrasSnap = await _db
+        .collection('servicos_extras')
+        .where('ativo', isEqualTo: true)
+        .get();
+    final List<Map<String, dynamic>> extrasDisponiveis = extrasSnap.docs
+        .map(
+          (e) => {
+            'id': e.id,
+            'nome': e['nome'],
+            'preco': (e['preco'] ?? 0).toDouble(),
+          },
+        )
+        .toList();
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+      barrierDismissible: false,
+      builder: (ctx) => CheckoutHotelDialog(
+        reservaId: docId,
+        dadosReserva: data,
+        precoDiaria: _precoDiariaCache,
+        listaExtras: extrasDisponiveis,
+        corAcai: _corAcai,
+        onSuccess: () {
+          setState(() {
+            _selectedReservaId = null;
+            _selectedReservaData = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Estadia finalizada com sucesso! 🏨"),
+              backgroundColor: Colors.green,
             ),
-            title: Text(
-              "Receber Pagamento 💰",
-              style: TextStyle(color: _corAcai, fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Valor a Receber:",
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                Text(
-                  "R\$ ${valorCobrar.toStringAsFixed(2)}",
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: _corAcai,
-                  ),
-                ),
-                SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: metodo,
-                  decoration: InputDecoration(
-                    labelText: "Forma de Pagamento",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    prefixIcon: Icon(Icons.payment, color: _corAcai),
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'dinheiro',
-                      child: Text("Dinheiro"),
-                    ),
-                    DropdownMenuItem(
-                      value: 'pix_balcao',
-                      child: Text("Pix (Maquininha/Celular)"),
-                    ),
-                    DropdownMenuItem(
-                      value: 'cartao_credito',
-                      child: Text("Cartão de Crédito"),
-                    ),
-                    DropdownMenuItem(
-                      value: 'cartao_debito',
-                      child: Text("Cartão de Débito"),
-                    ),
-                  ],
-                  onChanged: (v) => setModalState(() => metodo = v!),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text("Cancelar"),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                ),
-                onPressed: () async {
-                  await _db.collection('reservas_hotel').doc(docId).update({
-                    'payment_status': 'paid',
-                    'metodo_pagamento_final': metodo,
-                    'valor_total_final': valorCobrar, // Registra quanto pagou
-                  });
-
-                  // Atualiza painel lateral
-                  if (_selectedReservaId == docId) {
-                    final doc = await _db
-                        .collection('reservas_hotel')
-                        .doc(docId)
-                        .get();
-                    setState(() {
-                      _selectedReservaData = doc.data();
-                    });
-                  }
-
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Pagamento registrado!")),
-                  );
-                },
-                child: Text("CONFIRMAR PAGAMENTO"),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  // --- CADASTRO RÁPIDO E NOVA HOSPEDAGEM (Mantidos do código original) ---
-  // (Omiti o código interno dessas funções para brevidade,
-  // mas assuma que são EXATAMENTE as mesmas funções _abrirCadastroRapido e _novaHospedagemManual
-  // que você já tinha no arquivo. Vou colocar apenas a assinatura para compilar,
-  // mas no seu arquivo final mantenha o corpo delas completo conforme seu upload).
-
-  Future<void> _abrirCadastroRapido(
-    BuildContext context,
-    String cpf,
-    Function(String, List<Map<String, dynamic>>) onSucesso,
-  ) async {
-    // ... MANTENHA SEU CÓDIGO ORIGINAL AQUI ...
-    final _nomeController = TextEditingController();
-    final _telController = TextEditingController();
-    final _petNomeController = TextEditingController();
-    final _petRacaController = TextEditingController();
-    String _petTipo = 'cao';
-    bool _salvando = false;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateModal) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Text(
-              "Cadastro Rápido ⚡",
-              style: TextStyle(color: _corAcai, fontWeight: FontWeight.bold),
-            ),
-            content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Dados do Cliente (CPF: $cpf)",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _nomeController,
-                      decoration: InputDecoration(
-                        labelText: "Nome Completo",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person, color: _corAcai),
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _telController,
-                      decoration: InputDecoration(
-                        labelText: "WhatsApp / Telefone",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone, color: _corAcai),
-                      ),
-                    ),
-
-                    Divider(height: 30, color: _corLilas, thickness: 2),
-
-                    Text(
-                      "Dados do Primeiro Pet",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: _corAcai,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _petNomeController,
-                      decoration: InputDecoration(
-                        labelText: "Nome do Pet",
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.pets, color: _corAcai),
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _petRacaController,
-                      decoration: InputDecoration(
-                        labelText: "Raça (Opcional)",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Text("Tipo: "),
-                        Radio<String>(
-                          activeColor: _corAcai,
-                          value: 'cao',
-                          groupValue: _petTipo,
-                          onChanged: (v) => setStateModal(() => _petTipo = v!),
-                        ),
-                        Text("Cão"),
-                        Radio<String>(
-                          activeColor: _corAcai,
-                          value: 'gato',
-                          groupValue: _petTipo,
-                          onChanged: (v) => setStateModal(() => _petTipo = v!),
-                        ),
-                        Text("Gato"),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _corAcai,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: _salvando
-                    ? null
-                    : () async {
-                        if (_nomeController.text.isEmpty ||
-                            _petNomeController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text("Preencha os nomes obrigatórios."),
-                            ),
-                          );
-                          return;
-                        }
-
-                        setStateModal(() => _salvando = true);
-
-                        try {
-                          // 1. Criar Usuário
-                          await _db.collection('users').doc(cpf).set({
-                            'cpf': cpf,
-                            'nome': _nomeController.text,
-                            'telefone': _telController.text,
-                            'criado_em': FieldValue.serverTimestamp(),
-                          });
-
-                          // 2. Criar Pet
-                          final petRef = await _db
-                              .collection('users')
-                              .doc(cpf)
-                              .collection('pets')
-                              .add({
-                                'nome': _petNomeController.text,
-                                'raca': _petRacaController.text.isEmpty
-                                    ? 'SRD'
-                                    : _petRacaController.text,
-                                'tipo': _petTipo,
-                                'donoCpf': cpf,
-                              });
-
-                          // 3. Retornar
-                          final novoPet = {
-                            'id': petRef.id,
-                            'nome': _petNomeController.text,
-                            'tipo': _petTipo,
-                            'raca': _petRacaController.text,
-                          };
-
-                          Navigator.pop(ctx);
-                          onSucesso(_nomeController.text, [novoPet]);
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Erro ao salvar: $e")),
-                          );
-                        }
-                      },
-                child: _salvando
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
-                    : Text("SALVAR E USAR"),
-              ),
-            ],
           );
         },
       ),
@@ -435,402 +110,10 @@ class _HotelViewState extends State<HotelView> {
   }
 
   void _novaHospedagemManual() {
-    // ... MANTENHA SEU CÓDIGO ORIGINAL AQUI ...
-    String? _cpfBusca;
-    String? _petIdSelecionado;
-    List<Map<String, dynamic>> _petsEncontrados = [];
-    DateTimeRange? _datas;
-    bool _buscando = false;
-    String? _nomeCliente;
-    bool _clienteNaoEncontrado = false;
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setStateModal) {
-          double valorEstimado = 0;
-          if (_datas != null) {
-            int dias = _datas!.duration.inDays;
-            if (dias < 1) dias = 1;
-            valorEstimado = dias * _valorDiaria;
-          }
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _corLilas,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.store, color: _corAcai),
-                ),
-                SizedBox(width: 10),
-                Text(
-                  "Hospedagem de Balcão",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _corAcai,
-                  ),
-                ),
-              ],
-            ),
-            content: SizedBox(
-              width: 600,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. BUSCA DE CLIENTE
-                    Text(
-                      "1. Localizar Tutor",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            decoration: InputDecoration(
-                              labelText: "CPF do Cliente",
-                              hintText: "000.000.000-00",
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(
-                                Icons.search,
-                                color: Colors.grey,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                  color: _corAcai,
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                            onChanged: (v) {
-                              _cpfBusca = v;
-                              if (_clienteNaoEncontrado)
-                                setStateModal(
-                                  () => _clienteNaoEncontrado = false,
-                                );
-                            },
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _corAcai,
-                            padding: EdgeInsets.symmetric(
-                              vertical: 20,
-                              horizontal: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: () async {
-                            if (_cpfBusca == null || _cpfBusca!.isEmpty) return;
-                            setStateModal(() => _buscando = true);
-
-                            final userDoc = await _db
-                                .collection('users')
-                                .doc(_cpfBusca)
-                                .get();
-
-                            if (userDoc.exists) {
-                              _nomeCliente = userDoc.data()!['nome'];
-                              _clienteNaoEncontrado = false;
-                              final petsSnap = await _db
-                                  .collection('users')
-                                  .doc(_cpfBusca)
-                                  .collection('pets')
-                                  .get();
-                              _petsEncontrados = petsSnap.docs
-                                  .map((d) => {'id': d.id, ...d.data()})
-                                  .toList();
-                              _petIdSelecionado = null;
-                            } else {
-                              _petsEncontrados = [];
-                              _nomeCliente = null;
-                              _clienteNaoEncontrado = true;
-                            }
-                            setStateModal(() => _buscando = false);
-                          },
-                          child: _buscando
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text("BUSCAR"),
-                        ),
-                      ],
-                    ),
-
-                    if (_nomeCliente != null)
-                      Container(
-                        margin: EdgeInsets.only(top: 10),
-                        padding: EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.green[50],
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.green[200]!),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.check_circle,
-                              color: Colors.green,
-                              size: 20,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              "Cliente: $_nomeCliente",
-                              style: TextStyle(
-                                color: Colors.green[800],
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    if (_clienteNaoEncontrado)
-                      Container(
-                        margin: EdgeInsets.only(top: 10),
-                        padding: EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.red[50],
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.red[200]!),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: Colors.red,
-                              size: 20,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              "Cliente não encontrado.",
-                              style: TextStyle(color: Colors.red[800]),
-                            ),
-                            Spacer(),
-                            TextButton.icon(
-                              icon: Icon(Icons.person_add, color: _corAcai),
-                              label: Text(
-                                "CADASTRAR AGORA",
-                                style: TextStyle(
-                                  color: _corAcai,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              onPressed: () {
-                                _abrirCadastroRapido(context, _cpfBusca!, (
-                                  nome,
-                                  pets,
-                                ) {
-                                  setStateModal(() {
-                                    _nomeCliente = nome;
-                                    _petsEncontrados = pets;
-                                    _clienteNaoEncontrado = false;
-                                    if (pets.isNotEmpty)
-                                      _petIdSelecionado = pets.first['id'];
-                                  });
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    SizedBox(height: 20),
-                    Text(
-                      "2. Selecionar Pet",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _petIdSelecionado,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 15),
-                      ),
-                      hint: Text(
-                        _petsEncontrados.isEmpty ? "..." : "Escolha o pet...",
-                      ),
-                      items: _petsEncontrados
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p['id'] as String,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    p['tipo'] == 'cao'
-                                        ? FontAwesomeIcons.dog
-                                        : FontAwesomeIcons.cat,
-                                    size: 16,
-                                    color: _corAcai,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text("${p['nome']} (${p['raca'] ?? ''})"),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _petsEncontrados.isEmpty
-                          ? null
-                          : (v) => setStateModal(() => _petIdSelecionado = v),
-                    ),
-
-                    SizedBox(height: 20),
-
-                    Text(
-                      "3. Período da Estadia",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime.now().subtract(Duration(days: 1)),
-                          lastDate: DateTime.now().add(Duration(days: 365)),
-                          builder: (context, child) {
-                            return Theme(
-                              data: ThemeData.light().copyWith(
-                                primaryColor: _corAcai,
-                                colorScheme: ColorScheme.light(
-                                  primary: _corAcai,
-                                  onPrimary: Colors.white,
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (picked != null)
-                          setStateModal(() => _datas = picked);
-                      },
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          vertical: 15,
-                          horizontal: 15,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[400]!),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _datas == null
-                                  ? "Clique para selecionar datas"
-                                  : "${DateFormat('dd/MM/yyyy').format(_datas!.start)}  até  ${DateFormat('dd/MM/yyyy').format(_datas!.end)}",
-                              style: TextStyle(fontSize: 16),
-                            ),
-                            Icon(Icons.calendar_month, color: _corAcai),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    if (_datas != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 20.0),
-                        child: Container(
-                          padding: EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: _corLilas,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "Valor Previsto:",
-                                style: TextStyle(fontSize: 16, color: _corAcai),
-                              ),
-                              Text(
-                                "R\$ ${valorEstimado.toStringAsFixed(2)}",
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: _corAcai,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _corAcai,
-                  padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed:
-                    (_nomeCliente != null &&
-                        _petIdSelecionado != null &&
-                        _datas != null)
-                    ? () async {
-                        await _db.collection('reservas_hotel').add({
-                          'cpf_user': _cpfBusca,
-                          'pet_id': _petIdSelecionado,
-                          'check_in': Timestamp.fromDate(_datas!.start),
-                          'check_out': Timestamp.fromDate(_datas!.end),
-                          'status': 'reservado',
-                          'criado_em': FieldValue.serverTimestamp(),
-                          'origem': 'balcao_admin',
-                          'payment_status': 'pending',
-                          'valor_previsto': valorEstimado,
-                        });
-
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Reserva confirmada!")),
-                        );
-                      }
-                    : null,
-                child: Text(
-                  "CONFIRMAR HOSPEDAGEM",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+      barrierDismissible: false,
+      builder: (ctx) => NovaReservaDialog(),
     );
   }
 
@@ -839,56 +122,13 @@ class _HotelViewState extends State<HotelView> {
     return Scaffold(
       backgroundColor: _corFundo,
       body: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // --- HEADER & KPI (Fixo no topo) ---
           _buildHeaderAndKPIs(),
-
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- ESQUERDA: LISTA (MASTER) ---
-                Expanded(
-                  flex: 6,
-                  child: Container(
-                    margin: EdgeInsets.only(
-                      left: 20,
-                      top: 10,
-                      bottom: 20,
-                      right: _selectedReservaId != null ? 10 : 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            "Quadro de Hóspedes",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _corAcai,
-                            ),
-                          ),
-                        ),
-                        Expanded(child: _buildListaHospedes()),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // --- DIREITA: DETALHES (DETAIL) ---
+                Expanded(flex: 6, child: _buildListaReservas()),
                 if (_selectedReservaId != null)
                   Expanded(flex: 4, child: _buildPainelDetalhes()),
               ],
@@ -901,7 +141,8 @@ class _HotelViewState extends State<HotelView> {
 
   Widget _buildHeaderAndKPIs() {
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+      padding: EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+      color: Colors.white,
       child: Column(
         children: [
           Row(
@@ -911,35 +152,31 @@ class _HotelViewState extends State<HotelView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hotelzinho AgenPet 💜",
+                    "Hotel & Estadia",
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: _corAcai,
                     ),
                   ),
                   Text(
-                    "Gestão de Estadias",
+                    "Gerencie check-ins, check-outs e serviços do hotel",
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
               ),
               ElevatedButton.icon(
-                icon: Icon(Icons.add_circle),
+                icon: Icon(Icons.add),
                 label: Text("NOVA RESERVA"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _corAcai,
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
                 ),
                 onPressed: _novaHospedagemManual,
               ),
             ],
           ),
           SizedBox(height: 20),
-          // KPIs simplificados
           StreamBuilder<QuerySnapshot>(
             stream: _db
                 .collection('reservas_hotel')
@@ -948,34 +185,34 @@ class _HotelViewState extends State<HotelView> {
             builder: (context, snapshot) {
               if (!snapshot.hasData) return SizedBox();
               int hospedados = 0;
-              int reservado = 0;
+              int chegando = 0;
               for (var doc in snapshot.data!.docs) {
                 if (doc['status'] == 'hospedado')
                   hospedados++;
                 else
-                  reservado++;
+                  chegando++;
               }
               return Row(
                 children: [
-                  _buildCardKPI(
-                    "Ativos",
+                  _kpiCard(
+                    "Hóspedes Atuais",
                     "$hospedados",
                     FontAwesomeIcons.dog,
                     _corAcai,
                   ),
                   SizedBox(width: 15),
-                  _buildCardKPI(
-                    "Livres",
-                    "${_capacidadeTotal - hospedados}",
-                    FontAwesomeIcons.doorOpen,
-                    Colors.green,
+                  _kpiCard(
+                    "Chegando Hoje",
+                    "$chegando",
+                    FontAwesomeIcons.suitcase,
+                    _corLavanda,
                   ),
                   SizedBox(width: 15),
-                  _buildCardKPI(
-                    "Chegando",
-                    "$reservado",
-                    FontAwesomeIcons.clock,
-                    _corLavanda,
+                  _kpiCard(
+                    "Valor Diária",
+                    "R\$ $_precoDiariaCache",
+                    Icons.attach_money,
+                    Colors.green,
                   ),
                 ],
               );
@@ -986,457 +223,35 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  Widget _buildListaHospedes() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _db.collection('reservas_hotel').orderBy('check_in').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData)
-          return Center(child: CircularProgressIndicator(color: _corAcai));
-
-        final docs = snapshot.data!.docs
-            .where((d) => d['status'] != 'cancelado')
-            .toList();
-
-        if (docs.isEmpty)
-          return Center(child: Text("Nenhuma reserva encontrada."));
-
-        return Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: SingleChildScrollView(
-            child: DataTable(
-              showCheckboxColumn: false,
-              headingRowColor: MaterialStateProperty.all(_corLilas),
-              dataRowColor: MaterialStateProperty.resolveWith<Color?>((
-                Set<MaterialState> states,
-              ) {
-                if (states.contains(MaterialState.selected))
-                  return _corAcai.withOpacity(0.1);
-                return Colors.white;
-              }),
-              columns: [
-                DataColumn(
-                  label: Text(
-                    "PET",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    "STATUS",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    "PERÍODO",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    "AÇÃO",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                ),
-              ],
-              rows: docs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final status = data['status'] ?? 'reservado';
-                final isSelected = _selectedReservaId == doc.id;
-
-                return DataRow(
-                  selected: isSelected,
-                  onSelectChanged: (selected) {
-                    if (selected == true) {
-                      setState(() {
-                        _selectedReservaId = doc.id;
-                        _selectedReservaData = data;
-                      });
-                    }
-                  },
-                  cells: [
-                    DataCell(
-                      // Nome do Pet (Fetch rápido)
-                      FutureBuilder<DocumentSnapshot>(
-                        future: _db
-                            .collection('users')
-                            .doc(data['cpf_user'])
-                            .collection('pets')
-                            .doc(data['pet_id'])
-                            .get(),
-                        builder: (c, s) {
-                          if (!s.hasData) return Text("...");
-                          final pet =
-                              s.data!.data() as Map? ??
-                              {'nome': 'Desconhecido'};
-                          return Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: _corLilas,
-                                radius: 12,
-                                child: FaIcon(
-                                  pet['tipo'] == 'gato'
-                                      ? FontAwesomeIcons.cat
-                                      : FontAwesomeIcons.dog,
-                                  size: 12,
-                                  color: _corAcai,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                pet['nome'],
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    DataCell(_buildStatusBadge(status)),
-                    DataCell(
-                      Text(
-                        "${DateFormat('dd/MM').format((data['check_in'] as Timestamp).toDate())} - ${DateFormat('dd/MM').format((data['check_out'] as Timestamp).toDate())}",
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    DataCell(
-                      Text(
-                        "Ver Detalhes >",
-                        style: TextStyle(
-                          color: _corAcai,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // --- O NOVO PAINEL LATERAL ---
-  Widget _buildPainelDetalhes() {
-    if (_selectedReservaData == null) return SizedBox();
-
-    final data = _selectedReservaData!;
-    final docId = _selectedReservaId!;
-    final fin = _calcularSituacaoFinanceira(data);
-    final status = data['status'] ?? 'reservado';
-
-    return Container(
-      margin: EdgeInsets.only(top: 10, bottom: 20, right: 20),
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Detalhes da Reserva",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _corAcai,
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.close),
-                onPressed: () => setState(() {
-                  _selectedReservaId = null;
-                  _selectedReservaData = null;
-                }),
-              ),
-            ],
-          ),
-          Divider(),
-
-          // Dados Assíncronos (Tutor e Pet Completos)
-          Expanded(
-            child: FutureBuilder(
-              future: Future.wait([
-                _db.collection('users').doc(data['cpf_user']).get(),
-                _db
-                    .collection('users')
-                    .doc(data['cpf_user'])
-                    .collection('pets')
-                    .doc(data['pet_id'])
-                    .get(),
-              ]),
-              builder: (context, AsyncSnapshot<List<DocumentSnapshot>> snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
-
-                final user =
-                    snapshot.data![0].data() as Map? ??
-                    {'nome': 'N/A', 'telefone': 'N/A'};
-                final pet =
-                    snapshot.data![1].data() as Map? ??
-                    {'nome': 'N/A', 'raca': 'N/A'};
-
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // INFO BASICA
-                      _infoLabel("Tutor", user['nome']),
-                      _infoLabel("Telefone", user['telefone']),
-                      SizedBox(height: 10),
-                      _infoLabel("Pet", pet['nome']),
-                      _infoLabel("Raça", pet['raca']),
-
-                      Divider(height: 30),
-
-                      // FINANCEIRO
-                      Text(
-                        "Financeiro",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Container(
-                        padding: EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: fin['esta_pago']
-                              ? Colors.green[50]
-                              : Colors.orange[50],
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: fin['esta_pago']
-                                ? Colors.green
-                                : Colors.orange,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("Total Atual:"),
-                                Text(
-                                  "R\$ ${fin['valor_total_atual'].toStringAsFixed(2)}",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("Pago:"),
-                                Text(
-                                  "R\$ ${fin['valor_ja_pago'].toStringAsFixed(2)}",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Divider(),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  "A Pagar:",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  "R\$ ${fin['saldo_devedor'].toStringAsFixed(2)}",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: fin['esta_pago']
-                                        ? Colors.green
-                                        : Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 5),
-                            if (fin['esta_pago'])
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    size: 14,
-                                    color: Colors.green,
-                                  ),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    "Conta Quitada",
-                                    style: TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-
-                      SizedBox(height: 30),
-
-                      // --- BOTÕES DE AÇÃO ---
-
-                      // 1. CHECK-IN (Só se estiver reservado)
-                      if (status == 'reservado')
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            padding: EdgeInsets.all(15),
-                          ),
-                          icon: Icon(Icons.login),
-                          label: Text("REALIZAR CHECK-IN"),
-                          onPressed: () => _fazerCheckIn(docId),
-                        ),
-
-                      // 2. REGISTRAR PAGAMENTO (Só se dever algo e NÃO estiver concluído)
-                      if (!fin['esta_pago'] &&
-                          status != 'concluido' &&
-                          status != 'cancelado') ...[
-                        SizedBox(height: 10),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _corAcai,
-                            padding: EdgeInsets.all(15),
-                          ),
-                          icon: Icon(Icons.attach_money),
-                          label: Text("REGISTRAR PAGAMENTO"),
-                          onPressed: () =>
-                              _abrirCaixa(docId, fin['saldo_devedor']),
-                        ),
-                      ],
-
-                      // 3. CHECK-OUT (Só se estiver hospedado E pago)
-                      if (status == 'hospedado') ...[
-                        SizedBox(height: 10),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
-                            padding: EdgeInsets.all(15),
-                            // Desabilita visualmente se não estiver pago
-                            disabledBackgroundColor: Colors.grey[300],
-                            disabledForegroundColor: Colors.grey[600],
-                          ),
-                          icon: Icon(Icons.exit_to_app),
-                          label: Text("REALIZAR CHECK-OUT"),
-                          // Lógica solicitada: Botão só disponível se pago
-                          onPressed: fin['esta_pago']
-                              ? () => _confirmarSaidaSimples(docId)
-                              : null,
-                        ),
-                        if (!fin['esta_pago'])
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Text(
-                              "⚠️ Regularize o pagamento para liberar a saída.",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.red, fontSize: 11),
-                            ),
-                          ),
-                      ],
-
-                      if (status == 'concluido')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 20),
-                          child: Center(
-                            child: Text(
-                              "Hospedagem Finalizada",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _infoLabel(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCardKPI(String title, String value, IconData icon, Color color) {
+  Widget _kpiCard(String title, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
         padding: EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 10)],
+          color: _corFundo,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
         ),
         child: Row(
           children: [
-            FaIcon(icon, color: color, size: 20),
-            SizedBox(width: 10),
+            CircleAvatar(
+              backgroundColor: color.withOpacity(0.1),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            SizedBox(width: 15),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
                 ),
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: Colors.black87,
                   ),
                 ),
               ],
@@ -1447,32 +262,592 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color bg = Colors.grey;
-    Color text = Colors.white;
+  // --- LISTA DE RESERVAS COM BUSCA ---
+  Widget _buildListaReservas() {
+    return Container(
+      margin: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10),
+        ],
+      ),
+      child: Column(
+        children: [
+          // 1. CAMPO DE BUSCA
+          Padding(
+            padding: const EdgeInsets.all(15.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: "Buscar hóspede por Nome ou CPF",
+                prefixIcon: Icon(Icons.search, color: _corAcai),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 0,
+                ),
+                filled: true,
+                fillColor: _corFundo,
+              ),
+              onChanged: (v) {
+                setState(() => _filtroTexto = v.toLowerCase());
+              },
+            ),
+          ),
+
+          Divider(height: 1),
+
+          // 2. LISTA
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _db
+                  .collection('reservas_hotel')
+                  .orderBy('check_in', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData)
+                  return Center(child: CircularProgressIndicator());
+
+                final docs = snapshot.data!.docs;
+
+                return ListView.builder(
+                  padding: EdgeInsets.all(10),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final isSelected = _selectedReservaId == doc.id;
+                    final cpfUser = data['cpf_user'] ?? '';
+
+                    // FutureBuilder para pegar User (Tutor) e Pet
+                    return FutureBuilder<List<DocumentSnapshot>>(
+                      future: Future.wait([
+                        _db
+                            .collection('users')
+                            .doc(cpfUser)
+                            .get(), // Index 0: Tutor
+                        _db
+                            .collection('users')
+                            .doc(cpfUser)
+                            .collection('pets')
+                            .doc(data['pet_id'])
+                            .get(), // Index 1: Pet
+                      ]),
+                      builder: (c, s) {
+                        if (!s.hasData)
+                          return SizedBox(); // Carregando silencioso para não pular a tela
+
+                        // Extrai dados
+                        final userDoc = s.data![0];
+                        final petDoc = s.data![1];
+
+                        final nomeTutor = userDoc.exists
+                            ? (userDoc.get('nome') ?? 'Desconhecido')
+                            : 'Desconhecido';
+                        final nomePet = petDoc.exists
+                            ? (petDoc.get('nome') ?? 'Pet Removido')
+                            : 'Pet Removido';
+                        final tipoPet = petDoc.exists
+                            ? (petDoc.data() as Map)['tipo']
+                            : 'cao';
+
+                        // --- FILTRO DE BUSCA (Visual) ---
+                        // Se tiver texto de busca e NÃO bater com CPF nem Nome, esconde este item
+                        if (_filtroTexto.isNotEmpty) {
+                          bool matchCpf = cpfUser.toString().contains(
+                            _filtroTexto,
+                          );
+                          bool matchNome =
+                              nomeTutor.toLowerCase().contains(_filtroTexto) ||
+                              nomePet.toLowerCase().contains(_filtroTexto);
+                          if (!matchCpf && !matchNome) {
+                            return SizedBox.shrink();
+                          }
+                        }
+
+                        // Renderiza Item
+                        return Container(
+                          margin: EdgeInsets.only(
+                            bottom: 8,
+                          ), // Margem ao invés de separador
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? _corAcai.withOpacity(0.05)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: ListTile(
+                            selected: isSelected,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            leading: _buildStatusBadge(
+                              data['status'] ?? 'reservado',
+                            ),
+                            title: Row(
+                              children: [
+                                FaIcon(
+                                  tipoPet == 'gato'
+                                      ? FontAwesomeIcons.cat
+                                      : FontAwesomeIcons.dog,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  nomePet,
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                SizedBox(width: 5),
+                                Text("•", style: TextStyle(color: Colors.grey)),
+                                SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    "Tutor: $nomeTutor",
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 13,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Text(
+                              "${DateFormat('dd/MM').format((data['check_in'] as Timestamp).toDate())} até ${DateFormat('dd/MM').format((data['check_out'] as Timestamp).toDate())}",
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            trailing: Icon(
+                              Icons.chevron_right,
+                              color: isSelected ? _corAcai : Colors.grey[300],
+                            ),
+                            onTap: () {
+                              setState(() {
+                                _selectedReservaId = doc.id;
+                                _selectedReservaData = data;
+                              });
+                            },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- PAINEL DE DETALHES FIXO (SEM SCROLL) ---
+  Widget _buildPainelDetalhes() {
+    final data = _selectedReservaData!;
+    final docId = _selectedReservaId!;
+    final status = data['status'] ?? 'reservado';
+    final cpfUser = data['cpf_user'];
+    final petId = data['pet_id'];
+
+    return Container(
+      margin: EdgeInsets.only(top: 20, right: 20, bottom: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. CABEÇALHO COMPACTO
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Reserva",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _corAcai,
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+                icon: Icon(Icons.close, size: 20, color: Colors.grey),
+                onPressed: () => setState(() {
+                  _selectedReservaId = null;
+                  _selectedReservaData = null;
+                }),
+              ),
+            ],
+          ),
+          Divider(height: 15),
+
+          // 2. CONTEÚDO DISTRIBUÍDO (Expanded ocupa o resto da altura)
+          Expanded(
+            child: FutureBuilder<List<DocumentSnapshot>>(
+              future: Future.wait([
+                _db
+                    .collection('users')
+                    .doc(cpfUser)
+                    .collection('pets')
+                    .doc(petId)
+                    .get(),
+              ]),
+              builder: (context, snapshot) {
+                String tipoAnimalStr = "...";
+                IconData iconeAnimal = FontAwesomeIcons.paw;
+
+                if (snapshot.hasData && snapshot.data![0].exists) {
+                  var petData = snapshot.data![0].data() as Map;
+                  String tipo = petData['tipo'] ?? 'cao';
+                  if (tipo == 'gato') {
+                    tipoAnimalStr = "Gatinho";
+                    iconeAnimal = FontAwesomeIcons.cat;
+                  } else {
+                    tipoAnimalStr = "Cãozinho";
+                    iconeAnimal = FontAwesomeIcons.dog;
+                  }
+                }
+
+                return Column(
+                  children: [
+                    // A. BADGE DO PET
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 15,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _corLilas,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FaIcon(iconeAnimal, color: _corAcai, size: 14),
+                          SizedBox(width: 8),
+                          Text(
+                            tipoAnimalStr,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _corAcai,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    Spacer(flex: 2), // Espaço flexível
+                    // B. TABELA DE DADOS (Compacta)
+                    _buildCompactInfoRow(
+                      "Status",
+                      status.toString().toUpperCase(),
+                      isBadge: true,
+                      badgeColor: _getStatusColor(status),
+                    ),
+                    SizedBox(height: 8),
+                    _buildCompactInfoRow(
+                      "Check-in",
+                      DateFormat(
+                        'dd/MM/yy',
+                      ).format((data['check_in'] as Timestamp).toDate()),
+                    ),
+                    SizedBox(height: 8),
+                    _buildCompactInfoRow(
+                      "Check-out",
+                      DateFormat(
+                        'dd/MM/yy',
+                      ).format((data['check_out'] as Timestamp).toDate()),
+                    ),
+
+                    if (data['check_in_real'] != null) ...[
+                      SizedBox(height: 8),
+                      _buildCompactInfoRow(
+                        "Entrada",
+                        DateFormat(
+                          'dd/MM HH:mm',
+                        ).format((data['check_in_real'] as Timestamp).toDate()),
+                        valueColor: Colors.green[700],
+                      ),
+                    ],
+
+                    Spacer(flex: 3),
+
+                    // C. CARD FINANCEIRO (Compacto)
+                    Builder(
+                      builder: (context) {
+                        double valorPago = (data['valor_pago'] ?? 0).toDouble();
+                        return Container(
+                          padding: EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: Colors.blue[100]!),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    "JÁ PAGO",
+                                    style: TextStyle(
+                                      color: Colors.blue[900],
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    "R\$ ${valorPago.toStringAsFixed(2)}",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue[900],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (status != 'concluido') ...[
+                                SizedBox(height: 8),
+                                SizedBox(
+                                  height: 30, // Botão bem fininho
+                                  width: double.infinity,
+                                  child: OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: Colors.blue[300]!,
+                                      ),
+                                      backgroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                    onPressed: () async {
+                                      var res = await showDialog(
+                                        context: context,
+                                        builder: (c) =>
+                                            RegistrarPagamentoDialog(
+                                              reservaId: docId,
+                                              nomePet: "o Pet",
+                                            ),
+                                      );
+                                      if (res == true)
+                                        setState(() {
+                                          _refreshSelection(docId);
+                                        });
+                                    },
+                                    child: Text(
+                                      "REGISTRAR PAGAMENTO",
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue[800],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    Spacer(flex: 3),
+
+                    // D. BOTÃO DE AÇÃO PRINCIPAL
+                    if (status == 'reservado')
+                      _buildMainActionButton(
+                        label: "CHECK-IN (ENTRADA)",
+                        icon: Icons.login,
+                        color: Colors.green,
+                        onTap: () => _fazerCheckIn(docId),
+                      ),
+
+                    if (status == 'hospedado')
+                      _buildMainActionButton(
+                        label: "CHECK-OUT (SAÍDA)",
+                        icon: FontAwesomeIcons.fileInvoiceDollar,
+                        color: _corAcai,
+                        onTap: () => _abrirCheckoutHotel(docId, data),
+                      ),
+
+                    if (status == 'concluido')
+                      Container(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            "FINALIZADO ✅",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- WIDGETS AUXILIARES DO PAINEL ---
+
+  Widget _buildCompactInfoRow(
+    String label,
+    String value, {
+    bool isBadge = false,
+    Color? badgeColor,
+    Color? valueColor,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        isBadge
+            ? Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor!.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    color: badgeColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            : Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: valueColor ?? Colors.black87,
+                ),
+              ),
+      ],
+    );
+  }
+
+  Widget _buildMainActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton.icon(
+        icon: Icon(icon, size: 18),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          elevation: 4,
+          shadowColor: color.withOpacity(0.4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
     switch (status) {
       case 'reservado':
-        bg = Colors.blue[50]!;
-        text = Colors.blue[800]!;
+        return Colors.blue[700]!;
+      case 'hospedado':
+        return _corAcai;
+      case 'concluido':
+        return Colors.green[700]!;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _infoRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey[600])),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: color ?? Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color = Colors.grey;
+    switch (status) {
+      case 'reservado':
+        color = Colors.blue;
         break;
       case 'hospedado':
-        bg = _corLilas;
-        text = _corAcai;
+        color = _corAcai;
         break;
       case 'concluido':
-        bg = Colors.grey[100]!;
-        text = Colors.grey;
+        color = Colors.green;
         break;
     }
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(color: text, fontWeight: FontWeight.bold, fontSize: 9),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

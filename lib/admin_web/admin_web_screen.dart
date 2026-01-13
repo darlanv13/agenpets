@@ -1,12 +1,14 @@
-import 'package:agenpet/admin_web/views/agenda_view.dart';
-import 'package:agenpet/admin_web/views/configuracao_agenda_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// Importe as novas telas
+
+// --- IMPORTS DAS VIEWS ---
 import 'views/dashboard_view.dart';
+import 'views/agenda_view.dart';
 import 'views/hotel_view.dart';
-import 'views/gestao_precos_view.dart'; // <--- Nova
-import 'views/equipe_view.dart'; // <--- Nova
+import 'views/gestao_precos_view.dart';
+import 'views/equipe_view.dart';
+import 'views/configuracao_agenda_view.dart';
+import 'views/venda_assinatura_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -16,110 +18,204 @@ class AdminWebScreen extends StatefulWidget {
 class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
 
-  // Lista de Telas Atualizada
+  // Cores da Identidade Visual
+  final Color _corAcaiStart = Color(0xFF4A148C); // Roxo Escuro
+  final Color _corAcaiEnd = Color(0xFF7B1FA2); // Roxo Mais Claro
+  final Color _corFundo = Color(0xFFF0F2F5); // Cinza muito suave
+
+  // --- LISTA DE TELAS ---
   final List<Widget> _telas = [
-    DashboardView(),
-    AgendaView(),
-    HotelView(),
-    GestaoPrecosView(), // Índice 3
-    EquipeView(), // Índice 4
-    ConfiguracaoAgendaView(),
+    DashboardView(), // 0
+    AgendaView(), // 1
+    HotelView(), // 2
+    VendaAssinaturaView(), // 3
+    GestaoPrecosView(), // 4
+    EquipeView(), // 5
+    ConfiguracaoAgendaView(), // 6
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F5F5),
+      backgroundColor: _corFundo,
       body: Row(
         children: [
-          // MENU LATERAL
+          // --- MENU LATERAL (SIDEBAR) ---
           Container(
-            width: 260,
+            width: 280,
             decoration: BoxDecoration(
-              color: Color(0xFF0056D2), // Azul Principal
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_corAcaiStart, _corAcaiEnd],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 10,
+                  offset: Offset(2, 0),
+                ),
+              ],
             ),
             child: Column(
               children: [
+                // --- ÁREA DA LOGO ---
                 Container(
-                  height: 120,
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  padding: EdgeInsets.only(top: 50, bottom: 40),
+                  child: Column(
                     children: [
-                      FaIcon(
-                        FontAwesomeIcons.paw,
-                        color: Colors.white,
-                        size: 30,
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24, width: 2),
+                        ),
+                        child: FaIcon(
+                          FontAwesomeIcons.paw,
+                          color: Colors.white,
+                          size: 35,
+                        ),
                       ),
-                      SizedBox(width: 10),
+                      SizedBox(height: 15),
                       Text(
-                        "AgenPet Admin",
+                        "AgenPets",
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                          fontFamily:
+                              'Roboto', // Pode usar GoogleFonts se tiver
+                        ),
+                      ),
+                      Container(
+                        margin: EdgeInsets.only(top: 5),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          "PAINEL GERENCIAL",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2.0,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Divider(color: Colors.white24, height: 1),
-                SizedBox(height: 20),
 
-                // ITENS DO MENU
-                _buildMenuItem(0, "Dashboard", FontAwesomeIcons.chartPie),
+                // --- ITENS DO MENU ---
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.symmetric(horizontal: 15),
+                    children: [
+                      _buildSectionTitle("PRINCIPAL"),
+                      _buildMenuItem(
+                        0,
+                        "Dashboard",
+                        Icons.space_dashboard_rounded,
+                      ),
+                      _buildMenuItem(1, "Agenda", Icons.calendar_month_rounded),
+                      _buildMenuItem(
+                        2,
+                        "Hotel & Estadia",
+                        FontAwesomeIcons.hotel,
+                      ),
 
-                _buildMenuItem(1, "Agenda", FontAwesomeIcons.calendarDay),
-                _buildMenuItem(2, "Hotelzinho", FontAwesomeIcons.hotel),
+                      SizedBox(height: 20),
+                      _buildSectionTitle("VENDAS & PRODUTOS"),
+                      _buildMenuItem(
+                        3,
+                        "Venda de Planos",
+                        FontAwesomeIcons.cartShopping,
+                      ),
+                      _buildMenuItem(
+                        4,
+                        "Tabela de Preços",
+                        Icons.price_change_rounded,
+                      ),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
+                      SizedBox(height: 20),
+                      _buildSectionTitle("ADMINISTRAÇÃO"),
+                      _buildMenuItem(5, "Equipe", Icons.people_alt_rounded),
+                      _buildMenuItem(
+                        6,
+                        "Configurações",
+                        Icons.settings_rounded,
+                      ),
+                    ],
                   ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "GESTÃO",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                ),
+
+                // --- RODAPÉ DO MENU ---
+                Container(
+                  padding: EdgeInsets.all(20),
+                  child: InkWell(
+                    onTap: () =>
+                        Navigator.pushReplacementNamed(context, '/login'),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.logout_rounded,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            "Sair do Sistema",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-
-                _buildMenuItem(
-                  3,
-                  "Tabela de Preços",
-                  FontAwesomeIcons.moneyBillWave,
-                ),
-                _buildMenuItem(4, "Equipe & RH", FontAwesomeIcons.users),
-
-                _buildMenuItem(5, "Config. Agenda", FontAwesomeIcons.clock),
-
-                Spacer(),
-                ListTile(
-                  leading: Icon(Icons.exit_to_app, color: Colors.white70),
-                  title: Text(
-                    "Sair do Sistema",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/login'),
-                ),
-                SizedBox(height: 20),
               ],
             ),
           ),
 
-          // CONTEÚDO
+          // --- ÁREA DE CONTEÚDO (COM BORDA ARREDONDADA) ---
           Expanded(
             child: Container(
-              padding: EdgeInsets.all(40),
-              child: _telas[_selectedIndex],
+              color: _corAcaiEnd, // Fundo atrás do container arredondado
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _corFundo,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    bottomLeft: Radius.circular(30),
+                  ),
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    bottomLeft: Radius.circular(30),
+                  ),
+                  child: _telas[_selectedIndex],
+                ),
+              ),
             ),
           ),
         ],
@@ -127,28 +223,76 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     );
   }
 
+  // Títulos das seções do menu (ex: "PRINCIPAL")
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 15, bottom: 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.white38,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.5,
+        ),
+      ),
+    );
+  }
+
+  // Widget do Botão do Menu
   Widget _buildMenuItem(int index, String title, IconData icon) {
     bool isSelected = _selectedIndex == index;
+
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: FaIcon(
-          icon,
-          color: isSelected ? Color(0xFF0056D2) : Colors.white70,
-          size: 20,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Color(0xFF0056D2) : Colors.white70,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      margin: EdgeInsets.only(bottom: 5),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _selectedIndex = index),
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: Duration(milliseconds: 200),
+            padding: EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Row(
+              children: [
+                FaIcon(
+                  icon,
+                  color: isSelected ? _corAcaiStart : Colors.white70,
+                  size: 20,
+                ),
+                SizedBox(width: 15),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: isSelected ? _corAcaiStart : Colors.white,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+                Spacer(),
+                if (isSelected)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: _corAcaiStart,
+                    size: 18,
+                  ),
+              ],
+            ),
           ),
         ),
-        onTap: () => setState(() => _selectedIndex = index),
       ),
     );
   }

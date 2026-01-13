@@ -344,3 +344,175 @@ exports.webhookPix = onRequest(async (req, res) => {
     }
     res.status(200).send();
 });
+
+// --- NOVA FUNÇÃO: Realizar Checkout (Painel Admin) ---
+exports.realizarCheckout = onCall(async (request) => {
+    // 1. Recebe dados do Painel
+    const { agendamentoId, extrasIds, metodoPagamento, vouchersParaUsar } = request.data;
+
+    if (!agendamentoId) throw new HttpsError('invalid-argument', 'ID do agendamento é obrigatório');
+
+    // 2. Busca o Agendamento
+    const agendamentoRef = db.collection('agendamentos').doc(agendamentoId);
+    const agendamentoSnap = await agendamentoRef.get();
+
+    if (!agendamentoSnap.exists) throw new HttpsError('not-found', 'Agendamento não encontrado');
+
+    const dadosAgendamento = agendamentoSnap.data();
+    if (dadosAgendamento.status === 'concluido') {
+        throw new HttpsError('failed-precondition', 'Este agendamento já foi finalizado.');
+    }
+
+    // 3. Busca o Usuário (Para checar saldo de vouchers)
+    const userId = dadosAgendamento.userId;
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    const userData = userSnap.data() || {};
+
+    // 4. Calcular Valor Base e Verificar Vouchers
+    // Se o voucher for usado, o valor do serviço base (Banho/Tosa) vira 0.
+    let valorFinal = Number(dadosAgendamento.valor || 0);
+    let vouchersConsumidosLog = {}; // Log para salvar no histórico
+    let usouVoucherBase = false;
+
+    if (vouchersParaUsar) {
+        for (const [chaveVoucher, usar] of Object.entries(vouchersParaUsar)) {
+            if (usar === true) {
+                // Validação de segurança: O usuário TEM esse voucher?
+                const saldoAtual = userData[chaveVoucher] || 0;
+
+                if (saldoAtual > 0) {
+                    // Tem saldo! Zera o custo do serviço base e marca para descontar
+                    valorFinal = 0;
+                    vouchersConsumidosLog[chaveVoucher] = true;
+                    usouVoucherBase = true;
+                } else {
+                    // Não tem saldo (tentativa de fraude ou erro de interface)
+                    console.warn(`Admin tentou usar ${chaveVoucher} para ${userId} sem saldo.`);
+                    // Aqui optamos por não descontar e cobrar o valor cheio, ou você pode lançar erro:
+                    // throw new HttpsError('failed-precondition', `Cliente sem saldo de ${chaveVoucher}`);
+                }
+            }
+        }
+    }
+
+    // 5. Calcular Extras (Busca preço no banco para segurança)
+    let extrasProcessados = [];
+    if (extrasIds && extrasIds.length > 0) {
+        for (const extraId of extrasIds) {
+            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            if (extraDoc.exists) {
+                const extraData = extraDoc.data();
+                const precoReal = Number(extraData.preco || 0);
+
+                valorFinal += precoReal; // Soma ao total
+
+                extrasProcessados.push({
+                    id: extraId,
+                    nome: extraData.nome,
+                    preco: precoReal
+                });
+            }
+        }
+    }
+
+    // 6. Atualização Atômica (Batch)
+    const batch = db.batch();
+
+    // A. Atualiza status do Agendamento
+    batch.update(agendamentoRef, {
+        status: 'concluido',
+        status_pagamento: 'pago',
+        metodo_pagamento: metodoPagamento,
+        pago_em: admin.firestore.FieldValue.serverTimestamp(),
+        valor_final_cobrado: valorFinal,
+        vouchers_consumidos: vouchersConsumidosLog,
+        extras: extrasProcessados,
+        usou_voucher: usouVoucherBase
+    });
+
+    // B. Desconta os vouchers do usuário (apenas os validados)
+    for (const [chave, usou] of Object.entries(vouchersConsumidosLog)) {
+        if (usou) {
+            batch.update(userRef, {
+                [chave]: admin.firestore.FieldValue.increment(-1)
+            });
+        }
+    }
+
+    await batch.commit();
+
+    return {
+        sucesso: true,
+        mensagem: 'Checkout realizado com sucesso!',
+        valorCobrado: valorFinal
+    };
+});
+
+// --- NOVA FUNÇÃO: Realizar Venda de Assinatura (Balcão/Admin) ---
+exports.realizarVendaAssinatura = onCall(async (request) => {
+    const { userId, pacoteId, metodoPagamento } = request.data;
+
+    // 1. Validações
+    if (!userId || !pacoteId) throw new HttpsError('invalid-argument', 'Dados incompletos');
+
+    // 2. Busca dados OFICIAIS do Pacote (Segurança)
+    const pacoteRef = db.collection('pacotes_assinatura').doc(pacoteId);
+    const pacoteSnap = await pacoteRef.get();
+    if (!pacoteSnap.exists) throw new HttpsError('not-found', 'Pacote não encontrado');
+    const pacoteData = pacoteSnap.data();
+
+    // 3. Busca Cliente
+    const userRef = db.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    if (!userSnap.exists) throw new HttpsError('not-found', 'Cliente não encontrado');
+    const userData = userSnap.data();
+
+    // 4. Prepara Transação Atômica (Batch)
+    const batch = db.batch();
+    const dataVenda = admin.firestore.FieldValue.serverTimestamp();
+
+    // Regra de Validade: 45 dias a partir de hoje
+    const validadeDate = addDays(new Date(), 45);
+
+    // A. Registra o Histórico da Venda
+    const vendaRef = db.collection('vendas_assinaturas').doc();
+    batch.set(vendaRef, {
+        userId: userId,
+        user_nome: userData.nome || 'Cliente',
+        pacote_nome: pacoteData.nome,
+        pacote_id: pacoteId,
+        valor: Number(pacoteData.preco || 0),
+        metodo_pagamento: metodoPagamento,
+        data_venda: dataVenda,
+        status: 'pago', // Balcão = pagamento imediato
+        atendente: 'Admin/Balcão',
+        origem: 'painel_web'
+    });
+
+    // B. Atualiza o Usuário (Vouchers + Validade)
+    let updates = {
+        assinante_ativo: true,
+        ultima_compra: dataVenda,
+        validade_assinatura: admin.firestore.Timestamp.fromDate(validadeDate)
+    };
+
+    // Lógica Dinâmica: Varre o pacote e soma TODOS os vouchers encontrados
+    // Ex: se o pacote tem 'vouchers_banho': 4 e 'vouchers_tosa': 1
+    for (const [key, value] of Object.entries(pacoteData)) {
+        if (key.startsWith('vouchers_') && typeof value === 'number' && value > 0) {
+            updates[key] = admin.firestore.FieldValue.increment(value);
+        }
+    }
+
+    batch.update(userRef, updates);
+
+    // 5. Efetiva tudo
+    await batch.commit();
+
+    return {
+        sucesso: true,
+        mensagem: 'Venda realizada com sucesso!',
+        validade: validadeDate.toISOString()
+    };
+});

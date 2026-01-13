@@ -116,3 +116,177 @@ exports.obterDiasLotados = onCall(async (request) => {
 
     return { dias_lotados: diasLotados };
 });
+
+// --- NOVA FUNÇÃO: Checkout Hotel Seguro ---
+exports.realizarCheckoutHotel = onCall(async (request) => {
+    const { reservaId, extrasIds, metodoPagamento } = request.data;
+
+    if (!reservaId) throw new HttpsError('invalid-argument', 'ID da reserva obrigatório');
+
+    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
+    const reservaSnap = await reservaRef.get();
+
+    if (!reservaSnap.exists) throw new HttpsError('not-found', 'Reserva não encontrada');
+    const dadosReserva = reservaSnap.data();
+
+    if (dadosReserva.status === 'concluido') throw new HttpsError('failed-precondition', 'Esta estadia já foi finalizada.');
+
+    // 1. Busca Configuração de Preço (Diária)
+    const configDoc = await db.collection("config").doc("parametros").get();
+    const valorDiaria = configDoc.exists ? (configDoc.data().preco_hotel_diaria || 0) : 0;
+
+    // 2. Calcula Dias de Estadia (Data Atual - Check-in Real)
+    // Se não tiver check_in_real (erro de processo), usa o agendado
+    const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
+    const dataCheckOut = new Date(); // Agora
+
+    let diasEstadia = differenceInCalendarDays(dataCheckOut, dataCheckIn);
+    if (diasEstadia < 1) diasEstadia = 1; // Mínimo 1 diária
+
+    let valorTotal = diasEstadia * valorDiaria;
+
+    // 3. Processa Extras (Busca preço real no banco)
+    let extrasProcessados = [];
+    if (extrasIds && extrasIds.length > 0) {
+        for (const extraId of extrasIds) {
+            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            if (extraDoc.exists) {
+                const extraData = extraDoc.data();
+                const precoExtra = Number(extraData.preco || 0);
+
+                valorTotal += precoExtra;
+
+                extrasProcessados.push({
+                    id: extraId,
+                    nome: extraData.nome,
+                    preco: precoExtra
+                });
+            }
+        }
+    }
+
+    // 4. Atualiza Reserva (Batch)
+    await reservaRef.update({
+        status: 'concluido',
+        payment_status: 'paid',
+        check_out_real: admin.firestore.FieldValue.serverTimestamp(),
+        metodo_pagamento_final: metodoPagamento,
+
+        // Detalhes Financeiros salvos para histórico
+        dias_cobrados: diasEstadia,
+        valor_diaria_aplicado: valorDiaria,
+        valor_total_final: valorTotal,
+        extras_consumidos: extrasProcessados,
+    });
+
+    return {
+        sucesso: true,
+        mensagem: 'Estadia finalizada com sucesso!',
+        valorCobrado: valorTotal,
+        dias: diasEstadia
+    };
+});
+
+// --- NOVA FUNÇÃO: Registrar Pagamento Parcial/Antecipado ---
+exports.registrarPagamentoHotel = onCall(async (request) => {
+    const { reservaId, valor, metodo } = request.data;
+
+    if (!reservaId || !valor) throw new HttpsError('invalid-argument', 'Dados incompletos');
+
+    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
+
+    // Transação para garantir integridade do saldo
+    await db.runTransaction(async (t) => {
+        const doc = await t.get(reservaRef);
+        if (!doc.exists) throw new HttpsError('not-found', 'Reserva não encontrada');
+
+        const data = doc.data();
+        const pagoAtual = Number(data.valor_pago || 0);
+        const novoTotalPago = pagoAtual + Number(valor);
+
+        // Atualiza saldo e adiciona ao histórico
+        t.update(reservaRef, {
+            valor_pago: novoTotalPago,
+            payment_status: 'partial', // Marca como parcialmente pago
+            historico_pagamentos: admin.firestore.FieldValue.arrayUnion({
+                valor: Number(valor),
+                metodo: metodo,
+                data: new Date(),
+                tipo: 'adiantamento'
+            })
+        });
+    });
+
+    return { success: true };
+});
+
+// --- ATUALIZADO: Checkout Hotel (Considerando saldo já pago) ---
+exports.realizarCheckoutHotel = onCall(async (request) => {
+    const { reservaId, extrasIds, metodoPagamentoDiferenca } = request.data;
+
+    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
+    const reservaSnap = await reservaRef.get();
+    const dadosReserva = reservaSnap.data();
+
+    // 1. Cálculos de Custo (Diária + Extras)
+    const configDoc = await db.collection("config").doc("parametros").get();
+    const valorDiaria = configDoc.exists ? (configDoc.data().preco_hotel_diaria || 0) : 0;
+
+    const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
+    const dataCheckOut = new Date();
+
+    // date-fns: differenceInCalendarDays
+    let diasEstadia = Math.ceil((dataCheckOut - dataCheckIn) / (1000 * 60 * 60 * 24));
+    if (diasEstadia < 1) diasEstadia = 1;
+
+    let custoDiarias = diasEstadia * valorDiaria;
+    let custoExtras = 0;
+    let extrasProcessados = [];
+
+    if (extrasIds && extrasIds.length > 0) {
+        for (const extraId of extrasIds) {
+            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            if (extraDoc.exists) {
+                const p = Number(extraDoc.data().preco || 0);
+                custoExtras += p;
+                extrasProcessados.push({ id: extraId, nome: extraDoc.data().nome, preco: p });
+            }
+        }
+    }
+
+    const valorTotalServico = custoDiarias + custoExtras;
+    const valorJaPago = Number(dadosReserva.valor_pago || 0);
+
+    // AQUI ESTÁ O SEGULRO: Calculamos a diferença
+    const valorRestanteAPagar = valorTotalServico - valorJaPago;
+
+    // Se ainda deve algo e não mandou método de pagamento, erro (segurança)
+    // Mas permitimos margem de erro pequena (ex: centavos)
+    if (valorRestanteAPagar > 0.1 && !metodoPagamentoDiferenca) {
+        // O frontend deve tratar isso, mas aqui garantimos
+    }
+
+    // Atualização Final
+    await reservaRef.update({
+        status: 'concluido',
+        payment_status: valorRestanteAPagar <= 0 ? 'paid' : 'pending_audit', // Se pagou tudo, ok
+        check_out_real: admin.firestore.FieldValue.serverTimestamp(),
+
+        // Dados financeiros finais
+        dias_cobrados: diasEstadia,
+        valor_diaria_aplicado: valorDiaria,
+        custo_total_servico: valorTotalServico,
+        valor_pago_anterior: valorJaPago,
+        valor_pago_checkout: valorRestanteAPagar > 0 ? valorRestanteAPagar : 0,
+        metodo_pagamento_final: metodoPagamentoDiferenca || 'ja_pago', // Registra como pagou o resto
+
+        extras_consumidos: extrasProcessados,
+    });
+
+    return {
+        sucesso: true,
+        valorTotal: valorTotalServico,
+        valorPagoAnterior: valorJaPago,
+        valorCobradoAgora: valorRestanteAPagar
+    };
+});

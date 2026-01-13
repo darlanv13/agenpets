@@ -1,1 +1,53 @@
-{"functions":[{"source":"functions","codebase":"default","disallowLegacyRuntimeConfig":true,"ignore":["node_modules",".git","firebase-debug.log","firebase-debug.*.log","*.local"]}],"flutter":{"platforms":{"android":{"default":{"projectId":"agenpets","appId":"1:936955635480:android:dad2a038ccd3cf2286e06d","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"agenpets","configurations":{"android":"1:936955635480:android:dad2a038ccd3cf2286e06d","ios":"1:936955635480:ios:d95f4eec064132f086e06d","macos":"1:936955635480:ios:d95f4eec064132f086e06d","web":"1:936955635480:web:9e72de52b52eabf786e06d","windows":"1:936955635480:web:7a322dbd6089a94886e06d"}}}}}}
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "agenpets",
+          "appId": "1:936955635480:android:dad2a038ccd3cf2286e06d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "agenpets",
+          "configurations": {
+            "android": "1:936955635480:android:dad2a038ccd3cf2286e06d",
+            "ios": "1:936955635480:ios:d95f4eec064132f086e06d",
+            "macos": "1:936955635480:ios:d95f4eec064132f086e06d",
+            "web": "1:936955635480:web:9e72de52b52eabf786e06d",
+            "windows": "1:936955635480:web:7a322dbd6089a94886e06d"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
