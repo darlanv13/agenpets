@@ -4,7 +4,12 @@ const { addMinutes, format, parse, isSameDay } = require("date-fns"); // date-fn
 const EfiPay = require("sdk-node-apis-efi");
 const optionsEfi = require("../config/efipay");
 
-// --- Buscar Horários (Mantido igual) ---
+function addDays(date, days) {
+    var result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+
 // --- Função Corrigida: BUSCAR HORÁRIOS ---
 exports.buscarHorarios = onCall(async (request) => {
     try {
@@ -123,7 +128,7 @@ exports.buscarHorarios = onCall(async (request) => {
     }
 });
 
-// --- NOVA FUNÇÃO: Comprar Assinatura ---
+/* --- NOVA FUNÇÃO: Comprar Assinatura ---
 exports.comprarAssinatura = onCall(async (request) => {
     const { cpf_user, tipo_plano } = request.data; // 'pct_banho' ou 'pct_completo'
 
@@ -175,7 +180,7 @@ exports.comprarAssinatura = onCall(async (request) => {
     await db.collection("vendas_assinaturas").add(compra);
 
     return resposta;
-});
+});*/
 
 
 // --- ATUALIZADO: Criar Agendamento (Aceita Voucher) ---
@@ -449,14 +454,14 @@ exports.realizarCheckout = onCall(async (request) => {
     };
 });
 
-// --- NOVA FUNÇÃO: Realizar Venda de Assinatura (Balcão/Admin) ---
+// --- FUNÇÃO ATUALIZADA: Realizar Venda de Assinatura (Balcão/Admin) ---
 exports.realizarVendaAssinatura = onCall(async (request) => {
     const { userId, pacoteId, metodoPagamento } = request.data;
 
     // 1. Validações
     if (!userId || !pacoteId) throw new HttpsError('invalid-argument', 'Dados incompletos');
 
-    // 2. Busca dados OFICIAIS do Pacote (Segurança)
+    // 2. Busca dados OFICIAIS do Pacote
     const pacoteRef = db.collection('pacotes_assinatura').doc(pacoteId);
     const pacoteSnap = await pacoteRef.get();
     if (!pacoteSnap.exists) throw new HttpsError('not-found', 'Pacote não encontrado');
@@ -472,10 +477,11 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
     const batch = db.batch();
     const dataVenda = admin.firestore.FieldValue.serverTimestamp();
 
-    // Regra de Validade: 45 dias a partir de hoje
-    const validadeDate = addDays(new Date(), 45);
+    // Regra de Validade: 30 dias (Alinhei com seu código Flutter, mas você pode mudar para 45 se preferir)
+    // Certifique-se de ter a função 'addDays' importada ou use lógica nativa de data
+    const validadeDate = addDays(new Date(), 30);
 
-    // A. Registra o Histórico da Venda
+    // A. Registra o Histórico da Venda (Mantém igual para relatórios)
     const vendaRef = db.collection('vendas_assinaturas').doc();
     batch.set(vendaRef, {
         userId: userId,
@@ -485,27 +491,36 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
         valor: Number(pacoteData.preco || 0),
         metodo_pagamento: metodoPagamento,
         data_venda: dataVenda,
-        status: 'pago', // Balcão = pagamento imediato
+        status: 'pago',
         atendente: 'Admin/Balcão',
         origem: 'painel_web'
     });
 
-    // B. Atualiza o Usuário (Vouchers + Validade)
-    let updates = {
-        assinante_ativo: true,
-        ultima_compra: dataVenda,
-        validade_assinatura: admin.firestore.Timestamp.fromDate(validadeDate)
+    // --- MUDANÇA PRINCIPAL AQUI ---
+
+    // B. Monta o Objeto do Voucher (Igual ao Flutter)
+    const novoItemVoucher = {
+        nome_pacote: pacoteData.nome,
+        validade_pacote: admin.firestore.Timestamp.fromDate(validadeDate),
+        data_compra: dataVenda
     };
 
-    // Lógica Dinâmica: Varre o pacote e soma TODOS os vouchers encontrados
-    // Ex: se o pacote tem 'vouchers_banho': 4 e 'vouchers_tosa': 1
+    // Varre o pacote para pegar as quantidades (banho: 4, tosa: 2...)
+    // Transforma 'vouchers_banho' em 'banho'
     for (const [key, value] of Object.entries(pacoteData)) {
         if (key.startsWith('vouchers_') && typeof value === 'number' && value > 0) {
-            updates[key] = admin.firestore.FieldValue.increment(value);
+            const nomeServico = key.replace('vouchers_', ''); // Remove o prefixo
+            novoItemVoucher[nomeServico] = value;
         }
     }
 
-    batch.update(userRef, updates);
+    // C. Atualiza o Usuário usando arrayUnion
+    batch.update(userRef, {
+        assinante_ativo: true,
+        ultima_compra: dataVenda,
+        // Adiciona o novo objeto à lista existente
+        voucher_assinatura: admin.firestore.FieldValue.arrayUnion(novoItemVoucher)
+    });
 
     // 5. Efetiva tudo
     await batch.commit();

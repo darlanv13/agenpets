@@ -15,6 +15,11 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     databaseId: 'agenpets',
   );
 
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corLilas = Color(0xFFF3E5F5);
+  final Color _corFundo = Color(0xFFF8F9FC);
+
   Map<String, dynamic>? _dadosPro;
   DateTime _dataFiltro = DateTime.now();
 
@@ -28,28 +33,54 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     }
   }
 
-  // Função para marcar como concluído
+  // Função para marcar como concluído com confirmação
   Future<void> _concluirServico(String agendamentoId) async {
-    try {
-      await _db.collection('agendamentos').doc(agendamentoId).update({
-        'status': 'concluido',
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Serviço concluído! 🛁")));
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao atualizar.")));
-    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text("Concluir Serviço?"),
+        content: Text("Confirmar que o pet já foi atendido?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await _db.collection('agendamentos').doc(agendamentoId).update({
+                  'status': 'concluido',
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Serviço concluído com sucesso! 🛁"),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Erro ao atualizar status.")),
+                );
+              }
+            },
+            child: Text("Confirmar", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_dadosPro == null)
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: _corAcai)),
+      );
 
-    // Filtros de Data
+    // Filtros de Data para consulta (Start/End of Day)
     final inicioDia = DateTime(
       _dataFiltro.year,
       _dataFiltro.month,
@@ -65,58 +96,16 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Área do Profissional", style: TextStyle(fontSize: 14)),
-            Text(
-              "Olá, ${_dadosPro!['nome']}",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.green[700],
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.calendar_today),
-            onPressed: () async {
-              final data = await showDatePicker(
-                context: context,
-                initialDate: _dataFiltro,
-                firstDate: DateTime.now().subtract(Duration(days: 30)),
-                lastDate: DateTime.now().add(Duration(days: 30)),
-              );
-              if (data != null) setState(() => _dataFiltro = data);
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.exit_to_app),
-            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          ),
-        ],
-      ),
+      backgroundColor: _corFundo,
       body: Column(
         children: [
-          // Cabeçalho de Data
-          Container(
-            padding: EdgeInsets.all(15),
-            color: Colors.green[600],
-            width: double.infinity,
-            child: Text(
-              "Agenda de ${DateFormat('dd/MM/yyyy (EEEE)', 'pt_BR').format(_dataFiltro)}",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+          // 1. CABEÇALHO PERSONALIZADO
+          _buildHeader(),
 
-          // Lista de Agendamentos
+          // 2. SELETOR DE DATA E RESUMO
+          _buildDateSelector(),
+
+          // 3. LISTA DE AGENDAMENTOS
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _db
@@ -134,131 +123,326 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_busy, size: 50, color: Colors.grey),
-                        SizedBox(height: 10),
-                        Text(
-                          "Agenda livre para hoje!",
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
+                    child: CircularProgressIndicator(color: _corAcai),
                   );
                 }
 
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                final docs = snapshot.data!.docs;
+
                 return ListView.builder(
-                  padding: EdgeInsets.all(15),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (ctx, index) {
-                    final doc = snapshot.data!.docs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    final hora = (data['data_inicio'] as Timestamp).toDate();
-                    final status = data['status'] ?? 'agendado';
-
-                    // Se não for 'agendado' (ex: concluido, cancelado), mostra diferente
-                    bool isAtivo =
-                        status == 'agendado' ||
-                        status == 'aguardando_pagamento';
-
-                    return Card(
-                      color: isAtivo ? Colors.white : Colors.grey[200],
-                      margin: EdgeInsets.only(bottom: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.all(15),
-                        leading: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green[50],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.green),
-                          ),
-                          child: Text(
-                            DateFormat('HH:mm').format(hora),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green[800],
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          data['servico'].toString().toUpperCase(),
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(height: 5),
-                            // Busca nome do Pet (poderia vir salvo no agendamento para otimizar, mas vamos buscar rapidinho ou mostrar o ID)
-                            // Para simplificar, vou mostrar "Pet do cliente" se não tivermos o nome salvo no agendamento
-                            FutureBuilder<DocumentSnapshot>(
-                              future: _db
-                                  .collection('users')
-                                  .doc(data['userId'])
-                                  .collection('pets')
-                                  .doc(data['pet_id'])
-                                  .get(),
-                              builder: (context, petSnap) {
-                                if (petSnap.hasData && petSnap.data!.exists) {
-                                  final petData = petSnap.data!.data() as Map;
-                                  return Row(
-                                    children: [
-                                      FaIcon(
-                                        petData['tipo'] == 'cao'
-                                            ? FontAwesomeIcons.dog
-                                            : FontAwesomeIcons.cat,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 5),
-                                      Text(
-                                        "${petData['nome']} (${petData['raca']})",
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return Text("Carregando pet...");
-                              },
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              "Status: $status",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                        trailing: isAtivo
-                            ? ElevatedButton(
-                                onPressed: () => _concluirServico(doc.id),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  shape: CircleBorder(),
-                                  padding: EdgeInsets.all(10),
-                                ),
-                                child: Icon(Icons.check, color: Colors.white),
-                              )
-                            : Icon(Icons.check_circle, color: Colors.grey),
-                      ),
-                    );
-                  },
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 80),
+                  itemCount: docs.length,
+                  itemBuilder: (ctx, index) =>
+                      _buildAgendamentoCard(docs[index]),
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- WIDGETS ---
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.only(top: 50, left: 25, right: 25, bottom: 25),
+      decoration: BoxDecoration(
+        color: _corAcai,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        boxShadow: [
+          BoxShadow(
+            color: _corAcai.withOpacity(0.3),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Olá, ${_dadosPro!['nome'].toString().split(' ')[0]} 👋",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                "Sua agenda de hoje",
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ),
+          IconButton(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            icon: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.logout, color: Colors.white, size: 20),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateSelector() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            DateFormat(
+              "dd 'de' MMMM",
+              'pt_BR',
+            ).format(_dataFiltro).toUpperCase(),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
+          ),
+          InkWell(
+            onTap: () async {
+              final data = await showDatePicker(
+                context: context,
+                initialDate: _dataFiltro,
+                firstDate: DateTime.now().subtract(Duration(days: 60)),
+                lastDate: DateTime.now().add(Duration(days: 60)),
+                builder: (context, child) {
+                  return Theme(
+                    data: ThemeData.light().copyWith(
+                      primaryColor: _corAcai,
+                      colorScheme: ColorScheme.light(primary: _corAcai),
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (data != null) setState(() => _dataFiltro = data);
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 16, color: _corAcai),
+                  SizedBox(width: 8),
+                  Text(
+                    "Mudar Data",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgendamentoCard(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final hora = (data['data_inicio'] as Timestamp).toDate();
+    final status = data['status'] ?? 'agendado';
+
+    // Status visual
+    bool isConcluido = status == 'concluido';
+    bool isPendente = status == 'agendado' || status == 'aguardando_pagamento';
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+        border: Border(
+          left: BorderSide(
+            color: isConcluido ? Colors.green : _corAcai,
+            width: 5,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(15.0),
+        child: Row(
+          children: [
+            // 1. Coluna de Horário
+            Column(
+              children: [
+                Text(
+                  DateFormat('HH:mm').format(hora),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                Text(
+                  isConcluido ? "FEITO" : "HORA",
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: isConcluido ? Colors.green : Colors.grey[400],
+                  ),
+                ),
+              ],
+            ),
+
+            Container(
+              height: 40,
+              width: 1,
+              color: Colors.grey[200],
+              margin: EdgeInsets.symmetric(horizontal: 15),
+            ),
+
+            // 2. Detalhes
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data['servico'].toString().toUpperCase(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: _corAcai,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  // Busca assíncrona do Pet
+                  FutureBuilder<DocumentSnapshot>(
+                    future: _db
+                        .collection('users')
+                        .doc(data['userId'])
+                        .collection('pets')
+                        .doc(data['pet_id'])
+                        .get(),
+                    builder: (context, petSnap) {
+                      if (!petSnap.hasData)
+                        return Text(
+                          "...",
+                          style: TextStyle(color: Colors.grey),
+                        );
+
+                      if (petSnap.data!.exists) {
+                        final petData = petSnap.data!.data() as Map;
+                        return Row(
+                          children: [
+                            Icon(
+                              petData['tipo'] == 'cao'
+                                  ? FontAwesomeIcons.dog
+                                  : FontAwesomeIcons.cat,
+                              size: 12,
+                              color: Colors.grey[600],
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              "${petData['nome']} (${petData['raca'] ?? 'SRD'})",
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return Text(
+                        "Pet removido",
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // 3. Ação
+            if (isPendente)
+              ElevatedButton(
+                onPressed: () => _concluirServico(doc.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.green,
+                  elevation: 0,
+                  side: BorderSide(color: Colors.green),
+                  shape: CircleBorder(),
+                  padding: EdgeInsets.all(10),
+                ),
+                child: Icon(Icons.check, size: 24),
+              )
+            else if (isConcluido)
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.check_circle, color: Colors.green, size: 24),
+              )
+            else // Cancelado
+              Icon(Icons.cancel, color: Colors.red[300]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(color: _corLilas, shape: BoxShape.circle),
+            child: Icon(
+              FontAwesomeIcons.mugHot,
+              size: 40,
+              color: _corAcai.withOpacity(0.5),
+            ),
+          ),
+          SizedBox(height: 20),
+          Text(
+            "Agenda livre por enquanto!",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
+          ),
+          Text(
+            "Aproveite o descanso.",
+            style: TextStyle(color: Colors.grey[500]),
           ),
         ],
       ),

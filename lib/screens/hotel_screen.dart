@@ -18,15 +18,28 @@ class _HotelScreenState extends State<HotelScreen> {
 
   final _firebaseService = FirebaseService();
 
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corLilas = Color(0xFFF3E5F5);
+  final Color _corFundo = Color(0xFFF8F9FC);
+
   // CONFIGURAÇÃO DE PREÇO
   double _valorDiaria = 0.0;
 
   String? _userCpf;
   String? _petId;
   DateTimeRange? _periodoSelecionado;
+  Set<DateTime> _diasLotados = {};
 
   bool _isLoading = false;
   List<Map<String, dynamic>> _pets = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarPrecoHotel();
+    _carregarDisponibilidade();
+  }
 
   @override
   void didChangeDependencies() {
@@ -46,27 +59,14 @@ class _HotelScreenState extends State<HotelScreen> {
         .get();
     setState(() {
       _pets = snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-      if (_pets.isNotEmpty) _petId = _pets.first['id'];
+      if (_pets.isNotEmpty && _petId == null) _petId = _pets.first['id'];
     });
   }
 
-  Set<DateTime> _diasLotados = {}; // Usamos Set para busca rápida
-
-  @override
-  void initState() {
-    super.initState();
-    _carregarPrecoHotel();
-    _carregarDisponibilidade();
-  }
-
   Future<void> _carregarDisponibilidade() async {
-    // Busca do backend
     final datas = await _firebaseService.buscarDiasLotadosHotel();
-
     if (mounted) {
       setState(() {
-        // Normaliza as datas para garantir que hora/minuto/segundo sejam 00:00:00
-        // Isso é crucial para a comparação do calendário funcionar
         _diasLotados = datas
             .map((d) => DateTime(d.year, d.month, d.day))
             .toSet();
@@ -79,7 +79,8 @@ class _HotelScreenState extends State<HotelScreen> {
       final doc = await _db.collection('config').doc('parametros').get();
       if (doc.exists) {
         setState(() {
-          _valorDiaria = (doc.data()!['preco_hotel_diaria_diaria'] ?? 80.00)
+          // Tenta ler 'preco_hotel_diaria', fallback para 80.0
+          _valorDiaria = (doc.data()!['preco_hotel_diaria'] ?? 80.00)
               .toDouble();
         });
       }
@@ -88,35 +89,25 @@ class _HotelScreenState extends State<HotelScreen> {
     }
   }
 
-  // Seletor de Datas (Entrada e Saída)
+  // --- LÓGICA DE SELEÇÃO DE DATAS ---
   Future<void> _escolherDatas() async {
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 60)),
-
-      // --- CORREÇÃO AQUI ---
-      // Agora aceitamos os 3 parâmetros exigidos: day, start, end
+      lastDate: DateTime.now().add(Duration(days: 90)),
       selectableDayPredicate: (DateTime day, DateTime? start, DateTime? end) {
-        // Normaliza o dia (zera as horas) para comparar corretamente
         final normalizedDay = DateTime(day.year, day.month, day.day);
-
-        // Se o dia estiver na lista de lotados, retorna false (bloqueado)
-        if (_diasLotados.contains(normalizedDay)) {
-          return false;
-        }
-        return true; // Se não, retorna true (liberado)
+        if (_diasLotados.contains(normalizedDay)) return false;
+        return true;
       },
-
-      // ---------------------
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            primaryColor: Colors.orange,
+            primaryColor: _corAcai,
             colorScheme: ColorScheme.light(
-              primary: Colors.orange,
+              primary: _corAcai,
               onPrimary: Colors.white,
-              onSurface: Colors.black,
+              onSurface: Colors.black87,
             ),
           ),
           child: child!,
@@ -125,8 +116,7 @@ class _HotelScreenState extends State<HotelScreen> {
     );
 
     if (picked != null) {
-      // Validação Extra: Impede que o usuário selecione um intervalo que "pule" dias lotados
-      // (Ex: Dia 10 Livre -> Dia 11 Lotado -> Dia 12 Livre. Selecionar de 10 a 12 é inválido)
+      // Validação: Intervalo não pode conter dias lotados no meio
       bool intervaloInvalido = false;
       int diasNoIntervalo = picked.end.difference(picked.start).inDays;
 
@@ -145,13 +135,8 @@ class _HotelScreenState extends State<HotelScreen> {
       }
 
       if (intervaloInvalido) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "O período selecionado contém dias sem vaga. Por favor, escolha outras datas.",
-            ),
-            backgroundColor: Colors.red,
-          ),
+        _mostrarErroDialog(
+          "O período selecionado contém dias sem vaga.\nPor favor, escolha outras datas.",
         );
       } else {
         setState(() {
@@ -162,253 +147,77 @@ class _HotelScreenState extends State<HotelScreen> {
   }
 
   Future<void> _fazerReserva() async {
-    // 1. Validação inicial
-    if (_petId == null || _periodoSelecionado == null) {
-      print("❌ ERRO: Pet ou Datas não selecionados.");
-      return;
-    }
+    if (_petId == null || _periodoSelecionado == null) return;
 
     setState(() => _isLoading = true);
-    print("🚀 Iniciando reserva...");
-    print("Dados enviados: Pet=$_petId, CPF=$_userCpf");
-    print(
-      "Datas: ${_periodoSelecionado!.start} até ${_periodoSelecionado!.end}",
-    );
 
     try {
-      // 2. Chamada ao Backend
-      final resultado = await _firebaseService.reservarHotel(
+      await _firebaseService.reservarHotel(
         petId: _petId!,
         cpfUser: _userCpf!,
         checkIn: _periodoSelecionado!.start,
         checkOut: _periodoSelecionado!.end,
       );
 
-      print("✅ Sucesso! Resposta do servidor: $resultado");
-
-      // 3. Sucesso Visual
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: Column(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 50),
-                Text("Reserva Confirmada!"),
-              ],
-            ),
-            content: Text("Seu pet foi agendado com sucesso."),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pop(context);
-                },
-                child: Text("OK"),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e, stackTrace) {
-      // 4. CAPTURA DETALHADA DO ERRO
-      print("🛑 ERRO AO RESERVAR (CATCH):");
-      print("Mensagem: $e");
-      print("Stack Trace: $stackTrace");
-
-      String mensagemErro = "Erro desconhecido.";
-
-      // Tenta extrair a mensagem limpa se for erro do Cloud Functions
-      if (e.toString().contains("message:")) {
-        mensagemErro = e.toString().split("message:").last.trim();
-      } else {
-        mensagemErro = e.toString();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Falha: $mensagemErro"),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5), // Fica mais tempo na tela
-          ),
-        );
-      }
+      _mostrarSucessoDialog();
+    } catch (e) {
+      String msg = e.toString();
+      if (msg.contains("message:")) msg = msg.split("message:").last.trim();
+      _mostrarErroDialog("Falha ao reservar: $msg");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    int dias = _periodoSelecionado?.duration.inDays ?? 0;
-    // Se selecionou o mesmo dia, conta como 1 diária pelo menos, ou lógica de 0 noites
-    if (dias == 0 && _periodoSelecionado != null) dias = 1;
-
-    double total = dias * _valorDiaria;
-
-    return Scaffold(
-      backgroundColor: Colors.orange[50],
-      appBar: AppBar(
-        title: Text("Hotelzinho Pet 🏨"),
-        backgroundColor: Colors.orange[800],
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  void _mostrarSucessoDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Banner
             Container(
-              width: double.infinity,
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                color: Colors.green[50],
+                shape: BoxShape.circle,
               ),
-              child: Column(
-                children: [
-                  FaIcon(
-                    FontAwesomeIcons.hotel,
-                    size: 50,
-                    color: Colors.orange,
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    "Hospedagem com Amor",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange[800],
-                    ),
-                  ),
-                  Text(
-                    "Monitoramento 24h e brincadeiras",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
+              child: Icon(Icons.check_rounded, color: Colors.green, size: 60),
             ),
-
-            SizedBox(height: 30),
-
-            // 1. Escolha o Pet
+            SizedBox(height: 20),
             Text(
-              "Quem vai se hospedar?",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              "Reserva Solicitada!",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 10),
-            _buildPetSelector(),
-
+            Text(
+              "Aguarde a confirmação da nossa equipe.\nCuidaremos muito bem do seu pet! 🐶",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
             SizedBox(height: 25),
-
-            // 2. Escolha as Datas
-            Text(
-              "Qual o período?",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            SizedBox(height: 10),
-            GestureDetector(
-              onTap: _escolherDatas,
-              child: Container(
-                padding: EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.orange[200]!),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_month, color: Colors.orange),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: _periodoSelecionado == null
-                          ? Text(
-                              "Toque para selecionar datas",
-                              style: TextStyle(color: Colors.grey),
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Entrada: ${DateFormat('dd/MM/yyyy').format(_periodoSelecionado!.start)}",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  "Saída:    ${DateFormat('dd/MM/yyyy').format(_periodoSelecionado!.end)}",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                    ),
-                    Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                  ],
-                ),
-              ),
-            ),
-
-            SizedBox(height: 30),
-
-            // Resumo do Valor
-            if (_periodoSelecionado != null)
-              Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.orange[100],
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.orange),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "$dias diárias x R\$ $_valorDiaria",
-                      style: TextStyle(color: Colors.orange[900]),
-                    ),
-                    Text(
-                      "Total: R\$ ${total.toStringAsFixed(2)}",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Colors.orange[900],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            SizedBox(height: 40),
-
-            // Botão Reservar
             SizedBox(
               width: double.infinity,
-              height: 55,
               child: ElevatedButton(
-                onPressed:
-                    (_petId != null &&
-                        _periodoSelecionado != null &&
-                        !_isLoading)
-                    ? _fazerReserva
-                    : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[800],
+                  backgroundColor: _corAcai,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: _isLoading
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                        "SOLICITAR RESERVA",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  "OK, VOLTAR",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
@@ -417,43 +226,479 @@ class _HotelScreenState extends State<HotelScreen> {
     );
   }
 
-  Widget _buildPetSelector() {
-    if (_pets.isEmpty) return Text("Cadastre um pet na tela anterior.");
+  void _mostrarErroDialog(String msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red),
+            SizedBox(width: 10),
+            Text("Atenção"),
+          ],
+        ),
+        content: Text(msg),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text("OK")),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    int dias = _periodoSelecionado?.duration.inDays ?? 0;
+    if (dias == 0 && _periodoSelecionado != null) dias = 1;
+    double total = dias * _valorDiaria;
+
+    return Scaffold(
+      backgroundColor: _corFundo,
+      appBar: AppBar(
+        title: Text(
+          "Hotelzinho Pet",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: _corAcai,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: _isLoading && _pets.isEmpty
+          ? Center(child: CircularProgressIndicator(color: _corAcai))
+          : Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. CABEÇALHO / BANNER
+                        _buildHeaderBanner(),
+
+                        SizedBox(height: 25),
+
+                        // 2. SELEÇÃO DE PET
+                        _buildSectionHeader("Quem vai se hospedar?"),
+                        SizedBox(height: 10),
+                        _buildPetList(),
+
+                        SizedBox(height: 25),
+
+                        // 3. SELEÇÃO DE DATAS
+                        _buildSectionHeader("Período da estadia"),
+                        SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _buildDateSelector(),
+                        ),
+
+                        SizedBox(height: 25),
+
+                        // 4. RESUMO / ORÇAMENTO
+                        if (_periodoSelecionado != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _buildSummaryCard(dias, total),
+                          ),
+
+                        SizedBox(height: 100), // Espaço para botão
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+      bottomSheet: _buildBottomButton(total),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGETS VISUAIS ---
+
+  Widget _buildHeaderBanner() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, 10, 20, 30),
+      decoration: BoxDecoration(
+        color: _corAcai,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: FaIcon(
+              FontAwesomeIcons.hotel,
+              size: 40,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 15),
+          Text(
+            "Hospedagem com Amor",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 5),
+          Text(
+            "Monitoramento 24h, brincadeiras e muito conforto para seu melhor amigo.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPetList() {
+    if (_pets.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          padding: EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Text(
+                "Nenhum pet cadastrado.",
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 90,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 15),
+        itemCount: _pets.length,
+        itemBuilder: (context, index) {
+          final pet = _pets[index];
+          final isSelected = pet['id'] == _petId;
+
+          return GestureDetector(
+            onTap: () => setState(() => _petId = pet['id']),
+            child: Column(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  margin: EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? _corAcai : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? _corAcai : Colors.grey[300]!,
+                      width: 2,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: _corAcai.withOpacity(0.4),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Icon(
+                    pet['tipo'] == 'gato'
+                        ? FontAwesomeIcons.cat
+                        : FontAwesomeIcons.dog,
+                    color: isSelected ? Colors.white : Colors.grey[400],
+                    size: 24,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  pet['nome'],
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: isSelected ? _corAcai : Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDateSelector() {
+    bool hasDates = _periodoSelecionado != null;
+
+    return GestureDetector(
+      onTap: _escolherDatas,
+      child: Container(
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: hasDates ? _corAcai : Colors.grey[300]!,
+            width: hasDates ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _corLilas,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.calendar_month, color: _corAcai),
+            ),
+            SizedBox(width: 20),
+            Expanded(
+              child: !hasDates
+                  ? Text(
+                      "Toque para selecionar as datas de entrada e saída",
+                      style: TextStyle(color: Colors.grey[600]),
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Entrada",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              Text(
+                                DateFormat(
+                                  'dd/MM/yyyy',
+                                ).format(_periodoSelecionado!.start),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          height: 30,
+                          width: 1,
+                          color: Colors.grey[300],
+                          margin: EdgeInsets.symmetric(horizontal: 10),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Saída",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              Text(
+                                DateFormat(
+                                  'dd/MM/yyyy',
+                                ).format(_periodoSelecionado!.end),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(int dias, double total) {
+    return Container(
+      padding: EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_corAcai, Color(0xFF6A1B9A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _corAcai.withOpacity(0.3),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Valor da Diária", style: TextStyle(color: Colors.white70)),
+              Text(
+                "R\$ ${_valorDiaria.toStringAsFixed(2)}",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Dias selecionados",
+                style: TextStyle(color: Colors.white70),
+              ),
+              Text(
+                "$dias dias",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          Divider(color: Colors.white24, height: 25),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "TOTAL ESTIMADO",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+              Text(
+                "R\$ ${total.toStringAsFixed(2)}",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomButton(double total) {
+    bool canSubmit =
+        _petId != null && _periodoSelecionado != null && !_isLoading;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 15),
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey[300]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: Offset(0, -5),
+          ),
+        ],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _petId,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: Colors.orange),
-          items: _pets.map((pet) {
-            return DropdownMenuItem(
-              value: pet['id'] as String,
-              child: Row(
-                children: [
-                  Icon(
-                    pet['tipo'] == 'cao'
-                        ? FontAwesomeIcons.dog
-                        : FontAwesomeIcons.cat,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(width: 10),
-                  Text(
-                    pet['nome'],
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ],
+      child: SafeArea(
+        child: SizedBox(
+          width: double.infinity,
+          height: 55,
+          child: ElevatedButton(
+            onPressed: canSubmit ? _fazerReserva : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green, // Botão Verde para confirmar
+              disabledBackgroundColor: Colors.grey[300],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
               ),
-            );
-          }).toList(),
-          onChanged: (v) => setState(() => _petId = v),
+              elevation: 0,
+            ),
+            child: _isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "SOLICITAR RESERVA",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      if (canSubmit) ...[
+                        SizedBox(width: 10),
+                        Container(width: 1, height: 15, color: Colors.white30),
+                        SizedBox(width: 10),
+                        Text(
+                          "R\$ ${total.toStringAsFixed(2)}",
+                          style: TextStyle(fontSize: 14, color: Colors.white),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
         ),
       ),
     );

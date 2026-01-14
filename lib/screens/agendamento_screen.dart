@@ -12,40 +12,37 @@ class AgendamentoScreen extends StatefulWidget {
 }
 
 class _AgendamentoScreenState extends State<AgendamentoScreen> {
-  // Conexão com o Banco de Dados
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
-  // Conexão com Funções (Região SP - Brasil)
+  // Instância das Functions (Certifique-se que a região é a mesma do deploy, ex: southamerica-east1)
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: 'southamerica-east1',
   );
 
-  // Instância do nosso Serviço para lógicas extras
-  final _firebaseService = FirebaseService();
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corFundo = Color(0xFFF8F9FC);
 
-  // --- PREÇOS ---
+  // --- ESTADO ---
   double _precoBanho = 0.0;
   double _precoTosa = 0.0;
 
-  // Variáveis de Estado
   String? _userCpf;
   DateTime _dataSelecionada = DateTime.now();
   String _servicoSelecionado = 'Banho';
 
-  String? _profissionalIdSelecionadoPeloSistema;
-  String? _nomeProfissionalDoSistema;
+  // Nota: Não precisamos mais selecionar o profissional aqui no front para salvar,
+  // o Backend decide o melhor profissional livre.
 
   String? _petId;
   String? _horarioSelecionado;
 
   bool _isLoading = false;
-  List<Map<String, dynamic>> _gradeHorarios = []; // Nova estrutura
+  List<Map<String, dynamic>> _gradeHorarios = [];
   List<Map<String, dynamic>> _pets = [];
-  List<Map<String, dynamic>> _profissionais = [];
-
   late List<DateTime> _listaDias;
 
   @override
@@ -54,7 +51,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     _carregarPrecosAtualizados();
     _gerarListaDias();
 
-    // Garante que a data inicial não seja domingo
+    // Ajusta para não começar no domingo se a loja fecha domingo
     if (_dataSelecionada.weekday == DateTime.sunday) {
       _dataSelecionada = _dataSelecionada.add(Duration(days: 1));
     }
@@ -71,7 +68,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
     while (diasAdicionados < 30) {
       DateTime data = dataBase.add(Duration(days: diasPercorridos));
-      // Pula domingos
       if (data.weekday != DateTime.sunday) {
         _listaDias.add(data);
         diasAdicionados++;
@@ -96,18 +92,12 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
-          // Usa toDouble() para evitar erros se vier int do banco
-          _precoBanho = (data['preco_banho'] ?? 49.90).toDouble();
-          _precoTosa = (data['preco_tosa'] ?? 119.90).toDouble();
+          _precoBanho = (data['preco_banho'] ?? 0.0).toDouble();
+          _precoTosa = (data['preco_tosa'] ?? 0.0).toDouble();
         });
       }
     } catch (e) {
       print("Erro ao carregar preços: $e");
-      // Fallback seguro
-      setState(() {
-        _precoBanho = 49.90;
-        _precoTosa = 119.90;
-      });
     }
   }
 
@@ -115,16 +105,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     setState(() => _isLoading = true);
     try {
       await _atualizarListaPets();
-
-      final prosSnapshot = await _db
-          .collection('profissionais')
-          .where('ativo', isEqualTo: true)
-          .get();
-      _profissionais = prosSnapshot.docs
-          .map((d) => {'id': d.id, ...d.data()})
-          .toList();
-
-      _definirProfissionalAutomatico();
+      // Não precisamos carregar lista de profissionais aqui, a function buscarHorarios resolve isso
       _buscarHorarios();
     } catch (e) {
       print("Erro: $e");
@@ -146,58 +127,26 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     });
   }
 
-  void _definirProfissionalAutomatico() {
-    if (_profissionais.isEmpty) return;
-
-    final candidatos = _profissionais.where((pro) {
-      final habilidades = List<String>.from(pro['habilidades'] ?? []);
-      return habilidades.contains(_servicoSelecionado.toLowerCase());
-    }).toList();
-
-    if (candidatos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Nenhum profissional para $_servicoSelecionado."),
-        ),
-      );
-      setState(() {
-        _profissionalIdSelecionadoPeloSistema = null;
-        _gradeHorarios = [];
-      });
-      return;
-    }
-
-    // Pega o primeiro disponível (lógica simples de fila)
-    final escolhido = candidatos.first;
-    setState(() {
-      _profissionalIdSelecionadoPeloSistema = escolhido['id'];
-      _nomeProfissionalDoSistema = escolhido['nome'];
-    });
-
-    _buscarHorarios();
-  }
-
   Future<void> _buscarHorarios() async {
-    if (_servicoSelecionado == null) return;
+    if (_servicoSelecionado.isEmpty) return;
 
     setState(() {
       _isLoading = true;
-      _gradeHorarios = []; // Limpa a lista nova
+      _gradeHorarios = [];
       _horarioSelecionado = null;
     });
 
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
-      final servicoEnvio = _servicoSelecionado.toLowerCase();
 
+      // Chama a Cloud Function 'buscarHorarios' (já existente no seu backend)
       final result = await _functions.httpsCallable('buscarHorarios').call({
         'dataConsulta': dataString,
-        'servico': servicoEnvio,
+        'servico': _servicoSelecionado.toLowerCase(),
       });
 
       if (mounted) {
         setState(() {
-          // Agora lemos 'grade' e convertemos para Lista de Mapas
           List<dynamic> dados = result.data['grade'];
           _gradeHorarios = dados
               .map(
@@ -210,127 +159,59 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         });
       }
     } catch (e) {
-      // ... (tratamento de erro igual) ...
+      print("Erro ao buscar horários: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro de conexão ao buscar horários.")),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // --- LÓGICA DE PAGAMENTO E FINALIZAÇÃO ---
+  // --- CONFIRMAÇÃO VIA CLOUD FUNCTION ---
+  Future<void> _confirmarAgendamento() async {
+    if (_petId == null || _horarioSelecionado == null) return;
 
-  void _mostrarOpcoesPagamento(int saldoVouchers) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Container(
-          padding: EdgeInsets.all(25),
-          height: 380,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Como deseja pagar?",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 5),
-              Text(
-                "Escolha a melhor forma para você.",
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              SizedBox(height: 25),
-
-              // OPÇÃO 1: VOUCHER (Condicional)
-              if (saldoVouchers > 0) ...[
-                _buildBotaoPagamento(
-                  icon: FontAwesomeIcons.ticket,
-                  cor: Colors.purple,
-                  titulo: "USAR MEU VOUCHER",
-                  subtitulo: "Você tem $saldoVouchers disponíveis",
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _finalizarAgendamento('voucher');
-                  },
-                ),
-                SizedBox(height: 15),
-              ],
-
-              // OPÇÃO 2: PIX
-              _buildBotaoPagamento(
-                icon: FontAwesomeIcons.pix,
-                cor: Color(0xFF32BCAD),
-                titulo: "PAGAR COM PIX",
-                subtitulo: "Liberação imediata",
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _finalizarAgendamento('pix');
-                },
-              ),
-
-              SizedBox(height: 15),
-
-              // OPÇÃO 3: BALCÃO
-              _buildBotaoPagamento(
-                icon: FontAwesomeIcons.store,
-                cor: Colors.orange,
-                titulo: "PAGAR NO BALCÃO",
-                subtitulo: "Dinheiro ou Cartão na loja",
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _finalizarAgendamento('dinheiro');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _finalizarAgendamento(String metodo) async {
     setState(() => _isLoading = true);
 
     try {
-      // Prepara os dados
+      // Formata a data completa para envio
       final dataHoraString =
           "${DateFormat('yyyy-MM-dd').format(_dataSelecionada)} $_horarioSelecionado";
-      final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
+      // Converte para DateTime para validar, mas enviaremos string ISO ou compatível
+      // O backend espera 'data_hora'
+
       double valorFinal = _servicoSelecionado == 'Banho'
           ? _precoBanho
           : _precoTosa;
 
-      // Chama o Backend via Service
-      final result = await _firebaseService.criarAgendamento(
-        servico: _servicoSelecionado,
-        dataHora: dataInicio,
-        cpfUser: _userCpf!,
-        petId: _petId!,
-        metodoPagamento: metodo,
-        valor: valorFinal,
+      // CHAMA A FUNCTION 'criarAgendamento'
+      // Isso substitui a gravação direta no banco
+      final HttpsCallable callable = _functions.httpsCallable(
+        'criarAgendamento',
       );
 
-      // Tratamento do Resultado
-      if (metodo == 'voucher') {
-        _mostrarSucesso("Voucher utilizado com sucesso! 🎟️");
-        Navigator.pop(context); // Volta pra Home
-      } else if (metodo == 'pix') {
-        // Vai para tela de pagamento com o QR Code recebido
-        Navigator.pushReplacementNamed(
-          context,
-          '/pagamento',
-          arguments: result,
-        );
-      } else {
-        _mostrarSucesso("Agendado! Pague no balcão.");
-        Navigator.pop(context);
-      }
+      await callable.call({
+        'servico': _servicoSelecionado,
+        'data_hora': dataHoraString, // O backend faz "new Date(data_hora)"
+        'cpf_user': _userCpf,
+        'pet_id': _petId,
+        'metodo_pagamento': 'na_loja', // Padrão: Paga na recepção
+        'valor': valorFinal,
+      });
+
+      _mostrarSucessoDialog();
     } catch (e) {
+      String msgErro = "Erro desconhecido ao agendar.";
+      if (e is FirebaseFunctionsException) {
+        msgErro = e.message ?? e.details.toString();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Erro: ${e.toString().replaceAll('Exception: ', '')}"),
+          content: Text("Falha: $msgErro"),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
         ),
       );
     } finally {
@@ -338,33 +219,86 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     }
   }
 
-  void _mostrarSucesso(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
+  void _mostrarSucessoDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 10),
-            Text(msg),
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_circle, color: Colors.green, size: 50),
+            ),
+            SizedBox(height: 15),
+            Text(
+              "Agendamento Confirmado!",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10),
+            Text(
+              "Esperamos vocês no horário marcado.\nO pagamento será feito na recepção.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+            SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  "OK",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  // --- MODAL CADASTRO PET ---
+  // --- MODAL ADICIONAR PET ---
   void _abrirModalAdicionarPet() {
     final _nomeController = TextEditingController();
-    String _tipo = 'cao';
+    String _tipoSelecionado = 'cao';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return AlertDialog(
-            title: Text("Adicionar Pet Rápido ⚡"),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              "Adicionar Novo Pet",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: _corAcai,
+              ),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -372,23 +306,37 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                   controller: _nomeController,
                   decoration: InputDecoration(
                     labelText: "Nome do Pet",
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: Icon(Icons.pets, size: 20, color: Colors.grey),
+                    isDense: true,
                   ),
                 ),
-                SizedBox(height: 15),
+                SizedBox(height: 20),
+                Text(
+                  "Qual a espécie?",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    ChoiceChip(
-                      label: Text("Cão"),
-                      selected: _tipo == 'cao',
-                      onSelected: (v) => setModalState(() => _tipo = 'cao'),
+                    _buildTipoChip(
+                      "Cão",
+                      "cao",
+                      _tipoSelecionado,
+                      (v) => setModalState(() => _tipoSelecionado = v),
                     ),
-                    SizedBox(width: 10),
-                    ChoiceChip(
-                      label: Text("Gato"),
-                      selected: _tipo == 'gato',
-                      onSelected: (v) => setModalState(() => _tipo = 'gato'),
+                    SizedBox(width: 15),
+                    _buildTipoChip(
+                      "Gato",
+                      "gato",
+                      _tipoSelecionado,
+                      (v) => setModalState(() => _tipoSelecionado = v),
                     ),
                   ],
                 ),
@@ -397,26 +345,38 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text("Cancelar"),
+                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
                 onPressed: () async {
                   if (_nomeController.text.isNotEmpty) {
-                    await _db
+                    // Salva no Firestore
+                    final docRef = await _db
                         .collection('users')
                         .doc(_userCpf)
                         .collection('pets')
                         .add({
-                          'nome': _nomeController.text,
-                          'tipo': _tipo,
-                          'raca': 'Não informada',
+                          'nome': _nomeController.text.trim(),
+                          'tipo': _tipoSelecionado,
+                          'raca': 'SRD', // Padrão
                           'donoCpf': _userCpf,
+                          'created_at': FieldValue.serverTimestamp(),
                         });
+
                     Navigator.pop(context);
-                    await _atualizarListaPets();
+                    await _atualizarListaPets(); // Recarrega lista
+                    setState(
+                      () => _petId = docRef.id,
+                    ); // Já seleciona o novo pet
                   }
                 },
-                child: Text("Salvar"),
+                child: Text("Salvar", style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -425,552 +385,626 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     );
   }
 
+  Widget _buildTipoChip(
+    String label,
+    String valor,
+    String selecionado,
+    Function(String) onTap,
+  ) {
+    bool isSelected = valor == selecionado;
+    return GestureDetector(
+      onTap: () => onTap(valor),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? _corAcai : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? _corAcai : Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              valor == 'cao' ? FontAwesomeIcons.dog : FontAwesomeIcons.cat,
+              size: 14,
+              color: isSelected ? Colors.white : Colors.grey,
+            ),
+            SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[800],
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final petSelecionado = _pets.firstWhere(
+      (p) => p['id'] == _petId,
+      orElse: () => {'nome': '...'},
+    );
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text("Novo Agendamento"),
-        backgroundColor: Color(0xFF0056D2),
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: _isLoading && _pets.isEmpty
-          ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: EdgeInsets.only(bottom: 30),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. PET
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "1. Para quem é o carinho?",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        _buildPetSelector(),
-                      ],
+      backgroundColor: _corFundo,
+      body: Column(
+        children: [
+          // 1. CABEÇALHO IMERSIVO
+          Container(
+            padding: EdgeInsets.only(top: 45, left: 20, right: 20, bottom: 20),
+            decoration: BoxDecoration(
+              color: _corAcai,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
+              boxShadow: [
+                BoxShadow(
+                  color: _corAcai.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Agendar Horário",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
+                    Text(
+                      "Rápido e fácil",
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(
+                    Icons.calendar_today,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-                  // 2. SERVIÇO
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+          Expanded(
+            child: _isLoading && _pets.isEmpty
+                ? Center(child: CircularProgressIndicator(color: _corAcai))
+                : SingleChildScrollView(
+                    physics: BouncingScrollPhysics(),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "2. Qual o serviço?",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                        SizedBox(height: 20),
+
+                        // 2. SELEÇÃO DE PET
+                        _sectionTitle("Para quem é?"),
+                        SizedBox(height: 10),
+                        _buildPetList(),
+
+                        SizedBox(height: 20),
+
+                        // 3. SELEÇÃO DE SERVIÇO
+                        _sectionTitle("Serviço"),
+                        SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildServicoCard(
+                                  "Banho",
+                                  "Higiene",
+                                  FontAwesomeIcons.shower,
+                                  Colors.blue,
+                                ),
+                              ),
+                              SizedBox(width: 15),
+                              Expanded(
+                                child: _buildServicoCard(
+                                  "Tosa",
+                                  "Completa",
+                                  FontAwesomeIcons.scissors,
+                                  Colors.orange,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+
+                        SizedBox(height: 20),
+
+                        // 4. DATA E HORA
+                        _sectionTitle("Quando?"),
                         SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildServicoCard(
-                                "Banho",
-                                FontAwesomeIcons.shower,
-                                Colors.blue,
-                                _precoBanho,
-                              ),
-                            ),
-                            SizedBox(width: 15),
-                            Expanded(
-                              child: _buildServicoCard(
-                                "Tosa",
-                                FontAwesomeIcons.scissors,
-                                Colors.orange,
-                                _precoTosa,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_nomeProfissionalDoSistema != null)
+                        _buildCalendarList(),
+                        SizedBox(height: 15),
+
+                        if (_gradeHorarios.isNotEmpty) ...[
                           Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  size: 14,
-                                  color: Colors.green,
-                                ),
-                                SizedBox(width: 5),
-                                Text(
-                                  "Profissional: $_nomeProfissionalDoSistema",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  SizedBox(height: 25),
-
-                  // 3. DIA
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      "3. Escolha o dia",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-
-                  SizedBox(
-                    height: 70,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _listaDias.length,
-                      padding: EdgeInsets.symmetric(horizontal: 15),
-                      itemBuilder: (context, index) {
-                        final dia = _listaDias[index];
-                        final isSelected = DateUtils.isSameDay(
-                          dia,
-                          _dataSelecionada,
-                        );
-
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _dataSelecionada = dia;
-                              _horarioSelecionado = null;
-                            });
-                            _buscarHorarios();
-                          },
-                          child: Container(
-                            width: 70,
-                            margin: EdgeInsets.symmetric(horizontal: 5),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Color(0xFF0056D2)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected
-                                    ? Color(0xFF0056D2)
-                                    : Colors.grey[300]!,
-                                width: 1,
-                              ),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.blue.withOpacity(0.3),
-                                        blurRadius: 5,
-                                        offset: Offset(0, 3),
-                                      ),
-                                    ]
-                                  : [],
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  DateFormat('EEE', 'pt_BR')
-                                      .format(dia)
-                                      .toUpperCase()
-                                      .replaceAll('.', ''),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.grey[600],
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  DateFormat('dd').format(dia),
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.grey[800],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  SizedBox(height: 25),
-
-                  // 4. HORÁRIO
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      "4. Escolha o horário",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _gradeHorarios.isEmpty
-                        ? Container(
-                            padding: EdgeInsets.all(20),
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Center(
-                              child: _isLoading
-                                  ? CircularProgressIndicator()
-                                  : Text(
-                                      "Sem horários livres nesta data.",
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                            ),
-                          )
-                        : Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: _gradeHorarios.map((item) {
-                              final horario = item['hora'];
-                              final isLivre = item['livre'];
-                              final isSelected = _horarioSelecionado == horario;
-
-                              // Define as cores baseadas no estado
-                              Color corFundo;
-                              Color corBorda;
-                              Color corTexto;
-
-                              if (!isLivre) {
-                                // OCUPADO (Cinza e Opaco)
-                                corFundo = Colors.grey[200]!;
-                                corBorda = Colors.grey[300]!;
-                                corTexto = Colors.grey[400]!;
-                              } else if (isSelected) {
-                                // SELECIONADO (Azul)
-                                corFundo = Color(0xFF0056D2);
-                                corBorda = Color(0xFF0056D2);
-                                corTexto = Colors.white;
-                              } else {
-                                // LIVRE (Branco)
-                                corFundo = Colors.white;
-                                corBorda = Colors.grey[300]!;
-                                corTexto = Colors.grey[800]!;
-                              }
-
-                              return GestureDetector(
-                                onTap: isLivre
-                                    ? () => setState(
-                                        () => _horarioSelecionado = horario,
-                                      )
-                                    : null, // Se não for livre, onTap é nulo (não clica)
-                                child: Container(
-                                  width: 80,
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: corFundo,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: corBorda),
-                                    // Só mostra sombra se estiver selecionado
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.blue.withOpacity(
-                                                0.3,
-                                              ),
-                                              blurRadius: 4,
-                                            ),
-                                          ]
-                                        : [],
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      horario,
-                                      style: TextStyle(
-                                        color: corTexto,
-                                        fontWeight: FontWeight.bold,
-                                        decoration: !isLivre
-                                            ? TextDecoration.lineThrough
-                                            : null, // Opcional: riscar o texto
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                  ),
-
-                  SizedBox(height: 40),
-
-                  // BOTÃO DE CONFIRMAÇÃO (COM MONITORAMENTO DE VOUCHER)
-                  StreamBuilder<Map<String, int>>(
-                    stream: _userCpf != null
-                        ? _firebaseService.getSaldoVouchers(_userCpf!)
-                        : Stream.value({'banho': 0, 'tosa': 0}), // Fallback
-                    builder: (context, snapshot) {
-                      int saldoVouchers = 0;
-                      if (snapshot.hasData) {
-                        saldoVouchers = _servicoSelecionado == 'Banho'
-                            ? snapshot.data!['banho']!
-                            : snapshot.data!['tosa']!;
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton(
-                            onPressed:
-                                (_horarioSelecionado != null &&
-                                    _petId != null &&
-                                    !_isLoading)
-                                ? () => _mostrarOpcoesPagamento(saldoVouchers)
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[700],
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              elevation: 5,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: Text(
-                              "CONTINUAR PARA PAGAMENTO",
+                              "Horários:",
                               style: TextStyle(
-                                fontSize: 16,
+                                color: Colors.grey[600],
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
+                          SizedBox(height: 8),
+                          _buildTimeGrid(),
+                        ] else ...[
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Center(
+                              child: Text(
+                                "Selecione um dia para ver horários.",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
 
-  // --- WIDGETS AUXILIARES DE UI ---
+                        SizedBox(height: 20),
 
-  Widget _buildBotaoPagamento({
-    required IconData icon,
-    required Color cor,
-    required String titulo,
-    required String subtitulo,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        padding: EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: cor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: FaIcon(icon, color: cor, size: 20),
-            ),
-            SizedBox(width: 15),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titulo,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  Text(
-                    subtitulo,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-          ],
-        ),
-      ),
-    );
-  }
+                        // 5. RESUMO FINAL
+                        if (_petId != null && _horarioSelecionado != null)
+                          Container(
+                            margin: EdgeInsets.symmetric(horizontal: 20),
+                            padding: EdgeInsets.all(15),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: _corAcai.withOpacity(0.1),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long,
+                                      color: _corAcai,
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "Resumo",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: _corAcai,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Divider(height: 15),
+                                _buildSummaryRow("Pet", petSelecionado['nome']),
+                                _buildSummaryRow(
+                                  "Serviço",
+                                  _servicoSelecionado,
+                                ),
+                                _buildSummaryRow(
+                                  "Data",
+                                  "${DateFormat('dd/MM').format(_dataSelecionada)} às $_horarioSelecionado",
+                                ),
+                                SizedBox(height: 10),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 6,
+                                    horizontal: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber[50],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.store,
+                                        size: 14,
+                                        color: Colors.amber[800],
+                                      ),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        "Pagamento na loja",
+                                        style: TextStyle(
+                                          color: Colors.amber[900],
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
 
-  Widget _buildPetSelector() {
-    if (_pets.isEmpty) {
-      return GestureDetector(
-        onTap: _abrirModalAdicionarPet,
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            border: Border.all(color: Colors.blue),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Column(
-            children: [
-              FaIcon(FontAwesomeIcons.paw, size: 30, color: Colors.blue),
-              SizedBox(height: 10),
-              Text(
-                "Cadastre seu pet primeiro!",
-                style: TextStyle(
-                  color: Colors.blue[800],
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _petId,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: Color(0xFF0056D2)),
-          hint: Text("Selecione seu pet"),
-          items: [
-            ..._pets.map((pet) {
-              return DropdownMenuItem(
-                value: pet['id'] as String,
-                child: Row(
-                  children: [
-                    Icon(
-                      pet['tipo'] == 'cao'
-                          ? FontAwesomeIcons.dog
-                          : FontAwesomeIcons.cat,
-                      size: 18,
-                      color: Colors.grey,
+                        SizedBox(height: 80),
+                      ],
                     ),
-                    SizedBox(width: 10),
+                  ),
+          ),
+        ],
+      ),
+      bottomSheet: _buildBottomButton(),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGETS PERSONALIZADOS ---
+
+  Widget _buildPetList() {
+    return SizedBox(
+      height: 85,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 15),
+        itemCount: _pets.length + 1, // +1 para botão adicionar
+        itemBuilder: (context, index) {
+          // Botão Adicionar Pet
+          if (index == _pets.length) {
+            return GestureDetector(
+              onTap: _abrirModalAdicionarPet,
+              child: Container(
+                width: 60,
+                margin: EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Icon(Icons.add, color: _corAcai),
+                    ),
+                    SizedBox(height: 5),
                     Text(
-                      pet['nome'],
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      "Adicionar",
+                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                     ),
                   ],
                 ),
-              );
-            }).toList(),
-            DropdownMenuItem(
-              value: 'add_new',
-              child: Row(
+              ),
+            );
+          }
+
+          final pet = _pets[index];
+          final isSelected = pet['id'] == _petId;
+          final isDog = pet['tipo'] == 'cao';
+
+          return GestureDetector(
+            onTap: () => setState(() => _petId = pet['id']),
+            child: Container(
+              margin: EdgeInsets.symmetric(horizontal: 8),
+              child: Column(
                 children: [
-                  Icon(Icons.add_circle, color: Colors.blue),
-                  SizedBox(width: 10),
+                  AnimatedContainer(
+                    duration: Duration(milliseconds: 200),
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: isSelected ? _corAcai : Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? _corAcai : Colors.grey[300]!,
+                        width: isSelected ? 2 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black12, blurRadius: 4),
+                      ],
+                    ),
+                    child: Icon(
+                      isDog ? FontAwesomeIcons.dog : FontAwesomeIcons.cat,
+                      color: isSelected ? Colors.white : Colors.grey[400],
+                      size: 22,
+                    ),
+                  ),
+                  SizedBox(height: 5),
                   Text(
-                    "Adicionar outro...",
-                    style: TextStyle(color: Colors.blue),
+                    pet['nome'],
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isSelected ? _corAcai : Colors.grey[600],
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-          onChanged: (v) {
-            if (v == 'add_new')
-              _abrirModalAdicionarPet();
-            else
-              setState(() => _petId = v);
-          },
-        ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildServicoCard(
     String label,
+    String subtitle,
     IconData icon,
-    Color cor,
-    double preco,
+    Color themeColor,
   ) {
     final isSelected = _servicoSelecionado == label;
-    final precoFormatado =
-        "R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}";
 
     return GestureDetector(
       onTap: () {
         setState(() => _servicoSelecionado = label);
-        _definirProfissionalAutomatico();
+        _buscarHorarios(); // Recarrega horários ao mudar serviço
       },
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 15),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(vertical: 15, horizontal: 10),
         decoration: BoxDecoration(
-          color: isSelected ? cor.withOpacity(0.1) : Colors.white,
-          border: Border.all(
-            color: isSelected ? cor : Colors.grey[300]!,
-            width: 2,
-          ),
+          color: isSelected ? _corAcai : Colors.white,
           borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: isSelected ? _corAcai : Colors.grey[200]!),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: _corAcai.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ]
+              : [],
         ),
         child: Column(
           children: [
-            FaIcon(icon, color: isSelected ? cor : Colors.grey, size: 28),
+            FaIcon(
+              icon,
+              color: isSelected ? Colors.white : themeColor,
+              size: 24,
+            ),
             SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: isSelected ? cor : Colors.grey[700],
+                fontSize: 14,
+                color: isSelected ? Colors.white : Colors.grey[800],
               ),
             ),
-            SizedBox(height: 4),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isSelected ? cor : Colors.grey[200],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                precoFormatado,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[600],
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
+            SizedBox(height: 2),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: isSelected ? Colors.white70 : Colors.grey[500],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendarList() {
+    return SizedBox(
+      height: 70,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: 15),
+        itemCount: _listaDias.length,
+        itemBuilder: (context, index) {
+          final dia = _listaDias[index];
+          final isSelected = DateUtils.isSameDay(dia, _dataSelecionada);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _dataSelecionada = dia;
+                _horarioSelecionado = null;
+              });
+              _buscarHorarios();
+            },
+            child: AnimatedContainer(
+              duration: Duration(milliseconds: 200),
+              width: 50,
+              margin: EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: isSelected ? _corAcai : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected ? _corAcai : Colors.grey[300]!,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat(
+                      'EEE',
+                      'pt_BR',
+                    ).format(dia).toUpperCase().substring(0, 3),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white70 : Colors.grey[400],
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    DateFormat('dd').format(dia),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTimeGrid() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: _gradeHorarios.map((item) {
+          final horario = item['hora'];
+          final isLivre = item['livre'];
+          final isSelected = _horarioSelecionado == horario;
+
+          return GestureDetector(
+            onTap: isLivre
+                ? () => setState(() => _horarioSelecionado = horario)
+                : null,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? _corAcai
+                    : (isLivre ? Colors.white : Colors.grey[50]),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? _corAcai
+                      : (isLivre ? Colors.grey[300]! : Colors.transparent),
+                ),
+              ),
+              child: Text(
+                horario,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected
+                      ? Colors.white
+                      : (isLivre ? Colors.grey[700] : Colors.grey[300]),
+                  fontWeight: FontWeight.bold,
+                  decoration: !isLivre ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomButton() {
+    bool canSubmit =
+        _petId != null && _horarioSelecionado != null && !_isLoading;
+
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 15,
+            offset: Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: canSubmit ? _confirmarAgendamento : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _corAcai,
+              disabledBackgroundColor: Colors.grey[300],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: canSubmit ? 4 : 0,
+            ),
+            child: _isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Text(
+                    "CONFIRMAR AGENDAMENTO",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
         ),
       ),
     );

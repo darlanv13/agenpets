@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -9,14 +10,77 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Conexão segura com o banco 'agenpets'
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corFundo = Color(0xFFF8F9FC);
+  final Color _corLilas = Color(0xFFF3E5F5);
+
   Map<String, dynamic>? _dadosUsuario;
   String _primeiroNome = "";
+
+  // Controle do Carrossel
+  final PageController _pageController = PageController();
+  int _currentBannerIndex = 0;
+  Timer? _timer;
+
+  // --- MAPAS PARA TRADUZIR O BANCO DE DADOS ---
+  // (Precisam ser iguais aos do Painel de Gestão)
+  final Map<String, IconData> _mapaIcones = {
+    'shower': FontAwesomeIcons.shower,
+    'crown': FontAwesomeIcons.crown,
+    'hotel': FontAwesomeIcons.hotel,
+    'scissors': FontAwesomeIcons.scissors,
+    'percentage': FontAwesomeIcons.percent,
+    'syringe': FontAwesomeIcons.syringe,
+    'heart': FontAwesomeIcons.heart,
+    'star': FontAwesomeIcons.star,
+  };
+
+  final Map<String, Color> _mapaCores = {
+    'acai': Color(0xFF4A148C),
+    'laranja': Colors.orange,
+    'azul': Colors.blue,
+    'verde': Colors.green,
+    'roxo': Colors.purple,
+    'rosa': Colors.pink,
+    'vermelho': Colors.red,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicia o auto-play do carrossel
+    _iniciarTimerCarrossel();
+  }
+
+  void _iniciarTimerCarrossel() {
+    _timer = Timer.periodic(Duration(seconds: 5), (Timer timer) {
+      if (_pageController.hasClients) {
+        // Avança para a próxima página ou volta para a primeira
+        int proximaPagina = _currentBannerIndex + 1;
+        // Nota: A lógica de loop infinito aqui depende de saber o tamanho da lista,
+        // que agora vem do Stream. O animateToPage lida bem se o índice for inválido,
+        // mas idealmente verificamos o tamanho dentro do StreamBuilder.
+        _pageController.animateToPage(
+          proximaPagina,
+          duration: Duration(milliseconds: 350),
+          curve: Curves.easeIn,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -29,7 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (args != null && args is Map<String, dynamic>) {
       setState(() {
         _dadosUsuario = args;
-        // Pega apenas o primeiro nome
         String nomeCompleto = _dadosUsuario?['nome'] ?? 'Cliente';
         _primeiroNome = nomeCompleto.split(' ')[0];
       });
@@ -39,14 +102,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void _navegar(String rota) async {
     if (_dadosUsuario == null) return;
 
-    // O await aqui serve para esperar o retorno da tela de perfil (caso o nome mude)
     final result = await Navigator.pushNamed(
       context,
       rota,
       arguments: {'cpf': _dadosUsuario!['cpf']},
     );
 
-    // Se voltou da tela de perfil com alteração, atualizamos o nome aqui
     if (rota == '/perfil' && result == true) {
       final doc = await _db
           .collection('users')
@@ -65,173 +126,330 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_dadosUsuario == null)
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: _corAcai)),
+      );
 
     return Scaffold(
-      backgroundColor:
-          Colors.grey[100], // Fundo levemente cinza para destacar os cards
-      body: Column(
-        children: [
-          // --- HEADER PERSONALIZADO (UX APRIMORADA) ---
-          Container(
-            padding: EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 25),
-            decoration: BoxDecoration(
-              color: Color(0xFF0056D2), // Azul da marca
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(30),
-                bottomRight: Radius.circular(30),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: Offset(0, 5),
-                ),
-              ],
+      backgroundColor: _corFundo,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. HEADER
+            _buildHeader(),
+
+            SizedBox(height: 10),
+
+            // 2. STREAM DE BANNERS (Dinâmico)
+            StreamBuilder<QuerySnapshot>(
+              stream: _db
+                  .collection('banners')
+                  .where('ativo', isEqualTo: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                // Lista de dados dos banners
+                List<Map<String, dynamic>> bannersData = [];
+
+                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                  bannersData = snapshot.data!.docs
+                      .map((doc) => doc.data() as Map<String, dynamic>)
+                      .toList();
+                } else {
+                  // Fallback se não tiver banners: Mostra um padrão
+                  bannersData = [
+                    {
+                      "titulo": "Bem-vindo!",
+                      "subtitulo": "Cuidamos do seu pet com amor",
+                      "cor_id": "acai",
+                      "icone_id": "heart",
+                    },
+                  ];
+                }
+
+                // Reinicia o indice se a lista mudou e o indice atual estourou
+                if (_currentBannerIndex >= bannersData.length) {
+                  _currentBannerIndex = 0;
+                }
+
+                return Column(
+                  children: [
+                    // CARROSSEL
+                    Container(
+                      height: 140,
+                      width: double.infinity,
+                      child: PageView.builder(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          // Lógica para loop "infinito" visual (se quiser simplificar, use apenas index % length)
+                          setState(
+                            () => _currentBannerIndex =
+                                index % bannersData.length,
+                          );
+                        },
+                        // Usamos um número grande para simular loop infinito, ou apenas o tamanho da lista
+                        itemBuilder: (context, index) {
+                          final banner =
+                              bannersData[index % bannersData.length];
+
+                          // Traduz IDs para Objetos
+                          Color corBg =
+                              _mapaCores[banner['cor_id']] ?? _corAcai;
+                          IconData icone =
+                              _mapaIcones[banner['icone_id']] ??
+                              FontAwesomeIcons.star;
+
+                          return _buildBannerItem(
+                            titulo: banner['titulo'] ?? '',
+                            subtitulo: banner['subtitulo'] ?? '',
+                            cor: corBg,
+                            icone: icone,
+                          );
+                        },
+                      ),
+                    ),
+
+                    // INDICADORES
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(bannersData.length, (index) {
+                        return Container(
+                          width: 8.0,
+                          height: 8.0,
+                          margin: EdgeInsets.symmetric(
+                            vertical: 10.0,
+                            horizontal: 4.0,
+                          ),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _currentBannerIndex == index
+                                ? _corAcai
+                                : Colors.grey[300],
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                );
+              },
             ),
+
+            SizedBox(height: 10),
+
+            // 3. MENU GRID
+            Expanded(
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "O que seu pet precisa?",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    SizedBox(height: 15),
+                    Expanded(
+                      child: GridView.count(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
+                        childAspectRatio: 0.85,
+                        physics: BouncingScrollPhysics(),
+                        children: [
+                          _buildMenuCard(
+                            "Agendar",
+                            FontAwesomeIcons.calendarCheck,
+                            Colors.blue,
+                            () => _navegar('/agendamento'),
+                          ),
+                          _buildMenuCard(
+                            "Hotel",
+                            FontAwesomeIcons.hotel,
+                            Colors.orange,
+                            () => _navegar('/hotel'),
+                          ),
+                          _buildMenuCard(
+                            "Meus Pets",
+                            FontAwesomeIcons.paw,
+                            Colors.purple,
+                            () => _navegar('/meus_pets'),
+                          ),
+                          _buildMenuCard(
+                            "Assinatura",
+                            FontAwesomeIcons.crown,
+                            Colors.amber,
+                            () => _navegar('/assinatura'),
+                          ),
+                          _buildMenuCard(
+                            "Carteira",
+                            FontAwesomeIcons.wallet,
+                            Colors.green,
+                            () => _navegar('/historico'),
+                          ),
+                          _buildMenuCard(
+                            "Perfil",
+                            FontAwesomeIcons.user,
+                            Colors.grey,
+                            () => _navegar('/perfil'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGETS ---
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _corAcai, width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: _corLilas,
+                  child: Icon(Icons.person, color: _corAcai),
+                ),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Olá, $_primeiroNome 👋",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: _corAcai,
+                    ),
+                  ),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: _db
+                        .collection('users')
+                        .doc(_dadosUsuario!['cpf'])
+                        .collection('pets')
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      int qtd = snapshot.hasData
+                          ? snapshot.data!.docs.length
+                          : 0;
+                      return Text(
+                        qtd == 0 ? "Cadastre seu pet" : "$qtd pets cadastrados",
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          IconButton(
+            icon: Icon(Icons.logout_rounded, color: Colors.grey[400]),
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerItem({
+    required String titulo,
+    required String subtitulo,
+    required Color cor,
+    required IconData icone,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cor, cor.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: cor.withOpacity(0.3),
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -10,
+            bottom: -10,
+            child: Icon(icone, size: 80, color: Colors.white.withOpacity(0.15)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20.0),
             child: Row(
               children: [
-                // FOTO DO USUÁRIO
-                CircleAvatar(
-                  radius: 35,
-                  backgroundColor: Colors.white,
-                  child: CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.blue[100],
-                    child: Icon(
-                      Icons.person,
-                      size: 40,
-                      color: Colors.blue[700],
-                    ),
-                    // No futuro: backgroundImage: NetworkImage(fotoUrl),
-                  ),
-                ),
-                SizedBox(width: 15),
-
-                // NOME E QUANTIDADE DE PETS
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        "Olá, $_primeiroNome!",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "NOVIDADE",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      SizedBox(height: 5),
-                      // Contador de Pets em Tempo Real
-                      StreamBuilder<QuerySnapshot>(
-                        stream: _db
-                            .collection('users')
-                            .doc(_dadosUsuario!['cpf'])
-                            .collection('pets')
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          int qtdPets = 0;
-                          if (snapshot.hasData)
-                            qtdPets = snapshot.data!.docs.length;
-
-                          return Row(
-                            children: [
-                              FaIcon(
-                                FontAwesomeIcons.paw,
-                                color: Colors.blue[100],
-                                size: 14,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                "$qtdPets pets cadastrados",
-                                style: TextStyle(
-                                  color: Colors.blue[100],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                      SizedBox(height: 8),
+                      Text(
+                        titulo,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        subtitulo,
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-
-                // BOTÕES DE AÇÃO (PERFIL E SAIR)
-                Row(
-                  children: [
-                    _buildHeaderButton(Icons.edit, () => _navegar('/perfil')),
-                    SizedBox(width: 10),
-                    _buildHeaderButton(
-                      Icons.logout,
-                      () => Navigator.pushReplacementNamed(context, '/login'),
-                    ),
-                  ],
-                ),
               ],
-            ),
-          ),
-
-          // --- CORPO DA HOME ---
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Serviços Disponíveis",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 15),
-                  Expanded(
-                    child: GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
-                      childAspectRatio:
-                          1.1, // Deixa os cards um pouco mais retangulares
-                      children: [
-                        _buildCard(
-                          icon: FontAwesomeIcons.shower,
-                          color: Colors.blue,
-                          label: "Banho & Tosa",
-                          onTap: () => _navegar('/agendamento'),
-                        ),
-                        _buildCard(
-                          icon: FontAwesomeIcons.hotel,
-                          color: Colors.orange, // Laranja combina com hotel
-                          label: "Hotelzinho",
-                          onTap: () => _navegar('/hotel'),
-                        ),
-                        _buildCard(
-                          icon: FontAwesomeIcons.paw,
-                          color: Colors.purple,
-                          label: "Meus Pets",
-                          onTap: () => _navegar('/meus_pets'),
-                        ),
-                        _buildCard(
-                          icon: FontAwesomeIcons.crown,
-                          color: Colors.amber, // Dourado
-                          label: "Clube AgenPet",
-                          onTap: () => _navegar('/assinatura'),
-                        ),
-                        _buildCard(
-                          icon: FontAwesomeIcons.fileInvoiceDollar,
-                          color: Colors.green,
-                          label: "Histórico",
-                          onTap: () =>
-                              _navegar('/historico'), // AGORA CONECTADO
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
@@ -239,28 +457,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Botão pequeno transparente no Header
-  Widget _buildHeaderButton(IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white, size: 20),
-        onPressed: onTap,
-        constraints: BoxConstraints(minWidth: 40, minHeight: 40),
-        padding: EdgeInsets.zero,
-      ),
-    );
-  }
-
-  Widget _buildCard({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildMenuCard(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -269,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withOpacity(0.05),
               blurRadius: 10,
               offset: Offset(0, 5),
             ),
@@ -279,19 +481,19 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(15),
+              padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: FaIcon(icon, color: color, size: 28),
+              child: FaIcon(icon, color: color, size: 24),
             ),
-            SizedBox(height: 15),
+            SizedBox(height: 12),
             Text(
               label,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
                 color: Colors.grey[800],
               ),
             ),

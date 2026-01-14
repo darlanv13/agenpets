@@ -1,3 +1,4 @@
+import 'package:agenpet/screens/tabs/meus_vouchers_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,14 +10,28 @@ class HistoricoScreen extends StatefulWidget {
   _HistoricoScreenState createState() => _HistoricoScreenState();
 }
 
-class _HistoricoScreenState extends State<HistoricoScreen> {
+class _HistoricoScreenState extends State<HistoricoScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corLavanda = Color(0xFFAB47BC);
+  final Color _corLilas = Color(0xFFF3E5F5);
+  final Color _corFundo = Color(0xFFF8F9FC);
+
   String? _userCpf;
   bool _init = false;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
 
   @override
   void didChangeDependencies() {
@@ -30,186 +45,338 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_userCpf == null)
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_userCpf == null) {
+      return Scaffold(
+        backgroundColor: _corFundo,
+        body: Center(child: CircularProgressIndicator(color: _corAcai)),
+      );
+    }
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          title: Text("Minhas Atividades"),
-          backgroundColor: Color(0xFF0056D2),
-          centerTitle: true,
-          elevation: 0,
-          bottom: TabBar(
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(text: "AGENDA", icon: Icon(Icons.calendar_month)),
-              Tab(
-                text: "MEUS VOUCHERS",
-                icon: FaIcon(FontAwesomeIcons.ticket, size: 18),
+    return Scaffold(
+      backgroundColor: _corFundo,
+      appBar: AppBar(
+        title: Text(
+          "Minhas Atividades",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        backgroundColor: _corAcai,
+        elevation: 0,
+        centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(70),
+          child: Container(
+            margin: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
+              labelColor: _corAcai,
+              unselectedLabelColor: Colors.white70,
+              labelStyle: TextStyle(fontWeight: FontWeight.bold),
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.calendar_today_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text("AGENDA"),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FaIcon(FontAwesomeIcons.ticket, size: 16),
+                      SizedBox(width: 8),
+                      Text("VOUCHERS"),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        body: TabBarView(children: [_buildAbaAgenda(), _buildAbaVouchers()]),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [_buildAbaAgenda(), _buildAbaVouchers()],
       ),
     );
   }
 
   // --- ABA 1: LISTA DE AGENDAMENTOS ---
+
+  // --- ABA 1: LISTA DE AGENDAMENTOS (COM CORREÇÃO DE ÍNDICE) ---
   Widget _buildAbaAgenda() {
     return StreamBuilder<QuerySnapshot>(
       stream: _db
           .collection('agendamentos')
           .where('userId', isEqualTo: _userCpf)
-          .orderBy('data_inicio', descending: true) // Mais recentes primeiro
+          .orderBy('data_inicio', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        // 1. TRATAMENTO DE ERRO (Para você ver o que falta)
+        if (snapshot.hasError) {
+          print(
+            "ERRO NA AGENDA: ${snapshot.error}",
+          ); // <--- Olhe no seu Console (Run)
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 40),
+                  SizedBox(height: 10),
+                  Text(
+                    "Erro ao carregar agenda.\nProvavelmente falta o índice no Firebase.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[700]),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    "Verifique o console para o link de criação.",
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator(color: _corAcai));
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return _buildEmptyState(
-            "Nenhum agendamento encontrado.",
-            Icons.calendar_today,
+            "Você ainda não tem agendamentos.",
+            "Que tal marcar um banho pro seu pet?",
+            FontAwesomeIcons.calendarXmark,
           );
         }
 
         final docs = snapshot.data!.docs;
 
         return ListView.builder(
-          padding: EdgeInsets.all(15),
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           itemCount: docs.length,
           itemBuilder: (ctx, index) {
             final data = docs[index].data() as Map<String, dynamic>;
             final timestamp = data['data_inicio'] as Timestamp;
             final dataInicio = timestamp.toDate();
             final status = data['status'] ?? 'agendado';
+            final servico = data['servicoNorm'] ?? data['servico'] ?? 'Serviço';
 
-            // Definição de Cores por Status
-            Color statusColor = Colors.blue;
-            String statusLabel = "Confirmado";
+            // Configuração Visual por Status
+            Color statusColor;
+            Color statusBg;
+            String statusLabel;
+            IconData statusIcon;
 
-            if (status == 'aguardando_pagamento') {
-              statusColor = Colors.orange;
-              statusLabel = "Pendente";
-            } else if (status == 'concluido') {
-              statusColor = Colors.green;
-              statusLabel = "Concluído";
-            } else if (status == 'cancelado') {
-              statusColor = Colors.red;
-              statusLabel = "Cancelado";
+            switch (status) {
+              case 'aguardando_pagamento':
+                statusColor = Colors.orange[800]!;
+                statusBg = Colors.orange[50]!;
+                statusLabel = "Pendente";
+                statusIcon = Icons.access_time_rounded;
+                break;
+              case 'concluido':
+                statusColor = Colors.green[800]!;
+                statusBg = Colors.green[50]!;
+                statusLabel = "Concluído";
+                statusIcon = Icons.check_circle_outline;
+                break;
+              case 'cancelado':
+                statusColor = Colors.red[800]!;
+                statusBg = Colors.red[50]!;
+                statusLabel = "Cancelado";
+                statusIcon = Icons.cancel_outlined;
+                break;
+              default: // agendado/reservado
+                statusColor = _corAcai;
+                statusBg = _corLilas;
+                statusLabel = "Confirmado";
+                statusIcon = Icons.event_available;
             }
 
-            return Card(
+            // Ícone do Serviço
+            bool isTosa = servico.toString().toLowerCase().contains('tosa');
+
+            return Container(
               margin: EdgeInsets.only(bottom: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 15,
+                    offset: Offset(0, 5),
+                  ),
+                ],
               ),
-              elevation: 2,
               child: Padding(
-                padding: const EdgeInsets.all(15.0),
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Data e Hora (Destaque)
-                        Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(10),
+                        // Data Box
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _corFundo,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                DateFormat('dd').format(dataInicio),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: _corAcai,
+                                ),
                               ),
-                              child: Column(
+                              Text(
+                                DateFormat(
+                                  'MMM',
+                                  'pt_BR',
+                                ).format(dataInicio).toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: 15),
+                        // Informações
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Text(
-                                    DateFormat('dd').format(dataInicio),
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue[800],
-                                    ),
+                                  Icon(
+                                    isTosa
+                                        ? FontAwesomeIcons.scissors
+                                        : FontAwesomeIcons.shower,
+                                    size: 14,
+                                    color: Colors.grey[400],
                                   ),
+                                  SizedBox(width: 6),
                                   Text(
-                                    DateFormat(
-                                      'MMM',
-                                    ).format(dataInicio).toUpperCase(),
+                                    servico,
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue[800],
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            SizedBox(width: 15),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  data['servico'] ?? 'Serviço',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                              SizedBox(height: 5),
+                              Text(
+                                DateFormat(
+                                  'EEEE, HH:mm',
+                                  'pt_BR',
+                                ).format(dataInicio),
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (data['profissional_nome'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    "Com: ${data['profissional_nome']}",
+                                    style: TextStyle(
+                                      color: _corAcai,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                                Text(
-                                  DateFormat(
-                                    'EEEE, HH:mm',
-                                    'pt_BR',
-                                  ).format(dataInicio),
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                        // Badge de Status
+                      ],
+                    ),
+                    SizedBox(height: 15),
+                    Divider(height: 1, color: Colors.grey[100]),
+                    SizedBox(height: 15),
+                    // Rodapé do Card
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Badge Status
                         Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.1),
+                            color: statusBg,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: statusColor),
                           ),
-                          child: Text(
-                            statusLabel,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          child: Row(
+                            children: [
+                              Icon(statusIcon, size: 14, color: statusColor),
+                              SizedBox(width: 5),
+                              Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                    Divider(height: 25),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.person, size: 16, color: Colors.grey),
-                            SizedBox(width: 5),
-                            Text(
-                              data['profissional_nome'] ?? 'Profissional',
-                              style: TextStyle(color: Colors.grey[700]),
-                            ),
-                          ],
-                        ),
+                        // Valor
                         if (data['valor'] != null)
                           Text(
                             "R\$ ${data['valor'].toStringAsFixed(2)}",
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                          )
+                        else
+                          Text(
+                            "Grátis / Voucher",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                       ],
                     ),
@@ -225,183 +392,34 @@ class _HistoricoScreenState extends State<HistoricoScreen> {
 
   // --- ABA 2: CARTEIRA DE VOUCHERS ---
   Widget _buildAbaVouchers() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: _db.collection('users').doc(_userCpf).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData)
-          return Center(child: CircularProgressIndicator());
-
-        final userData = snapshot.data!.data() as Map<String, dynamic>?;
-        if (userData == null)
-          return _buildEmptyState("Erro ao carregar dados.", Icons.error);
-
-        final vouchersBanho = userData['vouchers_banho'] ?? 0;
-        final vouchersTosa = userData['vouchers_tosa'] ?? 0;
-        final validadeTimestamp = userData['validade_assinatura'] as Timestamp?;
-
-        bool temAssinaturaAtiva =
-            validadeTimestamp != null &&
-            validadeTimestamp.toDate().isAfter(DateTime.now());
-
-        return SingleChildScrollView(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // CARD STATUS ASSINATURA
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: temAssinaturaAtiva
-                        ? [Color(0xFF0056D2), Colors.blueAccent]
-                        : [Colors.grey, Colors.grey[400]!],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    FaIcon(
-                      temAssinaturaAtiva
-                          ? FontAwesomeIcons.crown
-                          : FontAwesomeIcons.lock,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      temAssinaturaAtiva
-                          ? "ASSINATURA ATIVA"
-                          : "SEM ASSINATURA",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    if (temAssinaturaAtiva)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 5.0),
-                        child: Text(
-                          "Válido até ${DateFormat('dd/MM/yyyy').format(validadeTimestamp!.toDate())}",
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                    if (!temAssinaturaAtiva)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15.0),
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pushNamed(
-                            context,
-                            '/assinatura',
-                            arguments: {'cpf': _userCpf},
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                          ),
-                          child: Text("QUERO ASSINAR"),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: 30),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Seus Vouchers",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              SizedBox(height: 15),
-
-              _buildVoucherCard(
-                "Banho",
-                vouchersBanho,
-                FontAwesomeIcons.shower,
-                Colors.blue,
-              ),
-              SizedBox(height: 15),
-              _buildVoucherCard(
-                "Banho & Tosa",
-                vouchersTosa,
-                FontAwesomeIcons.scissors,
-                Colors.purple,
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    // Chama o novo componente passando o CPF
+    return MeusVouchersTab(userCpf: _userCpf!);
   }
 
-  Widget _buildVoucherCard(String titulo, int qtd, IconData icon, Color cor) {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: cor.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: FaIcon(icon, color: cor, size: 24),
-          ),
-          SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  "Disponíveis para uso",
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            "$qtd",
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: qtd > 0 ? cor : Colors.grey,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(String msg, IconData icon) {
+  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 60, color: Colors.grey[300]),
+          Container(
+            padding: EdgeInsets.all(30),
+            decoration: BoxDecoration(color: _corLilas, shape: BoxShape.circle),
+            child: Icon(icon, size: 50, color: _corAcai.withOpacity(0.5)),
+          ),
           SizedBox(height: 20),
-          Text(msg, style: TextStyle(color: Colors.grey)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          SizedBox(height: 5),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
         ],
       ),
     );

@@ -9,6 +9,7 @@ import 'views/gestao_precos_view.dart';
 import 'views/equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
+import 'views/gestao_banners_view.dart'; // <--- 1. IMPORT NOVO (Verifique se o arquivo está na pasta views)
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -19,19 +20,20 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
 
   // Cores da Identidade Visual
-  final Color _corAcaiStart = Color(0xFF4A148C); // Roxo Escuro
-  final Color _corAcaiEnd = Color(0xFF7B1FA2); // Roxo Mais Claro
-  final Color _corFundo = Color(0xFFF0F2F5); // Cinza muito suave
+  final Color _corAcaiStart = Color(0xFF4A148C);
+  final Color _corAcaiEnd = Color(0xFF7B1FA2);
+  final Color _corFundo = Color(0xFFF0F2F5);
 
-  // --- LISTA DE TELAS ---
+  // --- 2. LISTA DE TELAS ATUALIZADA ---
   final List<Widget> _telas = [
     DashboardView(), // 0
     AgendaView(), // 1
     HotelView(), // 2
     VendaAssinaturaView(), // 3
     GestaoPrecosView(), // 4
-    EquipeView(), // 5
-    ConfiguracaoAgendaView(), // 6
+    GestaoBannersView(), // 5 <--- NOVA TELA AQUI
+    EquipeView(), // 6 (Índice deslocado)
+    ConfiguracaoAgendaView(), // 7 (Índice deslocado)
   ];
 
   @override
@@ -59,7 +61,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
             ),
             child: Column(
               children: [
-                // --- ÁREA DA LOGO ---
+                // --- LOGO ---
                 Container(
                   padding: EdgeInsets.only(top: 50, bottom: 40),
                   child: Column(
@@ -85,8 +87,6 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                           fontSize: 26,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.0,
-                          fontFamily:
-                              'Roboto', // Pode usar GoogleFonts se tiver
                         ),
                       ),
                       Container(
@@ -113,7 +113,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                   ),
                 ),
 
-                // --- ITENS DO MENU ---
+                // --- 3. ITENS DO MENU ATUALIZADOS ---
                 Expanded(
                   child: ListView(
                     padding: EdgeInsets.symmetric(horizontal: 15),
@@ -144,19 +144,30 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                         Icons.price_change_rounded,
                       ),
 
+                      // --- NOVO BOTÃO AQUI ---
+                      _buildMenuItem(
+                        5,
+                        "Banners do App",
+                        Icons.view_carousel_rounded,
+                      ),
+
                       SizedBox(height: 20),
                       _buildSectionTitle("ADMINISTRAÇÃO"),
-                      _buildMenuItem(5, "Equipe", Icons.people_alt_rounded),
                       _buildMenuItem(
                         6,
+                        "Equipe",
+                        Icons.people_alt_rounded,
+                      ), // Atualizado para 6
+                      _buildMenuItem(
+                        7,
                         "Configurações",
                         Icons.settings_rounded,
-                      ),
+                      ), // Atualizado para 7
                     ],
                   ),
                 ),
 
-                // --- RODAPÉ DO MENU ---
+                // --- RODAPÉ ---
                 Container(
                   padding: EdgeInsets.all(20),
                   child: InkWell(
@@ -195,10 +206,10 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
             ),
           ),
 
-          // --- ÁREA DE CONTEÚDO (COM BORDA ARREDONDADA) ---
+          // --- ÁREA DE CONTEÚDO ---
           Expanded(
             child: Container(
-              color: _corAcaiEnd, // Fundo atrás do container arredondado
+              color: _corAcaiEnd,
               child: Container(
                 decoration: BoxDecoration(
                   color: _corFundo,
@@ -213,7 +224,8 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                     topLeft: Radius.circular(30),
                     bottomLeft: Radius.circular(30),
                   ),
-                  child: _telas[_selectedIndex],
+                  child:
+                      _telas[_selectedIndex], // Exibe a tela baseada no índice clicado
                 ),
               ),
             ),
@@ -223,7 +235,6 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     );
   }
 
-  // Títulos das seções do menu (ex: "PRINCIPAL")
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 15, bottom: 10),
@@ -239,7 +250,6 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     );
   }
 
-  // Widget do Botão do Menu
   Widget _buildMenuItem(int index, String title, IconData icon) {
     bool isSelected = _selectedIndex == index;
 

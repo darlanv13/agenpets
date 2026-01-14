@@ -144,85 +144,79 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
   void _finalizarCompra() async {
     if (_clienteId == null || _pacoteSelecionado == null) return;
 
-    // Feedback de carregamento
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (c) => Center(child: CircularProgressIndicator(color: _corAcai)),
-    );
-
     try {
-      // CHAMA A CLOUD FUNCTION
-      final functions = FirebaseFunctions.instanceFor(
-        region: 'southamerica-east1',
-      );
-
-      await functions.httpsCallable('realizarVendaAssinatura').call({
+      // 1. Registra a Venda no Histórico (Mantido para relatório)
+      await _db.collection('vendas_assinaturas').add({
         'userId': _clienteId,
-        'pacoteId':
-            _pacoteId, // Agora passamos o ID para o servidor buscar os dados seguros
-        'metodoPagamento': _metodoPagamento,
+        'user_nome': _clienteSelecionado!['nome'],
+        'pacote_nome': _pacoteSelecionado!['nome'],
+        'pacote_id': _pacoteId,
+        'valor': _pacoteSelecionado!['preco'],
+        'metodo_pagamento': _metodoPagamento,
+        'data_venda': FieldValue.serverTimestamp(),
+        'atendente': 'Admin/Balcão',
       });
 
-      Navigator.pop(context); // Fecha loading
+      // 2. Calcula a data de validade (30 dias padrão para mensal)
+      final dataValidade = DateTime.now().add(Duration(days: 30));
 
-      // Data de validade calculada (apenas visual, pois o servidor já gravou)
-      final dataValidade = DateTime.now().add(Duration(days: 45));
+      // 3. Monta o Objeto do Voucher (Estrutura da Imagem)
+      Map<String, dynamic> novoItemVoucher = {
+        'nome_pacote': _pacoteSelecionado!['nome'],
+        'validade_pacote': Timestamp.fromDate(dataValidade),
+        // Adiciona a data da compra para controle interno se precisar
+        'data_compra': Timestamp.now(),
+      };
 
-      // Feedback de Sucesso
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          content: Container(
-            padding: EdgeInsets.all(10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green[50],
+      // 4. Mapeamento Dinâmico dos Serviços
+      // Transforma 'vouchers_banho' -> 'banhos', 'vouchers_hidratacao' -> 'hidratacao'
+      _pacoteSelecionado!.forEach((key, value) {
+        if (key.startsWith('vouchers_') && (value is int || value is double)) {
+          // Remove o prefixo "vouchers_" para ficar igual à sua imagem
+          String nomeServico = key.replaceFirst('vouchers_', '');
+          // Salva a quantidade (ex: banhos: 4)
+          novoItemVoucher[nomeServico] = value;
+        }
+      });
+
+      // 5. Atualiza o Usuário (Adiciona ao Array 'voucher_assinatura')
+      await _db.collection('users').doc(_clienteId).update({
+        'ultima_compra': FieldValue.serverTimestamp(),
+        // Adiciona o novo mapa dentro da lista, mantendo os anteriores se houver
+        'voucher_assinatura': FieldValue.arrayUnion([novoItemVoucher]),
+      });
+
+      // 6. Sucesso
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: Container(
+              padding: EdgeInsets.all(10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 60),
+                  SizedBox(height: 20),
+                  Text(
+                    "Venda Realizada!",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
-                  child: Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 60,
+                  SizedBox(height: 10),
+                  Text(
+                    "Assinatura adicionada à carteira do cliente.\nVálida até ${DateFormat('dd/MM/yyyy').format(dataValidade)}.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey[600]),
                   ),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  "Venda Confirmada!",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  "Vouchers creditados e válidos até ${DateFormat('dd/MM/yyyy').format(dataValidade)}.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                SizedBox(height: 25),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+                  SizedBox(height: 25),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      // Reseta a tela para nova venda
                       setState(() {
                         _stepAtual = 1;
                         _clienteSelecionado = null;
@@ -232,31 +226,20 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
                       });
                     },
                     child: Text(
-                      "INICIAR NOVA VENDA",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      "NOVA VENDA",
+                      style: TextStyle(color: Colors.white),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    } catch (e) {
-      Navigator.pop(context); // Fecha loading
-      String erro = "Erro desconhecido";
-      if (e is FirebaseFunctionsException) {
-        erro = e.message ?? e.code;
+        );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Falha na venda: $erro"),
-          backgroundColor: Colors.red,
-        ),
-      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     }
   }
   // --- UI COMPONENTS ---
