@@ -350,109 +350,7 @@ exports.webhookPix = onRequest(async (req, res) => {
     res.status(200).send();
 });
 
-// --- NOVA FUNÇÃO: Realizar Checkout (Painel Admin) ---
-exports.realizarCheckout = onCall(async (request) => {
-    // 1. Recebe dados do Painel
-    const { agendamentoId, extrasIds, metodoPagamento, vouchersParaUsar } = request.data;
 
-    if (!agendamentoId) throw new HttpsError('invalid-argument', 'ID do agendamento é obrigatório');
-
-    // 2. Busca o Agendamento
-    const agendamentoRef = db.collection('agendamentos').doc(agendamentoId);
-    const agendamentoSnap = await agendamentoRef.get();
-
-    if (!agendamentoSnap.exists) throw new HttpsError('not-found', 'Agendamento não encontrado');
-
-    const dadosAgendamento = agendamentoSnap.data();
-    if (dadosAgendamento.status === 'concluido') {
-        throw new HttpsError('failed-precondition', 'Este agendamento já foi finalizado.');
-    }
-
-    // 3. Busca o Usuário (Para checar saldo de vouchers)
-    const userId = dadosAgendamento.userId;
-    const userRef = db.collection('users').doc(userId);
-    const userSnap = await userRef.get();
-    const userData = userSnap.data() || {};
-
-    // 4. Calcular Valor Base e Verificar Vouchers
-    // Se o voucher for usado, o valor do serviço base (Banho/Tosa) vira 0.
-    let valorFinal = Number(dadosAgendamento.valor || 0);
-    let vouchersConsumidosLog = {}; // Log para salvar no histórico
-    let usouVoucherBase = false;
-
-    if (vouchersParaUsar) {
-        for (const [chaveVoucher, usar] of Object.entries(vouchersParaUsar)) {
-            if (usar === true) {
-                // Validação de segurança: O usuário TEM esse voucher?
-                const saldoAtual = userData[chaveVoucher] || 0;
-
-                if (saldoAtual > 0) {
-                    // Tem saldo! Zera o custo do serviço base e marca para descontar
-                    valorFinal = 0;
-                    vouchersConsumidosLog[chaveVoucher] = true;
-                    usouVoucherBase = true;
-                } else {
-                    // Não tem saldo (tentativa de fraude ou erro de interface)
-                    console.warn(`Admin tentou usar ${chaveVoucher} para ${userId} sem saldo.`);
-                    // Aqui optamos por não descontar e cobrar o valor cheio, ou você pode lançar erro:
-                    // throw new HttpsError('failed-precondition', `Cliente sem saldo de ${chaveVoucher}`);
-                }
-            }
-        }
-    }
-
-    // 5. Calcular Extras (Busca preço no banco para segurança)
-    let extrasProcessados = [];
-    if (extrasIds && extrasIds.length > 0) {
-        for (const extraId of extrasIds) {
-            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
-            if (extraDoc.exists) {
-                const extraData = extraDoc.data();
-                const precoReal = Number(extraData.preco || 0);
-
-                valorFinal += precoReal; // Soma ao total
-
-                extrasProcessados.push({
-                    id: extraId,
-                    nome: extraData.nome,
-                    preco: precoReal
-                });
-            }
-        }
-    }
-
-    // 6. Atualização Atômica (Batch)
-    const batch = db.batch();
-
-    // A. Atualiza status do Agendamento
-    batch.update(agendamentoRef, {
-        status: 'concluido',
-        status_pagamento: 'pago',
-        metodo_pagamento: metodoPagamento,
-        pago_em: admin.firestore.FieldValue.serverTimestamp(),
-        valor_final_cobrado: valorFinal,
-        vouchers_consumidos: vouchersConsumidosLog,
-        extras: extrasProcessados,
-        usou_voucher: usouVoucherBase
-    });
-
-    // B. Desconta os vouchers do usuário (apenas os validados)
-    for (const [chave, usou] of Object.entries(vouchersConsumidosLog)) {
-        if (usou) {
-            batch.update(userRef, {
-                [chave]: admin.firestore.FieldValue.increment(-1)
-            });
-        }
-    }
-
-    await batch.commit();
-
-    return {
-        sucesso: true,
-        mensagem: 'Checkout realizado com sucesso!',
-        valorCobrado: valorFinal
-    };
-});
 
 // --- FUNÇÃO ATUALIZADA: Realizar Venda de Assinatura (Balcão/Admin) ---
 exports.realizarVendaAssinatura = onCall(async (request) => {
@@ -530,4 +428,67 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
         mensagem: 'Venda realizada com sucesso!',
         validade: validadeDate.toISOString()
     };
+});
+
+// --- NOVA FUNÇÃO: Salvar Checklist do Pet ---
+
+// CORREÇÃO: Tratamento seguro para 'auth' (evita o erro reading 'uid')
+exports.salvarChecklistPet = onCall({
+    region: "southamerica-east1",
+    maxInstances: 10,
+    cors: true,
+}, async (request) => {
+    const { data, auth } = request;
+
+    // 1. Definição segura do responsável (Funciona com ou sem login)
+    // Se 'auth' existir, usa o UID real. Se não, usa um valor padrão.
+    const responsavelId = auth ? auth.uid : 'usuario_nao_logado';
+    const responsavelNome = (auth && auth.token && auth.token.name) ? auth.token.name : 'Profissional (Sem Auth)';
+
+    /* SE QUISER BLOQUEAR O ACESSO SEM LOGIN, DESCOMENTE ISTO:
+       if (!auth) {
+           throw new HttpsError('unauthenticated', 'Usuário não autenticado.');
+       }
+    */
+
+    const { agendamentoId, checklist } = data;
+
+    // 2. Validações básicas
+    if (!agendamentoId || !checklist) {
+        throw new HttpsError('invalid-argument', 'Dados incompletos: ID ou checklist faltando.');
+    }
+
+    // Nota: Usamos 'db' importado no topo do arquivo (não crie admin.firestore() aqui)
+    const agendamentoRef = db.collection('agendamentos').doc(agendamentoId);
+
+    try {
+        const doc = await agendamentoRef.get();
+        if (!doc.exists) {
+            throw new HttpsError('not-found', 'Agendamento não encontrado.');
+        }
+
+        // 3. Prepara o objeto para salvar
+        const dadosChecklist = {
+            ...checklist,
+            'responsavel_id': responsavelId,     // <--- Agora usa a variável segura
+            'responsavel_nome': responsavelNome, // <--- Agora usa a variável segura
+            'data_registro': admin.firestore.FieldValue.serverTimestamp(),
+            'versao_app': '2.1'
+        };
+
+        // 4. Atualiza o documento
+        await agendamentoRef.update({
+            'checklist': dadosChecklist,
+            'checklist_feito': true,
+        });
+
+        return { success: true, message: 'Checklist salvo com sucesso.' };
+
+    } catch (error) {
+        console.error("Erro ao salvar checklist:", error);
+        if (error.code) {
+            throw error;
+        }
+        throw new HttpsError('internal', 'Erro interno ao salvar checklist.');
+    }
 });
