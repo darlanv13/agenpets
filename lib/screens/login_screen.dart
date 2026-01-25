@@ -237,7 +237,9 @@ class _LoginScreenState extends State<LoginScreen> {
     List<dynamic> skills = proData['habilidades'] ?? [];
 
     // É Master se tiver perfil 'master' OU habilidade 'master' OU 'caixa' (caixa geralmente é admin)
-    bool isMaster = perfil == 'master' || skills.contains('master');
+    bool isMaster = perfil == 'master' ||
+        skills.contains('master') ||
+        perfil == 'caixa';
 
     if (isMobile) {
       // Mobile: Abre o BottomSheet de escolha
@@ -250,7 +252,11 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacementNamed(
           context,
           '/admin_web',
-          arguments: {'tipo_acesso': 'master', 'dados': proData},
+          arguments: {
+            'tipo_acesso': 'master',
+            'dados': proData,
+            'isMaster': isMaster,
+          },
         );
       } else {
         // Se for Banhista no PC -> Área Profissional
