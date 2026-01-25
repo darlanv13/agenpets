@@ -2,6 +2,7 @@ import 'package:agenpet/admin_web/admin_web_screen.dart';
 import 'package:agenpet/screens/assinatura_screen.dart';
 import 'package:agenpet/screens/minhas_agendas.dart'; // Ensure this file contains MinhasAgendasScreen
 import 'package:agenpet/screens/hotel_screen.dart';
+import 'package:agenpet/screens/creche_screen.dart';
 import 'package:agenpet/screens/meus_pets_screen.dart';
 import 'package:agenpet/screens/perfil_screen.dart';
 import 'package:agenpet/screens/profissional_screen.dart';
@@ -78,6 +79,7 @@ class MyApp extends StatelessWidget {
         '/assinatura': (context) => AssinaturaScreen(),
         '/minhas_agendas': (context) => MinhasAgendas(userCpf: ''),
         '/hotel': (context) => HotelScreen(),
+        '/creche': (context) => CrecheScreen(),
         '/admin_web': (context) => AdminWebScreen(),
       },
     );
