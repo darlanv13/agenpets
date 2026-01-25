@@ -242,4 +242,14 @@ class FirebaseService {
       return [];
     }
   }
+
+  Future<double> getPrecoCreche() async {
+    try {
+      final result = await _functions.httpsCallable('obterPrecoCreche').call();
+      return (result.data['preco'] ?? 0).toDouble();
+    } catch (e) {
+      print("Erro ao buscar preço creche: $e");
+      return 0.0;
+    }
+  }
 }

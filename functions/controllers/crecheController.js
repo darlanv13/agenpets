@@ -115,6 +115,20 @@ exports.obterDiasLotadosCreche = onCall(async (request) => {
     return { dias_lotados: diasLotados };
 });
 
+// --- Obter Preço da Creche (Segurança) ---
+exports.obterPrecoCreche = onCall(async (request) => {
+    try {
+        const doc = await db.collection("config").doc("parametros").get();
+        if (doc.exists) {
+            return { preco: Number(doc.data().preco_creche_diaria || 0) };
+        }
+        return { preco: 0 };
+    } catch (error) {
+        console.error("Erro ao buscar preço creche:", error);
+        throw new HttpsError('internal', 'Erro ao buscar preço');
+    }
+});
+
 // --- Registrar Pagamento Parcial/Antecipado Creche ---
 exports.registrarPagamentoCreche = onCall(async (request) => {
     const { reservaId, valor, metodo } = request.data;

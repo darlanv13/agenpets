@@ -76,14 +76,10 @@ class _CrecheScreenState extends State<CrecheScreen> {
 
   Future<void> _carregarPrecoCreche() async {
     try {
-      final doc = await _db.collection('config').doc('parametros').get();
-      if (doc.exists) {
-        setState(() {
-          // Tenta ler 'preco_creche_diaria', fallback para 60.0
-          _valorDiaria = (doc.data()!['preco_creche_diaria'] ?? 60.00)
-              .toDouble();
-        });
-      }
+      final preco = await _firebaseService.getPrecoCreche();
+      setState(() {
+        _valorDiaria = preco > 0 ? preco : 60.00;
+      });
     } catch (e) {
       setState(() => _valorDiaria = 60.00);
     }
