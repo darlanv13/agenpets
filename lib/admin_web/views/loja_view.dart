@@ -38,7 +38,7 @@ class _LojaViewState extends State<LojaView> {
 
   // Paginação
   int _paginaAtual = 0;
-  final int _itensPorPagina = 4; // APENAS 4 PRODUTOS POR VEZ
+  final int _itensPorPagina = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -252,14 +252,16 @@ class _LojaViewState extends State<LojaView> {
               child: GridView.builder(
                 physics: NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 2 por linha, 2 linhas = 4 itens
-                  childAspectRatio: 1.6, // Cards bem largos e grandes
+                  crossAxisCount: 2, // 4 por linha, 1 linha = 4 itens
+                  childAspectRatio: 2.9, // Cards bem largos e grandes
                   crossAxisSpacing: 15,
                   mainAxisSpacing: 15,
                 ),
                 itemCount: paginatedDocs.length,
-                itemBuilder: (ctx, i) =>
-                  _buildProductCard(paginatedDocs[i], paginatedDocs[i].id == bestSellerId),
+                itemBuilder: (ctx, i) => _buildProductCard(
+                  paginatedDocs[i],
+                  paginatedDocs[i].id == bestSellerId,
+                ),
               ),
             ),
 
