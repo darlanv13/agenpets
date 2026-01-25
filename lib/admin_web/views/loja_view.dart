@@ -113,19 +113,23 @@ class _LojaViewState extends State<LojaView> {
             ),
           ),
         ),
+        // Verificação de segurança: Botão disponível apenas para Master/Caixa
         if (widget.isMaster) ...[
           SizedBox(width: 15),
-          ElevatedButton.icon(
-            icon: Icon(Icons.add, size: 20),
-            label: Text("NOVO PRODUTO"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
+          Tooltip(
+            message: "Acesso Restrito a Master/Caixa",
+            child: ElevatedButton.icon(
+              icon: Icon(Icons.add, size: 20),
+              label: Text("NOVO PRODUTO"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _corAcai,
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
               ),
+              onPressed: () => _abrirEditorProduto(context),
             ),
-            onPressed: () => _abrirEditorProduto(context),
           ),
         ],
       ],
@@ -191,8 +195,8 @@ class _LojaViewState extends State<LojaView> {
 
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            childAspectRatio: 0.75, // Card mais alto para caber marca/codigo
+            maxCrossAxisExtent: 200,
+            childAspectRatio: 0.95, // Card mais alto para caber marca/codigo
             crossAxisSpacing: 15,
             mainAxisSpacing: 15,
           ),

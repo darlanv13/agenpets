@@ -69,11 +69,25 @@ class _LoginScreenState extends State<LoginScreen> {
           .get(); //
 
       if (proQuery.docs.isNotEmpty) {
-        // É PROFISSIONAL: Precisa de senha para gerar o token de segurança
-        setState(
-          () => _isLoading = false,
-        ); // Para o loading para abrir o dialog
-        _abrirDialogoSenhaProfissional(cpfLimpo, proQuery.docs.first);
+        final docPro = proQuery.docs.first;
+        final dataPro = docPro.data() as Map<String, dynamic>;
+        final List<dynamic> skills = dataPro['habilidades'] ?? [];
+        final double width = MediaQuery.of(context).size.width;
+        final bool isMobile = width < 800;
+
+        // VERIFICAÇÃO MOBILE COM HABILIDADES ESPECÍFICAS (Tosa/Banho)
+        bool temSkillMobile =
+            skills.contains('tosa') || skills.contains('banho');
+
+        if (isMobile && temSkillMobile) {
+          // Mobile + Skill -> Bifurcação ANTES da senha
+          setState(() => _isLoading = false);
+          _mostrarDialogoBifurcacaoPreSenha(cpfLimpo, docPro);
+        } else {
+          // Desktop ou sem skills específicas -> Fluxo Padrão (Senha direto)
+          setState(() => _isLoading = false);
+          _abrirDialogoSenhaProfissional(cpfLimpo, docPro);
+        }
       } else {
         // NÃO É PROFISSIONAL: Segue fluxo de Cliente (Sem senha)
         await _loginComoCliente(cpfLimpo);
@@ -232,35 +246,116 @@ class _LoginScreenState extends State<LoginScreen> {
     double width = MediaQuery.of(context).size.width;
     bool isMobile = width < 800;
 
-    // Verifica permissões
-    String perfil = proData['perfil'] ?? 'padrao';
+    // Verifica permissões (Normalizando para minúsculas para evitar erros de case)
+    String perfil = (proData['perfil'] ?? 'padrao').toString().toLowerCase();
     List<dynamic> skills = proData['habilidades'] ?? [];
 
-    // É Master se tiver perfil 'master' OU habilidade 'master' OU 'caixa' (caixa geralmente é admin)
+    // É Master se tiver perfil 'master' OU habilidade 'master'
     bool isMaster = perfil == 'master' || skills.contains('master');
+    // Caixa/Vendedor também acessam painel web, mas com restrições (isMaster=false)
+    bool isCaixaOuVendedor = perfil == 'caixa' || perfil == 'vendedor';
+
+    // Decide se vai para o admin_web (Web Panel)
+    // Desktop: SEMPRE vai para o Admin Web (se não for mobile)
+    // Mobile: Vai para Admin Web apenas se for Master ou Caixa/Vendedor
+    bool vaiParaAdminWeb = !isMobile || isMaster || isCaixaOuVendedor;
 
     if (isMobile) {
-      // Mobile: Abre o BottomSheet de escolha
-      _mostrarDialogoBifurcacao(proData);
+      // Mobile: Se já passou pela senha, vai direto pro app profissional
+      // (A bifurcação agora acontece antes da senha para Tosa/Banho)
+      Navigator.pushReplacementNamed(
+        context,
+        '/profissional',
+        arguments: proData,
+      );
     } else {
-      // Desktop: Roteamento direto
-      if (isMaster) {
-        // Se for Master no PC -> Painel Admin
-        // VERIFIQUE SE A ROTA '/admin_web' EXISTE NO SEU MAIN.DART
-        Navigator.pushReplacementNamed(
-          context,
-          '/admin_web',
-          arguments: {'tipo_acesso': 'master', 'dados': proData},
-        );
-      } else {
-        // Se for Banhista no PC -> Área Profissional
-        Navigator.pushReplacementNamed(
-          context,
-          '/profissional',
-          arguments: proData,
-        );
-      }
+      // Desktop: Roteamento direto para o Painel (Admin Web)
+      // Agora TODOS os profissionais no Desktop acessam o painel,
+      // mas o AdminWebScreen vai filtrar o menu baseado no perfil/isMaster.
+      Navigator.pushReplacementNamed(
+        context,
+        '/admin_web',
+        arguments: {
+          'tipo_acesso': isMaster ? 'master' : perfil,
+          'dados': proData,
+          'isMaster': isMaster, // False para caixa/vendedor/padrao
+          'perfil': perfil, // Para filtrar menu
+        },
+      );
     }
+  }
+
+  // Novo Dialogo: Bifurcação ANTES da Senha (para Mobile Tosa/Banho)
+  void _mostrarDialogoBifurcacaoPreSenha(
+    String cpfLimpo,
+    DocumentSnapshot docPro,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.all(25),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              "Como deseja acessar?",
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: _corAcai,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              "Você possui acesso profissional.",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            SizedBox(height: 30),
+
+            // Opção Cliente
+            _buildBifurcacaoOption(
+              icon: FontAwesomeIcons.user,
+              color: Colors.blue,
+              title: "Entrar como Cliente",
+              subtitle: "Agendar para meus pets",
+              onTap: () {
+                Navigator.pop(ctx);
+                _loginComoCliente(cpfLimpo);
+              },
+            ),
+            SizedBox(height: 15),
+
+            // Opção Profissional -> Pede Senha
+            _buildBifurcacaoOption(
+              icon: FontAwesomeIcons.briefcase,
+              color: _corAcai,
+              title: "Área Profissional",
+              subtitle: "Minha agenda e tarefas",
+              onTap: () {
+                Navigator.pop(ctx);
+                _abrirDialogoSenhaProfissional(cpfLimpo, docPro);
+              },
+            ),
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
   }
 
   void _mostrarDialogoBifurcacao(Map<String, dynamic> proData) {

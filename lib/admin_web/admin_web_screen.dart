@@ -1,3 +1,4 @@
+import 'package:agenpet/admin_web/views/creche_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -20,7 +21,11 @@ class AdminWebScreen extends StatefulWidget {
 class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
   bool _isMaster = false;
-  late List<Widget> _telas; // Agora é late para inicializar no initState
+  String _perfil = 'padrao';
+
+  // Controle de Menu Dinâmico
+  late List<Widget> _telas;
+  late List<_MenuItem> _menuItems;
 
   // Cores da Identidade Visual
   final Color _corAcaiStart = Color(0xFF4A148C);
@@ -32,21 +37,94 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     super.didChangeDependencies();
     // Recupera argumentos passados pela rota
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    if (args != null && args['isMaster'] == true) {
-      _isMaster = true;
+    if (args != null) {
+      _isMaster = args['isMaster'] == true;
+      _perfil = args['perfil'] ?? 'padrao';
     }
 
-    _telas = [
-      DashboardView(), // 0
-      LojaView(isMaster: _isMaster), // 1 - Passando o parâmetro
-      AgendaView(), // 2
-      HotelView(), // 3
-      VendaAssinaturaView(), // 4
-      GestaoPrecosView(), // 5
-      GestaoBannersView(), // 6
-      EquipeView(), // 7
-      ConfiguracaoAgendaView(), // 8
-    ];
+    // LISTA COMPLETA DE TELAS (Índices devem bater com os do menu filtrado)
+    // Para simplificar a filtragem, vamos reconstruir a lista baseada no que é visível
+    _construirMenuETelas();
+  }
+
+  void _construirMenuETelas() {
+    // Se não é Master, é restrito (inclui caixa, vendedor, tosador, banhista, etc.)
+    bool isRestrito = !_isMaster;
+
+    if (isRestrito) {
+      // PERFIL RESTRITO (Caixa, Vendedor, Tosador, Banhista): Acesso limitado
+      _telas = [
+        LojaView(isMaster: false), // 0
+        AgendaView(), // 1
+        HotelView(), // 2
+        VendaAssinaturaView(), // 3
+        CrecheView(), // 4
+      ];
+
+      _menuItems = [
+        _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
+        _MenuItem("Agenda", Icons.calendar_month_rounded),
+        _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
+        _MenuItem("Venda de Planos", FontAwesomeIcons.cartShopping),
+        _MenuItem("Creche", FontAwesomeIcons.dog),
+      ];
+    } else {
+      // MASTER / ADMIN: Acesso Total
+      _telas = [
+        DashboardView(), // 0
+        LojaView(isMaster: _isMaster), // 1
+        AgendaView(), // 2
+        HotelView(), // 3
+        VendaAssinaturaView(), // 4
+        GestaoPrecosView(), // 5
+        GestaoBannersView(), // 6
+        EquipeView(), // 7
+        ConfiguracaoAgendaView(), // 8
+        CrecheView(), // 9
+      ];
+
+      _menuItems = [
+        _MenuItem(
+          "Dashboard",
+          Icons.space_dashboard_rounded,
+          section: "PRINCIPAL",
+        ),
+        _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
+        _MenuItem("Agenda", Icons.calendar_month_rounded),
+        _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
+        _MenuItem(
+          "Venda de Planos",
+          FontAwesomeIcons.cartShopping,
+          section: "VENDAS & PRODUTOS",
+        ),
+        _MenuItem("Tabela de Preços", Icons.price_change_rounded),
+        _MenuItem("Banners do App", Icons.view_carousel_rounded),
+        _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
+        _MenuItem("Configurações", Icons.settings_rounded),
+        _MenuItem("Creche", FontAwesomeIcons.dog),
+      ];
+    }
+  }
+
+  Widget _buildPlaceholder(String title) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(FontAwesomeIcons.personDigging, size: 50, color: Colors.grey),
+          SizedBox(height: 20),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+          Text("Módulo em produção", style: TextStyle(color: Colors.grey[600])),
+        ],
+      ),
+    );
   }
 
   @override
@@ -126,57 +204,24 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                   ),
                 ),
 
-                // --- 3. ITENS DO MENU ATUALIZADOS ---
+                // --- 3. ITENS DO MENU DINÂMICOS ---
                 Expanded(
-                  child: ListView(
+                  child: ListView.builder(
                     padding: EdgeInsets.symmetric(horizontal: 15),
-                    children: [
-                      _buildSectionTitle("PRINCIPAL"),
-                      _buildMenuItem(
-                        0,
-                        "Dashboard",
-                        Icons.space_dashboard_rounded,
-                      ),
-                      _buildMenuItem(
-                        1,
-                        "Loja / PDV",
-                        FontAwesomeIcons.cashRegister,
-                      ),
-                      _buildMenuItem(2, "Agenda", Icons.calendar_month_rounded),
-                      _buildMenuItem(
-                        3,
-                        "Hotel & Estadia",
-                        FontAwesomeIcons.hotel,
-                      ),
-
-                      SizedBox(height: 20),
-                      _buildSectionTitle("VENDAS & PRODUTOS"),
-                      _buildMenuItem(
-                        4,
-                        "Venda de Planos",
-                        FontAwesomeIcons.cartShopping,
-                      ),
-                      _buildMenuItem(
-                        5,
-                        "Tabela de Preços",
-                        Icons.price_change_rounded,
-                      ),
-
-                      _buildMenuItem(
-                        6,
-                        "Banners do App",
-                        Icons.view_carousel_rounded,
-                      ),
-
-                      SizedBox(height: 20),
-                      _buildSectionTitle("ADMINISTRAÇÃO"),
-                      _buildMenuItem(7, "Equipe", Icons.people_alt_rounded),
-                      _buildMenuItem(
-                        8,
-                        "Configurações",
-                        Icons.settings_rounded,
-                      ),
-                    ],
+                    itemCount: _menuItems.length,
+                    itemBuilder: (ctx, index) {
+                      final item = _menuItems[index];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (item.section != null) ...[
+                            SizedBox(height: 20),
+                            _buildSectionTitle(item.section!),
+                          ],
+                          _buildMenuItem(index, item.title, item.icon),
+                        ],
+                      );
+                    },
                   ),
                 ),
 
@@ -319,4 +364,12 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       ),
     );
   }
+}
+
+class _MenuItem {
+  final String title;
+  final IconData icon;
+  final String? section;
+
+  _MenuItem(this.title, this.icon, {this.section});
 }
