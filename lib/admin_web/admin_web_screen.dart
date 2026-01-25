@@ -1,4 +1,5 @@
 import 'package:agenpet/admin_web/views/creche_view.dart';
+import 'package:agenpet/admin_web/views/gestao_estoque_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -59,6 +60,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         HotelView(), // 2
         VendaAssinaturaView(), // 3
         CrecheView(), // 4
+        GestaoEstoqueView(), // 5
       ];
 
       _menuItems = [
@@ -67,6 +69,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
         _MenuItem("Venda de Planos", FontAwesomeIcons.cartShopping),
         _MenuItem("Creche", FontAwesomeIcons.dog),
+        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
       ];
     } else {
       // MASTER / ADMIN: Acesso Total
@@ -102,6 +105,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
         _MenuItem("Creche", FontAwesomeIcons.dog),
+        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
       ];
     }
   }
