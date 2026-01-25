@@ -23,8 +23,11 @@ class _LojaViewState extends State<LojaView> {
 
   // Carrinho
   List<Map<String, dynamic>> _carrinho = [];
-  String _metodoPagamento = 'Dinheiro';
-  double _valorRecebido = 0.0;
+
+  // Pagamentos Multiplos
+  List<Map<String, dynamic>> _pagamentos = [];
+  String _metodoSelecionado = 'Dinheiro';
+  TextEditingController _valorPagamentoCtrl = TextEditingController();
 
   // Busca
   String _filtroBusca = '';
@@ -113,21 +116,7 @@ class _LojaViewState extends State<LojaView> {
             ),
           ),
         ),
-        if (widget.isMaster) ...[
-          SizedBox(width: 15),
-          ElevatedButton.icon(
-            icon: Icon(Icons.add, size: 20),
-            label: Text("NOVO PRODUTO"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-            ),
-            onPressed: () => _abrirEditorProduto(context),
-          ),
-        ],
+        // BOTÃO REMOVIDO CONFORME SOLICITAÇÃO
       ],
     );
   }
@@ -211,7 +200,6 @@ class _LojaViewState extends State<LojaView> {
     String nome = data['nome'] ?? 'Produto';
     String marca = data['marca'] ?? '';
     double preco = (data['preco'] ?? 0).toDouble();
-    // Foto não existe na especificação, então usamos ícone padrão
 
     return InkWell(
       onTap: () => _addToCart(doc.id, data),
@@ -252,7 +240,7 @@ class _LojaViewState extends State<LojaView> {
                     child: Center(
                       // Ícone de Mercado Personalizado
                       child: FaIcon(
-                        FontAwesomeIcons.store, // Ícone de mercadinho/loja
+                        FontAwesomeIcons.store,
                         size: 40,
                         color:
                             isBestSeller
@@ -356,12 +344,6 @@ class _LojaViewState extends State<LojaView> {
     });
   }
 
-  void _removeFromCart(int index) {
-    setState(() {
-      _carrinho.removeAt(index);
-    });
-  }
-
   void _updateQtd(int index, int delta) {
     setState(() {
       _carrinho[index]['qtd'] += delta;
@@ -374,7 +356,43 @@ class _LojaViewState extends State<LojaView> {
   double get _totalCart =>
       _carrinho.fold(0, (sum, item) => sum + (item['preco'] * item['qtd']));
 
-  double get _troco => _valorRecebido > _totalCart ? _valorRecebido - _totalCart : 0.0;
+  // --- LÓGICA DE MÚLTIPLOS PAGAMENTOS ---
+
+  double get _totalPago => _pagamentos.fold(0, (sum, item) => sum + item['valor']);
+
+  double get _restante {
+    double diff = _totalCart - _totalPago;
+    return diff > 0 ? diff : 0.0;
+  }
+
+  double get _troco {
+    return _totalPago > _totalCart ? _totalPago - _totalCart : 0.0;
+  }
+
+  void _adicionarPagamento() {
+    double valor = double.tryParse(_valorPagamentoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+    if (valor <= 0) return;
+
+    // Se não tiver mais restante a pagar e não for para dar troco, evita?
+    // Permitir adicionar mesmo que passe o total, para cálculo de troco (ex: Pagar 100 em dinheiro pra conta de 80)
+
+    setState(() {
+      _pagamentos.add({
+        'metodo': _metodoSelecionado,
+        'valor': valor
+      });
+      _valorPagamentoCtrl.clear();
+
+      // Auto-selecionar 'Dinheiro' se restante for > 0? Não, mantem o ultimo ou reseta.
+    });
+  }
+
+  void _removerPagamento(int index) {
+    setState(() {
+      _pagamentos.removeAt(index);
+    });
+  }
 
   Widget _buildCartList() {
     if (_carrinho.isEmpty) {
@@ -462,106 +480,148 @@ class _LojaViewState extends State<LojaView> {
   }
 
   Widget _buildCheckoutSection() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text("Subtotal", style: TextStyle(color: Colors.grey)),
-            Text(
-              "R\$ ${_totalCart.toStringAsFixed(2)}",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 15),
+    // Se o carrinho estiver vazio, não mostra muita coisa ou desabilita
+    if (_carrinho.isEmpty) return SizedBox.shrink();
 
-        // Seletor de Pagamento
-        DropdownButtonFormField<String>(
-          value: _metodoPagamento,
-          decoration: InputDecoration(
-            labelText: "Forma de Pagamento",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 15),
-          ),
-          items:
-              ['Dinheiro', 'Pix', 'Cartão', 'Outro']
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-          onChanged: (v) {
-            setState(() {
-              _metodoPagamento = v!;
-              _valorRecebido = 0; // Resetar valor recebido se mudar método
-            });
-          },
-        ),
+    return Container(
+      height: 350, // Altura fixa para caber a rolagem dos pagamentos se precisar
+      child: Column(
+        children: [
+          // TOTAIS
+          _buildRowTotal("Total a Pagar", _totalCart, isBold: true),
+          _buildRowTotal("Total Pago", _totalPago, color: Colors.green[700]),
+          _buildRowTotal("Restante", _restante, color: Colors.red[700]),
+          _buildRowTotal("Troco", _troco, color: Colors.blue[700]),
 
-        // Campo de Valor Recebido (Apenas se Dinheiro)
-        if (_metodoPagamento == 'Dinheiro') ...[
-          SizedBox(height: 15),
-          TextField(
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: "Valor Recebido (R\$)",
-              prefixIcon: Icon(Icons.money, color: Colors.green),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onChanged: (val) {
-              setState(() {
-                _valorRecebido = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
-              });
-            },
-          ),
-          if (_valorRecebido > 0) ...[
-            SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text("Troco:", style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  "R\$ ${_troco.toStringAsFixed(2)}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _troco >= 0 ? Colors.green : Colors.red,
-                    fontSize: 16,
+          Divider(),
+
+          // ÁREA DE ADICIONAR PAGAMENTO
+          if (_restante > 0 || _pagamentos.isEmpty)
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  value: _metodoSelecionado,
+                  decoration: InputDecoration(
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
+                  items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 13))))
+                      .toList(),
+                  onChanged: (v) => setState(() => _metodoSelecionado = v!),
                 ),
-              ],
-            ),
-          ]
-        ],
-
-        SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
               ),
-              elevation: 5,
-            ),
-            onPressed: _carrinho.isEmpty ? null : _finalizarVenda,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline),
-                SizedBox(width: 10),
-                Text(
-                  "FINALIZAR VENDA",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _valorPagamentoCtrl,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    hintText: "R\$",
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onSubmitted: (_) => _adicionarPagamento(),
                 ),
-              ],
+              ),
+              SizedBox(width: 10),
+              IconButton(
+                onPressed: _adicionarPagamento,
+                icon: Icon(Icons.add_circle, color: Colors.green),
+                tooltip: "Adicionar",
+              )
+            ],
+          ),
+
+          SizedBox(height: 10),
+
+          // LISTA DE PAGAMENTOS ADICIONADOS
+          Expanded(
+            child: ListView.builder(
+              itemCount: _pagamentos.length,
+              itemBuilder: (ctx, i) {
+                final pag = _pagamentos[i];
+                return Container(
+                  margin: EdgeInsets.symmetric(vertical: 2),
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("${pag['metodo']}", style: TextStyle(fontSize: 12)),
+                      Row(
+                        children: [
+                          Text("R\$ ${pag['valor'].toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          SizedBox(width: 10),
+                          InkWell(
+                            onTap: () => _removerPagamento(i),
+                            child: Icon(Icons.close, size: 14, color: Colors.red),
+                          )
+                        ],
+                      )
+                    ],
+                  ),
+                );
+              },
             ),
           ),
-        ),
-      ],
+
+          SizedBox(height: 10),
+
+          // BOTÃO FINALIZAR
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _restante <= 0 ? Colors.green : Colors.grey,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 5,
+              ),
+              onPressed: (_carrinho.isNotEmpty && _restante <= 0) ? _finalizarVenda : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle_outline),
+                  SizedBox(width: 10),
+                  Text(
+                    "FINALIZAR VENDA",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRowTotal(String label, double val, {Color? color, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey[700], fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(
+            "R\$ ${val.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              color: color ?? Colors.black87,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -574,9 +634,8 @@ class _LojaViewState extends State<LojaView> {
       batch.set(vendaRef, {
         'itens': _carrinho,
         'valor_total': _totalCart,
-        'valor_recebido': _valorRecebido,
+        'pagamentos': _pagamentos, // Salva a lista de pagamentos
         'troco': _troco,
-        'metodo_pagamento': _metodoPagamento,
         'data_venda': FieldValue.serverTimestamp(),
         'status': 'concluido',
       });
@@ -591,11 +650,12 @@ class _LojaViewState extends State<LojaView> {
 
       await batch.commit();
 
-      // Limpar carrinho
+      // Limpar carrinho e pagamentos
       setState(() {
         _carrinho.clear();
-        _metodoPagamento = 'Dinheiro';
-        _valorRecebido = 0.0;
+        _pagamentos.clear();
+        _metodoSelecionado = 'Dinheiro';
+        _valorPagamentoCtrl.clear();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -615,148 +675,8 @@ class _LojaViewState extends State<LojaView> {
     }
   }
 
-  // --- EDITOR DE PRODUTO (MODAL) ---
+  // --- EDITOR DE PRODUTO REMOVIDO DA UI MAS MANTIDO NO CÓDIGO SE PRECISAR REATIVAR ---
   void _abrirEditorProduto(BuildContext context) {
-    // Controladores
-    final _nomeCtrl = TextEditingController();
-    final _marcaCtrl = TextEditingController();
-    final _codigoCtrl = TextEditingController();
-    final _custoCtrl = TextEditingController();
-    final _margemCtrl = TextEditingController();
-    final _precoCtrl = TextEditingController(); // Preço Final
-
-    void _calcularPrecoFinal() {
-      double custo = double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-      double margem = double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
-
-      if (custo > 0) {
-        double lucro = custo * (margem / 100);
-        double finalPrice = custo + lucro;
-        _precoCtrl.text = finalPrice.toStringAsFixed(2);
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: Text("Cadastrar Novo Produto"),
-        content: Container(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _nomeCtrl,
-                  decoration: InputDecoration(
-                    labelText: "Nome do Produto",
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _marcaCtrl,
-                        decoration: InputDecoration(
-                          labelText: "Marca",
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: TextField(
-                        controller: _codigoCtrl,
-                        decoration: InputDecoration(
-                          labelText: "Cód. Barras",
-                          prefixIcon: Icon(FontAwesomeIcons.barcode, size: 16),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _custoCtrl,
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: "Preço Custo (R\$)",
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onChanged: (_) => _calcularPrecoFinal(),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: TextField(
-                        controller: _margemCtrl,
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: "Lucro (%)",
-                          suffixText: "%",
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onChanged: (_) => _calcularPrecoFinal(),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 15),
-                 TextField(
-                  controller: _precoCtrl,
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: "Preço de Venda Final (R\$)",
-                    prefixIcon: Icon(Icons.attach_money, size: 18),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    filled: true,
-                    fillColor: Colors.green[50],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () async {
-              if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
-
-              double custo = double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              double margem = double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              double preco = double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-
-              await _db.collection('produtos').add({
-                'nome': _nomeCtrl.text,
-                'marca': _marcaCtrl.text,
-                'codigo_barras': _codigoCtrl.text,
-                'preco_custo': custo,
-                'margem_lucro': margem,
-                'preco': preco, // Preço Final de Venda
-                'qtd_vendida': 0, // Inicializa contador
-                'criado_em': FieldValue.serverTimestamp(),
-              });
-              Navigator.pop(ctx);
-            },
-            child: Text("Salvar Produto"),
-          ),
-        ],
-      ),
-    );
+    // ... Código mantido mas não acessível via botão
   }
 }
