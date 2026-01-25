@@ -256,7 +256,9 @@ class _LoginScreenState extends State<LoginScreen> {
     bool isCaixaOuVendedor = perfil == 'caixa' || perfil == 'vendedor';
 
     // Decide se vai para o admin_web (Web Panel)
-    bool vaiParaAdminWeb = isMaster || isCaixaOuVendedor;
+    // Desktop: SEMPRE vai para o Admin Web (se não for mobile)
+    // Mobile: Vai para Admin Web apenas se for Master ou Caixa/Vendedor
+    bool vaiParaAdminWeb = !isMobile || isMaster || isCaixaOuVendedor;
 
     if (isMobile) {
       // Mobile: Se já passou pela senha, vai direto pro app profissional
@@ -267,26 +269,19 @@ class _LoginScreenState extends State<LoginScreen> {
         arguments: proData,
       );
     } else {
-      // Desktop: Roteamento direto
-      if (vaiParaAdminWeb) {
-        Navigator.pushReplacementNamed(
-          context,
-          '/admin_web',
-          arguments: {
-            'tipo_acesso': isMaster ? 'master' : perfil,
-            'dados': proData,
-            'isMaster': isMaster, // False para caixa/vendedor (sem botão novo)
-            'perfil': perfil, // Para filtrar menu
-          },
-        );
-      } else {
-        // Se for Banhista no PC -> Área Profissional
-        Navigator.pushReplacementNamed(
-          context,
-          '/profissional',
-          arguments: proData,
-        );
-      }
+      // Desktop: Roteamento direto para o Painel (Admin Web)
+      // Agora TODOS os profissionais no Desktop acessam o painel,
+      // mas o AdminWebScreen vai filtrar o menu baseado no perfil/isMaster.
+      Navigator.pushReplacementNamed(
+        context,
+        '/admin_web',
+        arguments: {
+          'tipo_acesso': isMaster ? 'master' : perfil,
+          'dados': proData,
+          'isMaster': isMaster, // False para caixa/vendedor/padrao
+          'perfil': perfil, // Para filtrar menu
+        },
+      );
     }
   }
 

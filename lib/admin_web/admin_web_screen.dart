@@ -47,11 +47,11 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   }
 
   void _construirMenuETelas() {
-    bool isRestrito = !_isMaster &&
-        (_perfil == 'caixa' || _perfil == 'vendedor');
+    // Se não é Master, é restrito (inclui caixa, vendedor, tosador, banhista, etc.)
+    bool isRestrito = !_isMaster;
 
     if (isRestrito) {
-      // CAIXA / VENDEDOR: Acesso limitado
+      // PERFIL RESTRITO (Caixa, Vendedor, Tosador, Banhista): Acesso limitado
       _telas = [
         LojaView(isMaster: false), // 0
         AgendaView(), // 1
