@@ -246,8 +246,8 @@ class _LoginScreenState extends State<LoginScreen> {
     double width = MediaQuery.of(context).size.width;
     bool isMobile = width < 800;
 
-    // Verifica permissões
-    String perfil = proData['perfil'] ?? 'padrao';
+    // Verifica permissões (Normalizando para minúsculas para evitar erros de case)
+    String perfil = (proData['perfil'] ?? 'padrao').toString().toLowerCase();
     List<dynamic> skills = proData['habilidades'] ?? [];
 
     // É Master se tiver perfil 'master' OU habilidade 'master'
