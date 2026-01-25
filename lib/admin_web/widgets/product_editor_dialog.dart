@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 
 class ProductEditorDialog extends StatefulWidget {
   final DocumentSnapshot? produto; // Se null, é criação. Se não, é edição.
@@ -26,7 +27,9 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
   final _margemCtrl = TextEditingController();
   final _precoCtrl = TextEditingController();
   final _estoqueCtrl = TextEditingController(text: '0');
+  final _validadeCtrl = TextEditingController();
 
+  DateTime? _dataValidade;
   bool _isLoading = false;
 
   @override
@@ -41,6 +44,11 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
       _margemCtrl.text = (data['margem_lucro'] ?? 0.0).toString();
       _precoCtrl.text = (data['preco'] ?? 0.0).toString();
       _estoqueCtrl.text = (data['qtd_estoque'] ?? 0).toString();
+
+      if (data['data_validade'] != null) {
+        _dataValidade = (data['data_validade'] as Timestamp).toDate();
+        _validadeCtrl.text = DateFormat('dd/MM/yyyy').format(_dataValidade!);
+      }
     }
   }
 
@@ -78,6 +86,8 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
         'margem_lucro': margem,
         'preco': preco,
         'qtd_estoque': estoque,
+        'data_validade':
+            _dataValidade != null ? Timestamp.fromDate(_dataValidade!) : null,
         'atualizado_em': FieldValue.serverTimestamp(),
       };
 
@@ -250,6 +260,44 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
                       ),
                     ),
                   ],
+                ),
+                SizedBox(height: 15),
+                TextFormField(
+                  controller: _validadeCtrl,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: "Data de Validade (Opcional)",
+                    prefixIcon: Icon(Icons.calendar_today, size: 18),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    suffixIcon: _dataValidade != null
+                        ? IconButton(
+                            icon: Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _dataValidade = null;
+                                _validadeCtrl.clear();
+                              });
+                            },
+                          )
+                        : null,
+                  ),
+                  onTap: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: _dataValidade ?? DateTime.now(),
+                      firstDate: DateTime.now().subtract(Duration(days: 365)),
+                      lastDate: DateTime.now().add(Duration(days: 365 * 5)),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _dataValidade = picked;
+                        _validadeCtrl.text =
+                            DateFormat('dd/MM/yyyy').format(picked);
+                      });
+                    }
+                  },
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import '../widgets/product_editor_dialog.dart';
 
 class GestaoEstoqueView extends StatefulWidget {
@@ -67,25 +68,44 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             int estoque = (data['qtd_estoque'] ?? 0);
+            DateTime? validade;
+            if (data['data_validade'] != null) {
+              validade = (data['data_validade'] as Timestamp).toDate();
+            }
+
             if (_filtroStatus == 'Sem Estoque') return estoque <= 0;
             if (_filtroStatus == 'Baixo Estoque')
               return estoque > 0 && estoque < 5;
+            if (_filtroStatus == 'Vencidos') {
+              if (validade == null) return false;
+              return validade.isBefore(DateTime.now());
+            }
             return true;
           }).toList();
         }
 
-        // Cálculos de Resumo
+        // Cálculos de Resumo (Calcula sobre TUDO antes do filtro de status ou sobre o filtrado?
+        // Geralmente KPI é sobre o todo, mas aqui estamos iterando sobre 'docs' que já pode estar filtrado por busca.
+        // Vamos iterar sobre o resultado atual para manter consistência visual.)
         double valorTotalEstoque = 0;
         int itensBaixoEstoque = 0;
         int itensSemEstoque = 0;
+        int itensVencidos = 0;
 
         for (var doc in docs) {
           var data = doc.data() as Map<String, dynamic>;
           int estoque = (data['qtd_estoque'] ?? 0);
           double custo = (data['preco_custo'] ?? 0).toDouble();
+          DateTime? validade;
+          if (data['data_validade'] != null) {
+            validade = (data['data_validade'] as Timestamp).toDate();
+          }
 
           if (estoque <= 0) itensSemEstoque++;
           if (estoque > 0 && estoque < 5) itensBaixoEstoque++;
+          if (validade != null && validade.isBefore(DateTime.now())) {
+            itensVencidos++;
+          }
 
           valorTotalEstoque += (estoque * custo);
         }
@@ -97,6 +117,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
               valorTotalEstoque,
               itensBaixoEstoque,
               itensSemEstoque,
+              itensVencidos,
             ),
             SizedBox(height: 30),
             Expanded(child: _buildStockTable(docs)),
@@ -184,7 +205,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _filtroStatus,
-              items: ['Todos', 'Baixo Estoque', 'Sem Estoque']
+              items: ['Todos', 'Baixo Estoque', 'Sem Estoque', 'Vencidos']
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
               onChanged: (v) => setState(() => _filtroStatus = v!),
@@ -216,6 +237,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     double valorTotal,
     int baixoEstoque,
     int semEstoque,
+    int vencidos,
   ) {
     // Usando LayoutBuilder ou Wrap para responsividade
     // Aqui vamos usar um Wrap com tamanhos fixos mínimos para simular o Grid responsivo
@@ -254,6 +276,13 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           "$semEstoque itens",
           Colors.red,
           FontAwesomeIcons.ban,
+          width: cardWidth,
+        ),
+        _buildKpiCard(
+          "Vencidos",
+          "$vencidos itens",
+          Colors.purple,
+          FontAwesomeIcons.calendarXmark,
           width: cardWidth,
         ),
       ],
@@ -334,6 +363,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
               DataColumn(label: Text("Preço Custo")),
               DataColumn(label: Text("Preço Venda")),
               DataColumn(label: Text("Estoque")),
+              DataColumn(label: Text("Validade")),
               DataColumn(label: Text("Status")),
               DataColumn(label: Text("Ações")),
             ],
@@ -351,11 +381,20 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     double custo = (data['preco_custo'] ?? 0).toDouble();
     double venda = (data['preco'] ?? 0).toDouble();
     int estoque = (data['qtd_estoque'] ?? 0);
+    DateTime? validade;
+    if (data['data_validade'] != null) {
+      validade = (data['data_validade'] as Timestamp).toDate();
+    }
 
     // Status
     Color statusColor = Colors.green;
     String statusText = "Em Estoque";
-    if (estoque <= 0) {
+
+    // Lógica de Prioridade de Status
+    if (validade != null && validade.isBefore(DateTime.now())) {
+      statusColor = Colors.purple;
+      statusText = "Vencido";
+    } else if (estoque <= 0) {
       statusColor = Colors.red;
       statusText = "Esgotado";
     } else if (estoque < 5) {
@@ -402,6 +441,19 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
             child: Text(
               "$estoque",
               style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+        DataCell(
+          Text(
+            validade != null ? DateFormat('dd/MM/yy').format(validade) : "-",
+            style: TextStyle(
+              color: (validade != null && validade.isBefore(DateTime.now()))
+                  ? Colors.red
+                  : Colors.black87,
+              fontWeight: (validade != null && validade.isBefore(DateTime.now()))
+                  ? FontWeight.bold
+                  : FontWeight.normal,
             ),
           ),
         ),

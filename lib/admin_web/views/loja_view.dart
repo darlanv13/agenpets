@@ -216,10 +216,23 @@ class _LojaViewState extends State<LojaView> {
 
         var docs = snapshot.data!.docs;
 
-        // Filtro local
-        if (_filtroBusca.isNotEmpty) {
-          docs = docs.where((doc) {
-            var data = doc.data() as Map<String, dynamic>;
+        // Filtro local (Busca + Validade)
+        docs = docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+
+          // Filtro de Validade: Não mostrar vencidos
+          if (data['data_validade'] != null) {
+            DateTime validade = (data['data_validade'] as Timestamp).toDate();
+            // Considera vencido se for antes de hoje (começo do dia)
+            // Ou se quiser ser estrito, antes de agora.
+            // Vamos considerar vencido se validade < hoje
+            if (validade.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
+              return false;
+            }
+          }
+
+          // Filtro de Texto
+          if (_filtroBusca.isNotEmpty) {
             String nome = (data['nome'] ?? '').toString().toLowerCase();
             String codigo = (data['codigo_barras'] ?? '').toString();
             String marca = (data['marca'] ?? '').toString().toLowerCase();
@@ -227,8 +240,10 @@ class _LojaViewState extends State<LojaView> {
             return nome.contains(busca) ||
                 codigo.contains(busca) ||
                 marca.contains(busca);
-          }).toList();
-        }
+          }
+
+          return true;
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
