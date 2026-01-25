@@ -54,6 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.pushReplacementNamed(
             context,
             '/admin_web',
+            arguments: {'isMaster': true},
           ); // Versão Desktop
         } else {
           Navigator.pushNamed(

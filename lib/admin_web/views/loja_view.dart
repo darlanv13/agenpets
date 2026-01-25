@@ -4,6 +4,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LojaView extends StatefulWidget {
+  final bool isMaster;
+
+  const LojaView({Key? key, this.isMaster = false}) : super(key: key);
+
   @override
   _LojaViewState createState() => _LojaViewState();
 }
@@ -20,6 +24,7 @@ class _LojaViewState extends State<LojaView> {
   // Carrinho
   List<Map<String, dynamic>> _carrinho = [];
   String _metodoPagamento = 'Dinheiro';
+  double _valorRecebido = 0.0;
 
   // Busca
   String _filtroBusca = '';
@@ -97,7 +102,7 @@ class _LojaViewState extends State<LojaView> {
           child: TextField(
             onChanged: (val) => setState(() => _filtroBusca = val),
             decoration: InputDecoration(
-              hintText: "Buscar produto por nome...",
+              hintText: "Buscar produto por nome, código ou marca...",
               prefixIcon: Icon(Icons.search, color: Colors.grey),
               filled: true,
               fillColor: Colors.white,
@@ -108,19 +113,21 @@ class _LojaViewState extends State<LojaView> {
             ),
           ),
         ),
-        SizedBox(width: 15),
-        ElevatedButton.icon(
-          icon: Icon(Icons.add, size: 20),
-          label: Text("NOVO PRODUTO"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _corAcai,
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+        if (widget.isMaster) ...[
+          SizedBox(width: 15),
+          ElevatedButton.icon(
+            icon: Icon(Icons.add, size: 20),
+            label: Text("NOVO PRODUTO"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _corAcai,
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
             ),
+            onPressed: () => _abrirEditorProduto(context),
           ),
-          onPressed: () => _abrirEditorProduto(context),
-        ),
+        ],
       ],
     );
   }
@@ -134,13 +141,18 @@ class _LojaViewState extends State<LojaView> {
 
         var docs = snapshot.data!.docs;
 
-        // Filtro local (se o banco for pequeno)
+        // Filtro local
         if (_filtroBusca.isNotEmpty) {
           docs =
               docs.where((doc) {
                 var data = doc.data() as Map<String, dynamic>;
                 String nome = (data['nome'] ?? '').toString().toLowerCase();
-                return nome.contains(_filtroBusca.toLowerCase());
+                String codigo = (data['codigo_barras'] ?? '').toString();
+                String marca = (data['marca'] ?? '').toString().toLowerCase();
+                String busca = _filtroBusca.toLowerCase();
+                return nome.contains(busca) ||
+                    codigo.contains(busca) ||
+                    marca.contains(busca);
               }).toList();
         }
 
@@ -164,94 +176,164 @@ class _LojaViewState extends State<LojaView> {
           );
         }
 
+        // Identificar Mais Vendido
+        String bestSellerId = '';
+        int maxVendas = -1;
+        for (var doc in docs) {
+          var data = doc.data() as Map<String, dynamic>;
+          int vendas = (data['qtd_vendida'] ?? 0);
+          if (vendas > maxVendas) {
+            maxVendas = vendas;
+            bestSellerId = doc.id;
+          }
+        }
+        // Se ninguém vendeu nada, não destaca
+        if (maxVendas <= 0) bestSellerId = '';
+
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 200,
-            childAspectRatio: 0.85,
+            maxCrossAxisExtent: 220,
+            childAspectRatio: 0.75, // Card mais alto para caber marca/codigo
             crossAxisSpacing: 15,
             mainAxisSpacing: 15,
           ),
           itemCount: docs.length,
-          itemBuilder: (ctx, i) => _buildProductCard(docs[i]),
+          itemBuilder:
+              (ctx, i) =>
+                  _buildProductCard(docs[i], docs[i].id == bestSellerId),
         );
       },
     );
   }
 
-  Widget _buildProductCard(DocumentSnapshot doc) {
+  Widget _buildProductCard(DocumentSnapshot doc, bool isBestSeller) {
     final data = doc.data() as Map<String, dynamic>;
     String nome = data['nome'] ?? 'Produto';
+    String marca = data['marca'] ?? '';
     double preco = (data['preco'] ?? 0).toDouble();
+    // Foto não existe na especificação, então usamos ícone padrão
 
     return InkWell(
       onTap: () => _addToCart(doc.id, data),
       borderRadius: BorderRadius.circular(15),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 5,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: _corAcai.withOpacity(0.05),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
                 ),
-                child: Center(
-                  child: FaIcon(
-                    FontAwesomeIcons.box,
-                    size: 35,
-                    color: _corAcai.withOpacity(0.4),
-                  ),
-                ),
-              ),
+              ],
+              border:
+                  isBestSeller
+                      ? Border.all(color: Colors.amber, width: 2)
+                      : null,
             ),
-            Padding(
-              padding: EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nome,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: Colors.grey[800],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "R\$ ${preco.toStringAsFixed(2)}",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 15,
-                          color: _corAcai,
-                        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color:
+                          isBestSeller
+                              ? Colors.amber.withOpacity(0.1)
+                              : _corAcai.withOpacity(0.05),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(15),
                       ),
-                      Icon(Icons.add_circle, color: _corAcai, size: 24),
+                    ),
+                    child: Center(
+                      // Ícone de Mercado Personalizado
+                      child: FaIcon(
+                        FontAwesomeIcons.store, // Ícone de mercadinho/loja
+                        size: 40,
+                        color:
+                            isBestSeller
+                                ? Colors.amber[800]
+                                : _corAcai.withOpacity(0.5),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (marca.isNotEmpty)
+                        Text(
+                          marca.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      Text(
+                        nome,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.grey[800],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 5),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "R\$ ${preco.toStringAsFixed(2)}",
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              color: _corAcai,
+                            ),
+                          ),
+                          Icon(Icons.add_circle, color: _corAcai, size: 24),
+                        ],
+                      ),
                     ],
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          if (isBestSeller)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.amber,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(FontAwesomeIcons.trophy, size: 10, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      "Mais Vendido",
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -291,6 +373,8 @@ class _LojaViewState extends State<LojaView> {
 
   double get _totalCart =>
       _carrinho.fold(0, (sum, item) => sum + (item['preco'] * item['qtd']));
+
+  double get _troco => _valorRecebido > _totalCart ? _valorRecebido - _totalCart : 0.0;
 
   Widget _buildCartList() {
     if (_carrinho.isEmpty) {
@@ -394,7 +478,9 @@ class _LojaViewState extends State<LojaView> {
             ),
           ],
         ),
-        SizedBox(height: 20),
+        SizedBox(height: 15),
+
+        // Seletor de Pagamento
         DropdownButtonFormField<String>(
           value: _metodoPagamento,
           decoration: InputDecoration(
@@ -406,8 +492,49 @@ class _LojaViewState extends State<LojaView> {
               ['Dinheiro', 'Pix', 'Cartão', 'Outro']
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
-          onChanged: (v) => setState(() => _metodoPagamento = v!),
+          onChanged: (v) {
+            setState(() {
+              _metodoPagamento = v!;
+              _valorRecebido = 0; // Resetar valor recebido se mudar método
+            });
+          },
         ),
+
+        // Campo de Valor Recebido (Apenas se Dinheiro)
+        if (_metodoPagamento == 'Dinheiro') ...[
+          SizedBox(height: 15),
+          TextField(
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: "Valor Recebido (R\$)",
+              prefixIcon: Icon(Icons.money, color: Colors.green),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onChanged: (val) {
+              setState(() {
+                _valorRecebido = double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+              });
+            },
+          ),
+          if (_valorRecebido > 0) ...[
+            SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Troco:", style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  "R\$ ${_troco.toStringAsFixed(2)}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: _troco >= 0 ? Colors.green : Colors.red,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ]
+        ],
+
         SizedBox(height: 20),
         SizedBox(
           width: double.infinity,
@@ -440,19 +567,35 @@ class _LojaViewState extends State<LojaView> {
 
   void _finalizarVenda() async {
     try {
-      // Salvar venda no Firestore
-      await _db.collection('vendas').add({
+      WriteBatch batch = _db.batch();
+
+      // 1. Salvar venda no Firestore
+      var vendaRef = _db.collection('vendas').doc();
+      batch.set(vendaRef, {
         'itens': _carrinho,
         'valor_total': _totalCart,
+        'valor_recebido': _valorRecebido,
+        'troco': _troco,
         'metodo_pagamento': _metodoPagamento,
         'data_venda': FieldValue.serverTimestamp(),
         'status': 'concluido',
       });
 
+      // 2. Atualizar contagem de vendas nos produtos
+      for (var item in _carrinho) {
+        var prodRef = _db.collection('produtos').doc(item['id']);
+        batch.update(prodRef, {
+          'qtd_vendida': FieldValue.increment(item['qtd']),
+        });
+      }
+
+      await batch.commit();
+
       // Limpar carrinho
       setState(() {
         _carrinho.clear();
         _metodoPagamento = 'Dinheiro';
+        _valorRecebido = 0.0;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -474,35 +617,112 @@ class _LojaViewState extends State<LojaView> {
 
   // --- EDITOR DE PRODUTO (MODAL) ---
   void _abrirEditorProduto(BuildContext context) {
+    // Controladores
     final _nomeCtrl = TextEditingController();
-    final _precoCtrl = TextEditingController();
+    final _marcaCtrl = TextEditingController();
+    final _codigoCtrl = TextEditingController();
+    final _custoCtrl = TextEditingController();
+    final _margemCtrl = TextEditingController();
+    final _precoCtrl = TextEditingController(); // Preço Final
+
+    void _calcularPrecoFinal() {
+      double custo = double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+      double margem = double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+      if (custo > 0) {
+        double lucro = custo * (margem / 100);
+        double finalPrice = custo + lucro;
+        _precoCtrl.text = finalPrice.toStringAsFixed(2);
+      }
+    }
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: Text("Cadastrar Novo Produto"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nomeCtrl,
-              decoration: InputDecoration(
-                labelText: "Nome do Produto",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+        content: Container(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _nomeCtrl,
+                  decoration: InputDecoration(
+                    labelText: "Nome do Produto",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _marcaCtrl,
+                        decoration: InputDecoration(
+                          labelText: "Marca",
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 15),
+                    Expanded(
+                      child: TextField(
+                        controller: _codigoCtrl,
+                        decoration: InputDecoration(
+                          labelText: "Cód. Barras",
+                          prefixIcon: Icon(FontAwesomeIcons.barcode, size: 16),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _custoCtrl,
+                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: "Preço Custo (R\$)",
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onChanged: (_) => _calcularPrecoFinal(),
+                      ),
+                    ),
+                    SizedBox(width: 15),
+                    Expanded(
+                      child: TextField(
+                        controller: _margemCtrl,
+                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: "Lucro (%)",
+                          suffixText: "%",
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onChanged: (_) => _calcularPrecoFinal(),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 15),
+                 TextField(
+                  controller: _precoCtrl,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: "Preço de Venda Final (R\$)",
+                    prefixIcon: Icon(Icons.attach_money, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    filled: true,
+                    fillColor: Colors.green[50],
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 15),
-            TextField(
-              controller: _precoCtrl,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: "Preço (R\$)",
-                prefixIcon: Icon(Icons.attach_money, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
@@ -517,12 +737,18 @@ class _LojaViewState extends State<LojaView> {
             onPressed: () async {
               if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
 
-              double preco =
-                  double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+              double custo = double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+              double margem = double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
+              double preco = double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
 
               await _db.collection('produtos').add({
                 'nome': _nomeCtrl.text,
-                'preco': preco,
+                'marca': _marcaCtrl.text,
+                'codigo_barras': _codigoCtrl.text,
+                'preco_custo': custo,
+                'margem_lucro': margem,
+                'preco': preco, // Preço Final de Venda
+                'qtd_vendida': 0, // Inicializa contador
                 'criado_em': FieldValue.serverTimestamp(),
               });
               Navigator.pop(ctx);

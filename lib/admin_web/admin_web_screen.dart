@@ -19,24 +19,35 @@ class AdminWebScreen extends StatefulWidget {
 
 class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
+  bool _isMaster = false;
+  late List<Widget> _telas; // Agora é late para inicializar no initState
 
   // Cores da Identidade Visual
   final Color _corAcaiStart = Color(0xFF4A148C);
   final Color _corAcaiEnd = Color(0xFF7B1FA2);
   final Color _corFundo = Color(0xFFF0F2F5);
 
-  // --- LISTA DE TELAS ---
-  final List<Widget> _telas = [
-    DashboardView(), // 0
-    LojaView(), // 1
-    AgendaView(), // 2
-    HotelView(), // 3
-    VendaAssinaturaView(), // 4
-    GestaoPrecosView(), // 5
-    GestaoBannersView(), // 6
-    EquipeView(), // 7
-    ConfiguracaoAgendaView(), // 8
-  ];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Recupera argumentos passados pela rota
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    if (args != null && args['isMaster'] == true) {
+      _isMaster = true;
+    }
+
+    _telas = [
+      DashboardView(), // 0
+      LojaView(isMaster: _isMaster), // 1 - Passando o parâmetro
+      AgendaView(), // 2
+      HotelView(), // 3
+      VendaAssinaturaView(), // 4
+      GestaoPrecosView(), // 5
+      GestaoBannersView(), // 6
+      EquipeView(), // 7
+      ConfiguracaoAgendaView(), // 8
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
