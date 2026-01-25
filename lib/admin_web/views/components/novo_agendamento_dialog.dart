@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_functions/cloud_functions.dart'; // Importante para a verificação real
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -16,14 +16,13 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     databaseId: 'agenpets',
   );
 
-  // Conexão com Funções (Mesma região do App)
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: 'southamerica-east1',
   );
 
-  final _cpfController = TextEditingController();
+  final _buscaController = TextEditingController();
 
-  // Dados do Agendamento
+  // Dados
   String? _clienteId;
   String? _clienteNome;
   List<Map<String, dynamic>> _petsEncontrados = [];
@@ -34,42 +33,80 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
   String? _profissionalNomeSelecionado;
 
   DateTime _dataSelecionada = DateTime.now();
-  String? _horarioSelecionado; // String "HH:mm" vinda do servidor
-
+  String? _horarioSelecionado;
   bool _isLoadingHorarios = false;
-  List<Map<String, dynamic>> _gradeHorarios = []; // Grade vinda do servidor
+  List<Map<String, dynamic>> _gradeHorarios = [];
 
-  // Lista de Serviços
   final List<String> _servicosDisponiveis = [
     'Banho',
     'Tosa',
-    'Banho + Tosa',
-    'Hidratação',
-    'Corte de Unhas',
+    'Banho e Tosa',
+    'Higiênica',
   ];
 
+  // Cores
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corLilas = Color(0xFFF3E5F5);
+  final Color _corFundo = Color(0xFFF5F7FA);
 
-  // --- LÓGICA DE SERVIDOR (Igual ao App) ---
+  @override
+  void initState() {
+    super.initState();
+    // Opcional: Se quiser carregar horários iniciais ao abrir (se já tiver serviço padrão)
+  }
+
+  // --- LÓGICA ---
+
+  void _mudarData(int dias) {
+    setState(() {
+      _dataSelecionada = _dataSelecionada.add(Duration(days: dias));
+      // Impede datas passadas
+      if (_dataSelecionada.isBefore(
+        DateTime.now().subtract(Duration(days: 1)),
+      )) {
+        _dataSelecionada = DateTime.now();
+      }
+    });
+    _buscarHorariosDisponiveis();
+  }
+
+  Future<void> _selecionarDataPopup() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _dataSelecionada,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2030),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: _corAcai),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (d != null) {
+      setState(() => _dataSelecionada = d);
+      _buscarHorariosDisponiveis();
+    }
+  }
+
   Future<void> _buscarHorariosDisponiveis() async {
     if (_servicoSelecionado == null) return;
 
     setState(() {
       _isLoadingHorarios = true;
       _gradeHorarios = [];
-      _horarioSelecionado = null; // Reseta seleção anterior
+      _horarioSelecionado = null;
     });
 
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
       final servicoEnvio = _servicoSelecionado!.toLowerCase();
 
-      // Chama a mesma função que o App usa
       final result = await _functions.httpsCallable('buscarHorarios').call({
         'dataConsulta': dataString,
         'servico': servicoEnvio,
-        // Se sua cloud function suportar filtro por profissional, envie aqui:
         // 'profissionalId': _profissionalIdSelecionado
       });
 
@@ -87,42 +124,75 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro ao buscar horários: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Ignora erro visualmente ou mostra snackbar discreto
+      print("Erro horarios: $e");
     } finally {
       if (mounted) setState(() => _isLoadingHorarios = false);
     }
   }
 
-  void _salvarAgendamento() async {
-    // Validações
-    if (_clienteId == null || _petIdSelecionado == null) {
-      _showSnack("Identifique o cliente e o pet", Colors.orange);
-      return;
-    }
-    if (_servicoSelecionado == null) {
-      _showSnack("Selecione o serviço", Colors.orange);
-      return;
-    }
-    if (_horarioSelecionado == null) {
-      _showSnack("Selecione um horário disponível", Colors.orange);
+  void _buscarCliente() async {
+    if (_buscaController.text.isEmpty) return;
+    String termo = _buscaController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (termo.isEmpty) {
+      _showSnack("Digite apenas números do CPF", Colors.orange);
       return;
     }
 
-    // Monta Data Final combinando o dia selecionado com a hora escolhida
+    final snap = await _db
+        .collection('users')
+        .where('cpf', isEqualTo: termo)
+        .get();
+
+    if (snap.docs.isNotEmpty) {
+      final userDoc = snap.docs.first;
+      final uData = userDoc.data();
+      final petsSnap = await _db
+          .collection('users')
+          .doc(userDoc.id)
+          .collection('pets')
+          .get();
+
+      final petsList = petsSnap.docs
+          .map(
+            (p) => {
+              'id': p.id,
+              'nome': p['nome'],
+              'raca': p['raca'] ?? 'SRD',
+              'tipo': p['tipo'] ?? 'cao',
+            },
+          )
+          .toList();
+
+      setState(() {
+        _clienteId = userDoc.id;
+        _clienteNome = uData['nome'];
+        _petsEncontrados = petsList;
+        _petIdSelecionado = petsList.isNotEmpty ? petsList.first['id'] : null;
+      });
+    } else {
+      _showSnack("Cliente não encontrado", Colors.red);
+      setState(() {
+        _clienteId = null;
+        _clienteNome = null;
+        _petsEncontrados = [];
+      });
+    }
+  }
+
+  void _salvarAgendamento() async {
+    if (!_podeSalvar) return;
+
     final dataHoraString =
         "${DateFormat('yyyy-MM-dd').format(_dataSelecionada)} $_horarioSelecionado";
     final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
     final dataFim = dataInicio.add(Duration(hours: 1)); // Duração estimada
 
-    // Salva
     await _db.collection('agendamentos').add({
       'userId': _clienteId,
+      'cliente_nome': _clienteNome, // Importante para busca funcionar
       'pet_id': _petIdSelecionado,
+      // Salvar nome do pet também ajuda na busca: 'pet_nome': ...
       'servico': _servicoSelecionado!.toLowerCase(),
       'servicoNorm': _servicoSelecionado,
       'data_inicio': Timestamp.fromDate(dataInicio),
@@ -137,7 +207,14 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     });
 
     Navigator.pop(context);
-    _showSnack("Agendamento realizado com sucesso! ✅", Colors.green);
+    _showSnack("Agendamento realizado! ✅", Colors.green);
+  }
+
+  bool get _podeSalvar {
+    return _clienteId != null &&
+        _petIdSelecionado != null &&
+        _servicoSelecionado != null &&
+        _horarioSelecionado != null;
   }
 
   void _showSnack(String msg, Color color) {
@@ -146,314 +223,435 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
-  void _buscarCliente() async {
-    if (_cpfController.text.isEmpty) return;
-    String cpfLimpo = _cpfController.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    final snap = await _db
-        .collection('users')
-        .where('cpf', isEqualTo: cpfLimpo)
-        .get();
-
-    if (snap.docs.isNotEmpty) {
-      final userDoc = snap.docs.first;
-      final uData = userDoc.data();
-
-      final petsSnap = await _db
-          .collection('users')
-          .doc(userDoc.id)
-          .collection('pets')
-          .get();
-      final petsList = petsSnap.docs
-          .map(
-            (p) => {'id': p.id, 'nome': p['nome'], 'raca': p['raca'] ?? 'SRD'},
-          )
-          .toList();
-
-      setState(() {
-        _clienteId = userDoc.id;
-        _clienteNome = uData['nome'];
-        _petsEncontrados = petsList;
-        _petIdSelecionado = null;
-      });
-    } else {
-      _showSnack("Cliente não encontrado", Colors.red);
-    }
-  }
+  // --- UI ---
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _corLilas,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.calendar_month, color: _corAcai),
-          ),
-          SizedBox(width: 10),
-          Text(
-            "Novo Agendamento",
-            style: TextStyle(color: _corAcai, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Container(
-          width: 500,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // --- 1. CLIENTE ---
-              _buildSectionTitle("1. Cliente e Pet"),
-              Row(
+      backgroundColor: Colors.white,
+      child: Container(
+        width: 900,
+        height: 550, // Altura reduzida para garantir que cabe em telas menores
+        child: Column(
+          children: [
+            // HEADER
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _cpfController,
-                      decoration: _inputDecoration(
-                        "CPF do Tutor",
-                        Icons.search,
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _corLilas,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.add_task, color: _corAcai, size: 22),
                       ),
-                      keyboardType: TextInputType.number,
-                      onSubmitted: (_) => _buscarCliente(),
+                      SizedBox(width: 15),
+                      Text(
+                        "Novo Agendamento",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // BODY SPLIT
+            Expanded(
+              child: Row(
+                children: [
+                  // --- COLUNA 1: DADOS (40%) ---
+                  Expanded(
+                    flex: 4,
+                    child: Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: Colors.grey[200]!),
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // BUSCA CPF
+                            _label("1. Identificar Cliente"),
+                            SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _buscaController,
+                                    decoration: _inputDecoration(
+                                      "CPF do Tutor",
+                                      Icons.search,
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    onSubmitted: (_) => _buscarCliente(),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                InkWell(
+                                  onTap: _buscarCliente,
+                                  child: Container(
+                                    padding: EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: _corAcai,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      Icons.search,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // CLIENTE ENCONTRADO
+                            if (_clienteNome != null) ...[
+                              SizedBox(height: 15),
+                              Container(
+                                padding: EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.green[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.green.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        "$_clienteNome",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: Colors.green[900],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 15),
+                              _label("Pet"),
+                              SizedBox(height: 5),
+                              DropdownButtonFormField<String>(
+                                value: _petIdSelecionado,
+                                isDense: true,
+                                decoration: _inputDecoration(
+                                  "Selecione o Pet",
+                                  FontAwesomeIcons.dog,
+                                ),
+                                items: _petsEncontrados
+                                    .map(
+                                      (p) => DropdownMenuItem(
+                                        value: p['id'] as String,
+                                        child: Text("${p['nome']}"),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) =>
+                                    setState(() => _petIdSelecionado = v),
+                              ),
+                            ],
+
+                            Divider(height: 30),
+
+                            // SERVIÇO
+                            _label("2. Serviço"),
+                            SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              value: _servicoSelecionado,
+                              isDense: true,
+                              decoration: _inputDecoration(
+                                "Tipo de Serviço",
+                                Icons.cut,
+                              ),
+                              items: _servicosDisponiveis
+                                  .map(
+                                    (s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                setState(() => _servicoSelecionado = v);
+                                _buscarHorariosDisponiveis();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // --- COLUNA 2: DATA E HORA COMPACTA (60%) ---
+                  Expanded(
+                    flex: 6,
+                    child: Container(
+                      color: _corFundo,
+                      padding: EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _label("3. Disponibilidade"),
+                          SizedBox(height: 10),
+
+                          // --- NAVEGADOR DE DATA COMPACTO (Aqui está a mágica da economia de espaço) ---
+                          Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.chevron_left),
+                                  onPressed: () => _mudarData(-1),
+                                ),
+                                InkWell(
+                                  onTap: _selecionarDataPopup,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 16,
+                                        color: _corAcai,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        DateFormat(
+                                              "EEEE, dd 'de' MMMM",
+                                              "pt_BR",
+                                            )
+                                            .format(_dataSelecionada)
+                                            .toUpperCase(),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.chevron_right),
+                                  onPressed: () => _mudarData(1),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          SizedBox(height: 20),
+
+                          // HEADER HORÁRIOS
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Horários Disponíveis",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              if (_isLoadingHorarios)
+                                SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          SizedBox(height: 10),
+
+                          // GRADE DE HORÁRIOS (Expansível)
+                          Expanded(
+                            child: Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.all(15),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: _servicoSelecionado == null
+                                  ? Center(
+                                      child: Text(
+                                        "Selecione o serviço para ver horários",
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    )
+                                  : _gradeHorarios.isEmpty &&
+                                        !_isLoadingHorarios
+                                  ? Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.event_busy,
+                                            color: Colors.orange[200],
+                                          ),
+                                          Text(
+                                            "Agenda cheia ou fechada.",
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : SingleChildScrollView(
+                                      child: Wrap(
+                                        spacing: 10,
+                                        runSpacing: 10,
+                                        alignment: WrapAlignment.start,
+                                        children: _gradeHorarios.map((slot) {
+                                          bool livre = slot['livre'];
+                                          String hora = slot['hora'];
+                                          bool isSelected =
+                                              _horarioSelecionado == hora;
+
+                                          if (!livre)
+                                            return SizedBox(); // Esconde ocupados
+
+                                          return InkWell(
+                                            onTap: () => setState(
+                                              () => _horarioSelecionado = hora,
+                                            ),
+                                            child: Container(
+                                              width: 80,
+                                              padding: EdgeInsets.symmetric(
+                                                vertical: 10,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isSelected
+                                                    ? _corAcai
+                                                    : Colors.white,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: isSelected
+                                                      ? _corAcai
+                                                      : Colors.grey[300]!,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                hora,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isSelected
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // FOOTER
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey[200]!)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      "Cancelar",
+                      style: TextStyle(color: Colors.grey),
                     ),
                   ),
                   SizedBox(width: 10),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
+                      backgroundColor: _podeSalvar
+                          ? Colors.green
+                          : Colors.grey[300],
+                      foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
-                        vertical: 20,
-                        horizontal: 20,
+                        horizontal: 25,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: _buscarCliente,
-                    child: Icon(Icons.search, color: Colors.white),
+                    onPressed: _podeSalvar ? _salvarAgendamento : null,
+                    child: Text(
+                      "CONFIRMAR AGENDAMENTO",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
-              if (_clienteNome != null) ...[
-                SizedBox(height: 10),
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    "Cliente: $_clienteNome",
-                    style: TextStyle(
-                      color: Colors.green[800],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: _petIdSelecionado,
-                  decoration: _inputDecoration(
-                    "Selecione o Pet",
-                    FontAwesomeIcons.dog,
-                  ),
-                  items: _petsEncontrados
-                      .map(
-                        (p) => DropdownMenuItem(
-                          value: p['id'] as String,
-                          child: Text("${p['nome']} (${p['raca']})"),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => _petIdSelecionado = v),
-                ),
-              ],
-
-              SizedBox(height: 20),
-
-              // --- 2. SERVIÇO E PROFISSIONAL ---
-              _buildSectionTitle("2. Detalhes do Serviço"),
-              DropdownButtonFormField<String>(
-                value: _servicoSelecionado,
-                decoration: _inputDecoration("Serviço", Icons.cut),
-                items: _servicosDisponiveis
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: (v) {
-                  setState(() => _servicoSelecionado = v);
-                  _buscarHorariosDisponiveis(); // Atualiza horários ao mudar serviço
-                },
-              ),
-              SizedBox(height: 10),
-
-              StreamBuilder<QuerySnapshot>(
-                stream: _db
-                    .collection('profissionais')
-                    .where('ativo', isEqualTo: true)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return LinearProgressIndicator();
-                  var pros = snapshot.data!.docs;
-                  return DropdownButtonFormField<String>(
-                    value: _profissionalIdSelecionado,
-                    decoration: _inputDecoration(
-                      "Profissional (Opcional)",
-                      Icons.person,
-                    ),
-                    items: pros.map((d) {
-                      final data = d.data() as Map;
-                      return DropdownMenuItem(
-                        value: d.id,
-                        child: Text(data['nome']),
-                        onTap: () =>
-                            _profissionalNomeSelecionado = data['nome'],
-                      );
-                    }).toList(),
-                    onChanged: (v) {
-                      setState(() => _profissionalIdSelecionado = v);
-                      // Se a cloud function suportar filtro por ID, descomente abaixo:
-                      // _buscarHorariosDisponiveis();
-                    },
-                  );
-                },
-              ),
-
-              SizedBox(height: 20),
-
-              // --- 3. DATA E HORÁRIO (SERVER SIDE) ---
-              _buildSectionTitle("3. Data e Horário (Verificado)"),
-              InkWell(
-                onTap: () async {
-                  final d = await showDatePicker(
-                    context: context,
-                    initialDate: _dataSelecionada,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2030),
-                  );
-                  if (d != null) {
-                    setState(() => _dataSelecionada = d);
-                    _buscarHorariosDisponiveis(); // Atualiza horários ao mudar data
-                  }
-                },
-                child: Container(
-                  padding: EdgeInsets.symmetric(vertical: 15, horizontal: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[400]!),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.calendar_today, size: 18, color: _corAcai),
-                      SizedBox(width: 10),
-                      Text(
-                        DateFormat(
-                          'dd/MM/yyyy - EEEE',
-                          'pt_BR',
-                        ).format(_dataSelecionada),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 15),
-
-              // GRADE DE HORÁRIOS
-              if (_isLoadingHorarios)
-                Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (_servicoSelecionado == null)
-                Text(
-                  "Selecione um serviço para ver horários.",
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontStyle: FontStyle.italic,
-                  ),
-                )
-              else if (_gradeHorarios.isEmpty)
-                Container(
-                  padding: EdgeInsets.all(10),
-                  width: double.infinity,
-                  color: Colors.orange[50],
-                  child: Text(
-                    "Sem horários disponíveis nesta data.",
-                    style: TextStyle(color: Colors.orange[800]),
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _gradeHorarios.map((slot) {
-                    bool livre = slot['livre'];
-                    String hora = slot['hora'];
-                    bool isSelected = _horarioSelecionado == hora;
-
-                    return ChoiceChip(
-                      label: Text(hora),
-                      selected: isSelected,
-                      onSelected: livre
-                          ? (selected) {
-                              setState(
-                                () => _horarioSelecionado = selected
-                                    ? hora
-                                    : null,
-                              );
-                            }
-                          : null,
-                      selectedColor: _corAcai,
-                      labelStyle: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : (livre ? Colors.black : Colors.grey),
-                      ),
-                      disabledColor: Colors.grey[200],
-                      backgroundColor: Colors.white,
-                    );
-                  }).toList(),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text("Cancelar"),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            padding: EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-          ),
-          onPressed: _isLoadingHorarios ? null : _salvarAgendamento,
-          child: Text(
-            "CONFIRMAR AGENDAMENTO",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[700],
-          fontSize: 14,
-        ),
+  Widget _label(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+        color: Colors.grey[600],
+        letterSpacing: 0.5,
       ),
     );
   }
@@ -461,11 +659,15 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
   InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      prefixIcon: Icon(icon, color: _corAcai, size: 18),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      prefixIcon: Icon(icon, color: Colors.grey[500], size: 18),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey[300]!),
+      ),
       filled: true,
-      fillColor: Colors.grey[50],
+      fillColor: Colors.white,
       contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      labelStyle: TextStyle(fontSize: 13),
     );
   }
 }

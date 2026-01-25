@@ -1,6 +1,8 @@
+import 'package:agenpet/screens/minhas_agendas.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'dart:async';
 
@@ -29,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _timer;
 
   // --- MAPAS PARA TRADUZIR O BANCO DE DADOS ---
-  // (Precisam ser iguais aos do Painel de Gestão)
   final Map<String, IconData> _mapaIcones = {
     'shower': FontAwesomeIcons.shower,
     'crown': FontAwesomeIcons.crown,
@@ -54,18 +55,45 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Inicia o auto-play do carrossel
     _iniciarTimerCarrossel();
+    _salvarTokenNotificacao();
+  }
+
+  // Adicione esta função na classe
+  Future<void> _salvarTokenNotificacao() async {
+    if (_dadosUsuario == null) return;
+
+    try {
+      // 1. Pede permissão (iOS precisa disso, Android 13+ também)
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        // 2. Pega o Token
+        String? token = await messaging.getToken();
+
+        if (token != null) {
+          // 3. Salva no documento do usuário no Firestore
+          await _db.collection('users').doc(_dadosUsuario!['cpf']).update({
+            'fcmToken': token,
+            'ultimo_login': FieldValue.serverTimestamp(),
+          });
+          print("Token de notificação salvo/atualizado!");
+        }
+      }
+    } catch (e) {
+      print("Erro ao salvar token FCM: $e");
+    }
   }
 
   void _iniciarTimerCarrossel() {
     _timer = Timer.periodic(Duration(seconds: 5), (Timer timer) {
       if (_pageController.hasClients) {
-        // Avança para a próxima página ou volta para a primeira
         int proximaPagina = _currentBannerIndex + 1;
-        // Nota: A lógica de loop infinito aqui depende de saber o tamanho da lista,
-        // que agora vem do Stream. O animateToPage lida bem se o índice for inválido,
-        // mas idealmente verificamos o tamanho dentro do StreamBuilder.
         _pageController.animateToPage(
           proximaPagina,
           duration: Duration(milliseconds: 350),
@@ -99,9 +127,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // --- NAVEGAÇÃO ATUALIZADA ---
   void _navegar(String rota) async {
     if (_dadosUsuario == null) return;
 
+    // Lógica específica para abrir Minhas Agendas diretamente
+    if (rota == '/minhas_agendas') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MinhasAgendas(userCpf: _dadosUsuario!['cpf']),
+        ),
+      );
+      return;
+    }
+
+    // Navegação padrão (Named Routes)
     final result = await Navigator.pushNamed(
       context,
       rota,
@@ -141,14 +182,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
             SizedBox(height: 10),
 
-            // 2. STREAM DE BANNERS (Dinâmico)
+            // 2. STREAM DE BANNERS
             StreamBuilder<QuerySnapshot>(
               stream: _db
                   .collection('banners')
                   .where('ativo', isEqualTo: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                // Lista de dados dos banners
                 List<Map<String, dynamic>> bannersData = [];
 
                 if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
@@ -156,7 +196,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       .map((doc) => doc.data() as Map<String, dynamic>)
                       .toList();
                 } else {
-                  // Fallback se não tiver banners: Mostra um padrão
                   bannersData = [
                     {
                       "titulo": "Bem-vindo!",
@@ -167,32 +206,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   ];
                 }
 
-                // Reinicia o indice se a lista mudou e o indice atual estourou
                 if (_currentBannerIndex >= bannersData.length) {
                   _currentBannerIndex = 0;
                 }
 
                 return Column(
                   children: [
-                    // CARROSSEL
                     Container(
                       height: 140,
                       width: double.infinity,
                       child: PageView.builder(
                         controller: _pageController,
                         onPageChanged: (index) {
-                          // Lógica para loop "infinito" visual (se quiser simplificar, use apenas index % length)
                           setState(
                             () => _currentBannerIndex =
                                 index % bannersData.length,
                           );
                         },
-                        // Usamos um número grande para simular loop infinito, ou apenas o tamanho da lista
                         itemBuilder: (context, index) {
                           final banner =
                               bannersData[index % bannersData.length];
 
-                          // Traduz IDs para Objetos
                           Color corBg =
                               _mapaCores[banner['cor_id']] ?? _corAcai;
                           IconData icone =
@@ -208,8 +242,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     ),
-
-                    // INDICADORES
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(bannersData.length, (index) {
@@ -236,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             SizedBox(height: 10),
 
-            // 3. MENU GRID
+            // 3. MENU GRID (Com o novo botão)
             Expanded(
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: 20),
@@ -262,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           _buildMenuCard(
                             "Agendar",
-                            FontAwesomeIcons.calendarCheck,
+                            FontAwesomeIcons.calendarPlus,
                             Colors.blue,
                             () => _navegar('/agendamento'),
                           ),
@@ -272,6 +304,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             Colors.orange,
                             () => _navegar('/hotel'),
                           ),
+                          // --- BOTÃO NOVO: MINHAS AGENDAS ---
+                          _buildMenuCard(
+                            "Minhas Agendas", // Nome atualizado
+                            FontAwesomeIcons
+                                .calendarDays, // Ícone de calendário/acompanhamento
+                            Colors.green, // Verde (para indicar status/ok)
+                            () => _navegar('/minhas_agendas'), // Rota nova
+                          ),
+                          // ----------------------------------
                           _buildMenuCard(
                             "Meus Pets",
                             FontAwesomeIcons.paw,
@@ -283,12 +324,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             FontAwesomeIcons.crown,
                             Colors.amber,
                             () => _navegar('/assinatura'),
-                          ),
-                          _buildMenuCard(
-                            "Carteira",
-                            FontAwesomeIcons.wallet,
-                            Colors.green,
-                            () => _navegar('/historico'),
                           ),
                           _buildMenuCard(
                             "Perfil",

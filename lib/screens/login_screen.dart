@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:cpf_cnpj_validator/cpf_validator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; //
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../services/firebase_service.dart';
@@ -13,189 +13,376 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Conexão com o banco agenpets para verificar profissionais
+  // Instâncias do Firebase
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final _firebaseService = FirebaseService();
   final _cpfController = TextEditingController();
 
-  // Máscara
+  // --- CORES DA MARCA ---
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corAcaiClaro = Color(0xFF7B1FA2);
+
   var maskCpf = MaskTextInputFormatter(
     mask: '###.###.###-##',
     filter: {"#": RegExp(r'[0-9]')},
   );
 
   bool _isLoading = false;
+  bool _cpfValidoVisualmente = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _cpfController.addListener(() {
+      final cpfLimpo = maskCpf.getUnmaskedText();
+      final isValido = cpfLimpo.length == 11 && CPFValidator.isValid(cpfLimpo);
+      if (isValido != _cpfValidoVisualmente) {
+        setState(() => _cpfValidoVisualmente = isValido);
+      }
+    });
+  }
+
+  // --- 1. CÉREBRO DO LOGIN: IDENTIFICA O TIPO DE USUÁRIO ---
   Future<void> _verificarAcesso() async {
-    // 1. Pega os dois formatos
-    String cpfLimpo = maskCpf.getUnmaskedText(); // 11122233344
-    String cpfFormatado = _cpfController.text; // 111.222.333-44
+    String cpfLimpo = maskCpf.getUnmaskedText();
+    String cpfFormatado = _cpfController.text;
 
-    // 2. Validação
     if (!CPFValidator.isValid(cpfLimpo)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("CPF Inválido."), backgroundColor: Colors.red),
-      );
+      _mostrarSnack("CPF Inválido. Verifique os números.", cor: Colors.red);
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // --- LÓGICA DE ADMIN (MASTER) ---
-      // Se o CPF for o do "Chefe", manda direto para o painel de gestão
-      if (cpfFormatado == "069.125.303-03") {
-        // Defina o CPF do dono aqui
-        if (kIsWeb) {
-          Navigator.pushReplacementNamed(
-            context,
-            '/admin_web',
-          ); // Versão Desktop
-        } else {
-          Navigator.pushNamed(
-            context,
-            '/admin',
-          ); // Versão Mobile (Dashboard simplificado)
-        }
-        return;
-      }
-      // 3. Verifica se é PROFISSIONAL (Busca com CPF Formatado)
+      // PASSO A: Verifica se é um Profissional Cadastrado
+      // Consultamos a coleção 'profissionais' para saber se pedimos senha ou não.
       final proQuery = await _db
           .collection('profissionais')
           .where('cpf', isEqualTo: cpfFormatado)
           .limit(1)
-          .get();
+          .get(); //
 
       if (proQuery.docs.isNotEmpty) {
-        // CORREÇÃO: Passamos o Formatado para o menu funcionar
-        _mostrarOpcoesDeAcesso(cpfFormatado);
+        // É PROFISSIONAL: Precisa de senha para gerar o token de segurança
+        setState(
+          () => _isLoading = false,
+        ); // Para o loading para abrir o dialog
+        _abrirDialogoSenhaProfissional(cpfLimpo, proQuery.docs.first);
       } else {
-        // Cliente usa CPF Limpo
+        // NÃO É PROFISSIONAL: Segue fluxo de Cliente (Sem senha)
         await _loginComoCliente(cpfLimpo);
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro: $e")));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _mostrarSnack("Erro de conexão: $e", cor: Colors.orange);
+      setState(() => _isLoading = false);
     }
   }
 
-  // Fluxo Padrão do Cliente
-  Future<void> _loginComoCliente(String cpf) async {
-    final user = await _firebaseService.getUser(cpf);
+  // --- 2. FLUXO DE PROFISSIONAL (COM AUTH SEGURO) ---
+  void _abrirDialogoSenhaProfissional(
+    String cpfLimpo,
+    DocumentSnapshot docPro,
+  ) {
+    final _passCtrl = TextEditingController();
+    bool _senhaVisivel = false;
+    bool _logandoDialog = false;
 
-    if (user != null) {
-      // Usuário existe -> Home
-      Navigator.pushReplacementNamed(context, '/home', arguments: user.toMap());
-    } else {
-      // Usuário novo -> Cadastro (Onde pediremos o Telefone e Nome)
-      Navigator.pushReplacementNamed(
-        context,
-        '/cadastro',
-        arguments: {'cpf': cpf},
-      );
-    }
-  }
-
-  // Modal para escolher perfil (UX Diferenciada)
-  void _mostrarOpcoesDeAcesso(String cpfFormatado) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: EdgeInsets.all(25),
-          height: 320,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Identificamos seu perfil! 🌟",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800],
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.lock, color: _corAcai),
+                SizedBox(width: 10),
+                Text(
+                  "Acesso Profissional",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Olá, ${docPro['nome'].toString().split(' ')[0]}. Digite sua senha.",
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _passCtrl,
+                  obscureText: !_senhaVisivel,
+                  autofocus: false,
+                  decoration: InputDecoration(
+                    labelText: "Senha",
+                    border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _senhaVisivel ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () =>
+                          setStateDialog(() => _senhaVisivel = !_senhaVisivel),
+                    ),
+                  ),
+                ),
+                if (_logandoDialog)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 15.0),
+                    child: LinearProgressIndicator(color: _corAcai),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: _logandoDialog ? null : () => Navigator.pop(ctx),
+                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
               ),
-              Text(
-                "Como você deseja acessar hoje?",
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
+                onPressed: _logandoDialog
+                    ? null
+                    : () async {
+                        setStateDialog(() => _logandoDialog = true);
 
-              // OPÇÃO 1: PROFISSIONAL (Usa CPF Formatado)
-              _buildOpcaoAcesso(
-                icon: FontAwesomeIcons.briefcase,
-                color: Colors.green,
-                titulo: "Acessar como Profissional",
-                subtitulo: "Ver minha agenda e atender pets",
-                onTap: () async {
-                  Navigator.pop(context);
+                        // 1. Tenta pegar os dados do usuário
+                        Map<String, dynamic>? dadosUsuario =
+                            await _autenticarProfissionalFirebase(
+                              cpfLimpo,
+                              _passCtrl.text,
+                            );
 
-                  // Agora a busca vai funcionar pois 'cpfFormatado' tem pontos e traço
-                  final proSnapshot = await _db
-                      .collection('profissionais')
-                      .where('cpf', isEqualTo: cpfFormatado)
-                      .limit(1)
-                      .get();
+                        if (dadosUsuario != null) {
+                          // 2. SUCESSO: Primeiro fechamos o diálogo!
+                          Navigator.pop(ctx);
 
-                  if (proSnapshot.docs.isNotEmpty) {
-                    final doc = proSnapshot.docs.first;
-                    final proData = doc.data();
-                    proData['id'] = doc.id;
-                    Navigator.pushNamed(
-                      context,
-                      '/profissional',
-                      arguments: proData,
-                    );
-                  }
-                },
-              ),
-
-              SizedBox(height: 15),
-
-              // OPÇÃO 2: CLIENTE (Usa CPF Limpo)
-              _buildOpcaoAcesso(
-                icon: FontAwesomeIcons.user,
-                color: Colors.blue,
-                titulo: "Acessar como Cliente",
-                subtitulo: "Agendar serviços para meus pets",
-                onTap: () {
-                  Navigator.pop(context);
-                  // CORREÇÃO: Garante que o cliente logue com apenas números
-                  _loginComoCliente(maskCpf.getUnmaskedText());
-                },
+                          // 3. AGORA navegamos (com o contexto da tela principal livre)
+                          _rotearProfissional(dadosUsuario);
+                        } else {
+                          // ERRO: Apenas para o loading do dialog
+                          setStateDialog(() => _logandoDialog = false);
+                        }
+                      },
+                child: Text("ENTRAR", style: TextStyle(color: Colors.white)),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildOpcaoAcesso({
+  Future<Map<String, dynamic>?> _autenticarProfissionalFirebase(
+    String cpfLimpo,
+    String senha,
+  ) async {
+    final emailLogin = "$cpfLimpo@agenpets.pro";
+
+    try {
+      UserCredential userCred = await _auth.signInWithEmailAndPassword(
+        email: emailLogin,
+        password: senha,
+      );
+
+      DocumentSnapshot doc = await _db
+          .collection('profissionais')
+          .doc(userCred.user!.uid)
+          .get();
+
+      if (!doc.exists) {
+        _mostrarSnack("Erro: Perfil não encontrado no banco.", cor: Colors.red);
+        await _auth.signOut();
+        return null;
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+
+      if (data['ativo'] == false) {
+        _mostrarSnack("Acesso revogado.", cor: Colors.red);
+        await _auth.signOut();
+        return null;
+      }
+
+      return data; // Retorna os dados para quem chamou
+    } on FirebaseAuthException catch (e) {
+      String msg = "Erro no login.";
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential')
+        msg = "Senha incorreta.";
+      if (e.code == 'user-not-found') msg = "Usuário não cadastrado.";
+      if (e.code == 'too-many-requests') msg = "Muitas tentativas. Aguarde.";
+      _mostrarSnack(msg, cor: Colors.red);
+      return null;
+    } catch (e) {
+      _mostrarSnack("Erro: $e", cor: Colors.red);
+      return null;
+    }
+  }
+
+  // --- 3. ROTEAMENTO (Aqui que decide para onde vai) ---
+  void _rotearProfissional(Map<String, dynamic> proData) {
+    double width = MediaQuery.of(context).size.width;
+    bool isMobile = width < 800;
+
+    // Verifica permissões
+    String perfil = proData['perfil'] ?? 'padrao';
+    List<dynamic> skills = proData['habilidades'] ?? [];
+
+    // É Master se tiver perfil 'master' OU habilidade 'master' OU 'caixa' (caixa geralmente é admin)
+    bool isMaster = perfil == 'master' || skills.contains('master');
+
+    if (isMobile) {
+      // Mobile: Abre o BottomSheet de escolha
+      _mostrarDialogoBifurcacao(proData);
+    } else {
+      // Desktop: Roteamento direto
+      if (isMaster) {
+        // Se for Master no PC -> Painel Admin
+        // VERIFIQUE SE A ROTA '/admin_web' EXISTE NO SEU MAIN.DART
+        Navigator.pushReplacementNamed(
+          context,
+          '/admin_web',
+          arguments: {'tipo_acesso': 'master', 'dados': proData},
+        );
+      } else {
+        // Se for Banhista no PC -> Área Profissional
+        Navigator.pushReplacementNamed(
+          context,
+          '/profissional',
+          arguments: proData,
+        );
+      }
+    }
+  }
+
+  void _mostrarDialogoBifurcacao(Map<String, dynamic> proData) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.all(25),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              "Como deseja acessar?",
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: _corAcai,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              "Você possui acesso administrativo/profissional.",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            SizedBox(height: 30),
+
+            // Opção Cliente
+            _buildBifurcacaoOption(
+              icon: FontAwesomeIcons.user,
+              color: Colors.blue,
+              title: "Entrar como Cliente",
+              subtitle: "Agendar para meus pets",
+              onTap: () {
+                Navigator.pop(ctx);
+                _loginComoCliente(maskCpf.getUnmaskedText());
+              },
+            ),
+            SizedBox(height: 15),
+
+            // Opção Profissional
+            _buildBifurcacaoOption(
+              icon: FontAwesomeIcons.briefcase,
+              color: _corAcai,
+              title: "Área Profissional",
+              subtitle: "Minha agenda e tarefas",
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(
+                  context,
+                  '/profissional',
+                  arguments: proData,
+                );
+              },
+            ),
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- 4. FLUXO DE CLIENTE (SEM SENHA) ---
+  Future<void> _loginComoCliente(String cpfLimpo) async {
+    // Aqui usamos o serviço existente para buscar o cliente
+    final user = await _firebaseService.getUser(cpfLimpo); //
+
+    if (user != null) {
+      // Cliente já existe -> Home
+      Navigator.pushReplacementNamed(context, '/home', arguments: user.toMap());
+    } else {
+      // Cliente novo -> Cadastro (levando o CPF)
+      Navigator.pushReplacementNamed(
+        context,
+        '/cadastro',
+        arguments: {'cpf': cpfLimpo},
+      );
+    }
+    setState(() => _isLoading = false);
+  }
+
+  // --- WIDGETS AUXILIARES ---
+
+  void _mostrarSnack(String msg, {Color cor = Colors.black87}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: cor,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildBifurcacaoOption({
     required IconData icon,
     required Color color,
-    required String titulo,
-    required String subtitulo,
+    required String title,
+    required String subtitle,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(15),
       child: Container(
-        padding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
+        padding: EdgeInsets.all(20),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
+          color: color.withOpacity(0.05),
           borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: Row(
           children: [
@@ -205,24 +392,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: FaIcon(icon, color: color, size: 20),
+              child: Icon(icon, color: color),
             ),
             SizedBox(width: 15),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(
-                  subtitulo,
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
             ),
-            Spacer(),
-            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
           ],
         ),
       ),
@@ -231,146 +423,183 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // --- HEADER CURVO (DESIGN) ---
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0056D2), Color(0xFF0078FF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              // HEADER COM GRADIENTE
+              Container(
+                height: 320,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_corAcai, _corAcaiClaro],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomRight: Radius.circular(80),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _corAcai.withOpacity(0.4),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.only(
-                  bottomRight: Radius.circular(100),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: FaIcon(
+                        FontAwesomeIcons.paw,
+                        size: 60,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 15),
+                    Text(
+                      "AgenPet",
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    Text(
+                      "Cuidado que seu pet merece",
+                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: FaIcon(
-                      FontAwesomeIcons.paw,
-                      size: 60,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  Text(
-                    "AgenPet",
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    "Seu pet em boas mãos",
-                    style: TextStyle(color: Colors.blue[100]),
-                  ),
-                ],
-              ),
-            ),
 
-            SizedBox(height: 40),
+              SizedBox(height: 50),
 
-            // --- FORMULÁRIO ---
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Bem-vindo(a)!",
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  Text(
-                    "Digite seu CPF para entrar ou cadastrar.",
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-
-                  SizedBox(height: 30),
-
-                  TextField(
-                    controller: _cpfController,
-                    inputFormatters: [maskCpf],
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(fontSize: 18),
-                    decoration: InputDecoration(
-                      labelText: "CPF",
-                      floatingLabelBehavior: FloatingLabelBehavior.auto,
-                      prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(color: Colors.blue, width: 2),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                    ),
-                  ),
-
-                  SizedBox(height: 30),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _verificarAcesso,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF0056D2),
-                        elevation: 8,
-                        shadowColor: Colors.blue.withOpacity(0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
+              // INPUT CPF
+              Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 450),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Bem-vindo(a)!",
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
                         ),
-                      ),
-                      child: _isLoading
-                          ? CircularProgressIndicator(color: Colors.white)
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "CONTINUAR",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Icon(Icons.arrow_forward),
-                              ],
-                            ),
-                    ),
-                  ),
+                        SizedBox(height: 5),
+                        Text(
+                          "Digite seu CPF para acessar.",
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        SizedBox(height: 30),
 
-                  SizedBox(height: 20),
-                  Center(
-                    child: Text(
-                      "Ao continuar, você concorda com nossos Termos.",
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                        TextField(
+                          controller: _cpfController,
+                          inputFormatters: [maskCpf],
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            fontSize: 18,
+                            letterSpacing: 1.0,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          onSubmitted: (_) => _verificarAcesso(),
+                          decoration: InputDecoration(
+                            labelText: "CPF",
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: _cpfValidoVisualmente
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
+                            suffixIcon: _cpfValidoVisualmente
+                                ? Icon(Icons.check_circle, color: Colors.green)
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                        ),
+
+                        SizedBox(height: 30),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _verificarAcesso,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _corAcai,
+                              elevation: 5,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? SizedBox(
+                                    width: 25,
+                                    height: 25,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 3,
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        "CONTINUAR",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      SizedBox(width: 10),
+                                      Icon(
+                                        Icons.arrow_forward_rounded,
+                                        color: Colors.white,
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                        SizedBox(height: 30),
+                        Center(
+                          child: Text(
+                            "Ao continuar, você concorda com nossos Termos de Uso.",
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 30),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

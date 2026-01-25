@@ -1,3 +1,4 @@
+import 'package:agenpet/screens/tabs/meus_vouchers_tab.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -9,26 +10,41 @@ class AssinaturaScreen extends StatefulWidget {
   _AssinaturaScreenState createState() => _AssinaturaScreenState();
 }
 
-class _AssinaturaScreenState extends State<AssinaturaScreen> {
+class _AssinaturaScreenState extends State<AssinaturaScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
   final _firebaseService = FirebaseService();
+  late TabController _tabController;
 
-  // --- CORES DA MARCA ---
+  // --- PALETA DE CORES VIBRANTE ---
   final Color _corAcai = Color(0xFF4A148C);
-  final Color _corFundo = Color(0xFFF8F9FC);
+  final Color _corRoxoClaro = Color(0xFF7B1FA2);
+  final Color _corFundo = Color(0xFFF0F2F5);
 
   String? _cpfUser;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)!.settings.arguments as Map?;
     if (args != null) _cpfUser = args['cpf'];
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _comprar(String pacoteId, String nomePacote, double valor) async {
@@ -54,6 +70,7 @@ class _AssinaturaScreenState extends State<AssinaturaScreen> {
         SnackBar(
           content: Text("Erro ao iniciar compra: $e"),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -63,359 +80,452 @@ class _AssinaturaScreenState extends State<AssinaturaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_cpfUser == null)
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
+
     return Scaffold(
       backgroundColor: _corFundo,
       appBar: AppBar(
         title: Text(
-          "Clube de Assinatura",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          "Clube Da Fazendinha",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: _corAcai,
         centerTitle: true,
+        backgroundColor: _corAcai,
         elevation: 0,
+        iconTheme: IconThemeData(color: Colors.white),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.amber,
+          indicatorWeight: 4,
+          labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          tabs: [
+            Tab(text: "LOJA DE PLANOS"),
+            Tab(text: "MEUS PACOTES"),
+          ],
+        ),
       ),
-      body: Column(
-        children: [
-          _buildHeaderBanner(),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator(color: _corAcai))
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                // ABA 1: VITRINE DE PLANOS
+                _buildTabPlanos(),
 
-          Expanded(
-            child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: _corAcai))
-                : StreamBuilder<QuerySnapshot>(
-                    // ATENÇÃO: Se der erro, verifique o console para criar o índice no Firebase
-                    stream: _db
-                        .collection('pacotes_assinatura')
-                        .where('ativo', isEqualTo: true)
-                        .orderBy('preco', descending: false)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      // 1. TRATAMENTO DE ERRO (Para você ver o que está acontecendo)
-                      if (snapshot.hasError) {
-                        print(
-                          "ERRO FIREBASE: ${snapshot.error}",
-                        ); // Olhe o console!
-                        return Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text(
-                              "Erro ao carregar pacotes.\nVerifique se o Índice foi criado no Firebase.\n\nDetalhe: ${snapshot.error}",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        );
-                      }
-
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(
-                          child: CircularProgressIndicator(color: _corAcai),
-                        );
-                      }
-
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.boxOpen,
-                                size: 50,
-                                color: Colors.grey[300],
-                              ),
-                              SizedBox(height: 20),
-                              Text(
-                                "Nenhum pacote disponível no momento.",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      final docs = snapshot.data!.docs;
-
-                      return ListView.builder(
-                        padding: EdgeInsets.all(20),
-                        physics: BouncingScrollPhysics(),
-                        itemCount: docs.length,
-                        itemBuilder: (ctx, index) {
-                          final data =
-                              docs[index].data() as Map<String, dynamic>;
-                          final docId = docs[index].id;
-
-                          // Mapeamento dos dados do seu Print
-                          String nome = data['nome'] ?? 'Pacote';
-                          String porte =
-                              data['porte'] ?? ''; // Pego do seu print
-                          double preco = (data['preco'] ?? 0).toDouble();
-                          String descricao = data['descricao'] ?? '';
-                          bool destaque = data['destaque'] ?? false;
-
-                          // Monta benefícios dinamicamente
-                          List<String> beneficios = [];
-
-                          if ((data['vouchers_banho'] ?? 0) > 0) {
-                            beneficios.add("${data['vouchers_banho']}x Banhos");
-                          }
-                          if ((data['vouchers_tosa'] ?? 0) > 0) {
-                            beneficios.add("${data['vouchers_tosa']}x Tosas");
-                          }
-                          // Adicionado conforme seu print (Hidratação)
-                          if ((data['vouchers_hidratacao'] ?? 0) > 0) {
-                            beneficios.add(
-                              "${data['vouchers_hidratacao']}x Hidratação",
-                            );
-                          }
-
-                          if (descricao.isNotEmpty) beneficios.add(descricao);
-                          beneficios.add("Válido por 30 dias");
-
-                          // Ícone dinâmico
-                          IconData icon = FontAwesomeIcons.paw;
-                          Color corTema = _corAcai;
-
-                          if (nome.toLowerCase().contains('supremo') ||
-                              destaque) {
-                            corTema = Colors.purple;
-                            icon = FontAwesomeIcons.crown;
-                          } else if ((data['vouchers_tosa'] ?? 0) > 0) {
-                            icon = FontAwesomeIcons.scissors;
-                            corTema = Colors.orange[800]!;
-                          } else {
-                            icon = FontAwesomeIcons.shower;
-                            corTema = Colors.blue;
-                          }
-
-                          return _buildPlanCard(
-                            pacoteId: docId,
-                            titulo: nome,
-                            subtitulo: porte.isNotEmpty
-                                ? "Ideal para $porte"
-                                : null,
-                            preco:
-                                "R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}",
-                            valorNumerico: preco,
-                            beneficios: beneficios,
-                            cor: corTema,
-                            icon: icon,
-                            isDestaque: destaque,
-                          );
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+                // ABA 2: VOUCHERS (Sua Tab existente)
+                MeusVouchersTab(userCpf: _cpfUser!),
+              ],
+            ),
     );
   }
 
-  Widget _buildHeaderBanner() {
+  // ===========================================================================
+  // ABA 1: PLANOS (REDESENHADA - VISUAL "VITRINE")
+  // ===========================================================================
+  Widget _buildTabPlanos() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _db
+          .collection('pacotes_assinatura')
+          .where('ativo', isEqualTo: true)
+          .orderBy('preco', descending: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError)
+          return Center(child: Text("Erro ao carregar planos"));
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return Center(child: CircularProgressIndicator(color: _corAcai));
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("Nenhum plano disponível."));
+        }
+
+        return ListView(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 40),
+          children: [
+            _buildHeaderPromocional(), // Banner de topo
+            SizedBox(height: 20),
+
+            ...snapshot.data!.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return _buildPlanCardVibrante(doc.id, data);
+            }).toList(),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHeaderPromocional() {
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(25, 10, 25, 30),
+      margin: EdgeInsets.only(top: 20),
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _corAcai,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        gradient: LinearGradient(colors: [_corAcai, _corRoxoClaro]),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _corAcai.withOpacity(0.3),
-            blurRadius: 15,
+            color: _corAcai.withOpacity(0.4),
+            blurRadius: 10,
             offset: Offset(0, 5),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(15),
+            padding: EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(FontAwesomeIcons.crown, size: 35, color: Colors.amber),
+            child: Icon(FontAwesomeIcons.crown, color: Colors.amber, size: 30),
           ),
-          SizedBox(height: 15),
-          Text(
-            "Seja Premium",
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Seja Membro VIP",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  "Garanta descontos exclusivos e prioridade na agenda do seu pet!",
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
             ),
-          ),
-          SizedBox(height: 5),
-          Text(
-            "Assine nossos pacotes e garanta descontos exclusivos e prioridade na agenda.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPlanCard({
-    required String pacoteId,
-    required String titulo,
-    String? subtitulo,
-    required String preco,
-    required double valorNumerico,
-    required List<String> beneficios,
-    required Color cor,
-    required IconData icon,
-    bool isDestaque = false,
-  }) {
+  Widget _buildPlanCardVibrante(String docId, Map<String, dynamic> data) {
+    String nome = data['nome'] ?? 'Pacote';
+    // --- NOVO: Extração do Porte ---
+    String porte = data['porte'] ?? '';
+    double preco = (data['preco'] ?? 0).toDouble();
+    bool destaque = data['destaque'] ?? false;
+
+    // --- DESIGN SYSTEM DO CARD ---
+    Color bgCard = destaque ? _corAcai : Colors.white;
+    Color corTextoTitulo = destaque ? Colors.white : Colors.black87;
+    Color corTextoDesc = destaque ? Colors.white70 : Colors.grey[600]!;
+    Color corIconeCheck = destaque ? Colors.amber : Colors.green;
+    Color btnBg = destaque ? Colors.amber : _corAcai;
+    Color btnTexto = destaque ? Colors.black87 : Colors.white;
+
+    // Ícone Principal do Plano
+    IconData iconePlano = FontAwesomeIcons.paw;
+    if (nome.toLowerCase().contains('tosa'))
+      iconePlano = FontAwesomeIcons.scissors;
+    if (nome.toLowerCase().contains('vip') || destaque)
+      iconePlano = FontAwesomeIcons.crown;
+
+    // --- LISTAGEM DINÂMICA DE BENEFÍCIOS ---
+    List<Widget> listaBeneficios = [];
+
+    // 1. Varre o mapa 'data' procurando chaves que começam com 'vouchers_'
+    data.forEach((key, value) {
+      if (key.startsWith('vouchers_') && value is int && value > 0) {
+        // Formata o nome: vouchers_corte_unha -> Corte Unha
+        String labelRaw = key.replaceAll('vouchers_', '').replaceAll('_', ' ');
+        String labelFormatada = labelRaw
+            .split(' ')
+            .map(
+              (str) => str.isNotEmpty
+                  ? '${str[0].toUpperCase()}${str.substring(1)}'
+                  : '',
+            )
+            .join(' ');
+
+        // Escolhe um ícone bonitinho baseado no nome
+        IconData iconeItem = FontAwesomeIcons.check;
+        if (key.contains('banho'))
+          iconeItem = FontAwesomeIcons.shower;
+        else if (key.contains('tosa'))
+          iconeItem = FontAwesomeIcons.scissors;
+        else if (key.contains('hidratacao'))
+          iconeItem = FontAwesomeIcons.droplet;
+        else if (key.contains('taxi') || key.contains('transporte'))
+          iconeItem = FontAwesomeIcons.car;
+        else if (key.contains('unha'))
+          iconeItem = FontAwesomeIcons.handScissors;
+        else if (key.contains('hotel'))
+          iconeItem = FontAwesomeIcons.hotel;
+        else
+          iconeItem = Icons.star;
+
+        listaBeneficios.add(
+          _buildBeneficioRow(
+            "${value}x $labelFormatada",
+            corIconeCheck,
+            corTextoDesc,
+            customIcon: iconeItem,
+          ),
+        );
+      }
+    });
+
+    // 2. Adiciona Descrição (se houver) no final
+    if (data['descricao'] != null && data['descricao'].toString().isNotEmpty) {
+      listaBeneficios.add(
+        _buildBeneficioRow(
+          data['descricao'],
+          corIconeCheck,
+          corTextoDesc,
+          customIcon: Icons.info_outline,
+        ),
+      );
+    }
+
     return Stack(
       children: [
         Container(
-          margin: EdgeInsets.only(top: isDestaque ? 0 : 15, bottom: 15),
-          padding: EdgeInsets.all(25),
+          margin: EdgeInsets.only(bottom: 25, top: destaque ? 15 : 0),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: isDestaque
-                ? Border.all(color: Colors.amber, width: 2)
-                : Border.all(color: Colors.transparent),
+            color: bgCard,
+            borderRadius: BorderRadius.circular(25),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 15,
-                offset: Offset(0, 5),
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: Offset(0, 10),
               ),
             ],
+            gradient: destaque
+                ? LinearGradient(
+                    colors: [_corAcai, Color(0xFF6A1B9A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
           ),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: FaIcon(icon, color: cor, size: 20),
-                  ),
-                  if (isDestaque)
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber[100],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        "MAIS VENDIDO",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber[900],
+              // Cabeçalho do Card
+              Padding(
+                padding: EdgeInsets.all(25),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Ícone, Nome e PORTE
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: destaque
+                                      ? Colors.white.withOpacity(0.15)
+                                      : Color(0xFFF3E5F5),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: FaIcon(
+                                  iconePlano,
+                                  color: destaque ? Colors.white : _corAcai,
+                                  size: 20,
+                                ),
+                              ),
+                              SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      nome,
+                                      style: TextStyle(
+                                        color: corTextoTitulo,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+
+                                    // --- NOVO: Exibição do Porte ---
+                                    if (porte.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          "Para $porte",
+                                          style: TextStyle(
+                                            color: corTextoDesc,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      )
+                                    else if (!destaque)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          "Plano Mensal",
+                                          style: TextStyle(
+                                            color: corTextoDesc,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        // Preço
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              "R\$",
+                              style: TextStyle(
+                                color: corTextoDesc,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              preco.toStringAsFixed(0),
+                              style: TextStyle(
+                                color: corTextoTitulo,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                ],
-              ),
 
-              SizedBox(height: 15),
-
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  titulo,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              if (subtitulo != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      subtitulo,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w600,
-                      ),
+                    SizedBox(height: 25),
+                    Divider(
+                      color: destaque ? Colors.white24 : Colors.grey[200],
                     ),
-                  ),
-                ),
+                    SizedBox(height: 20),
 
-              SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  preco,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: cor,
-                  ),
-                ),
-              ),
+                    // Benefícios Dinâmicos
+                    if (listaBeneficios.isNotEmpty)
+                      ...listaBeneficios
+                    else
+                      Text(
+                        "Nenhum item listado",
+                        style: TextStyle(color: corTextoDesc),
+                      ),
 
-              SizedBox(height: 20),
-              Divider(height: 1),
-              SizedBox(height: 20),
+                    SizedBox(height: 30),
 
-              ...beneficios.map(
-                (b) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 18),
-                      SizedBox(width: 10),
-                      Expanded(
+                    // Botão de Ação
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: btnBg,
+                          foregroundColor: btnTexto,
+                          elevation: 8,
+                          shadowColor: btnBg.withOpacity(0.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        onPressed: () => _comprar(docId, nome, preco),
                         child: Text(
-                          b,
+                          destaque ? "QUERO SER VIP" : "ASSINAR PLANO",
                           style: TextStyle(
-                            color: Colors.grey[700],
-                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 25),
-
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () => _comprar(pacoteId, titulo, valorNumerico),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cor,
-                    elevation: 4,
-                    shadowColor: cor.withOpacity(0.4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
                     ),
-                  ),
-                  child: Text(
-                    "ASSINAR AGORA",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.white,
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+
+        // Badge de "Mais Vendido"
+        if (destaque)
+          Positioned(
+            top: 0,
+            right: 30,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star, size: 14, color: Colors.black87),
+                  SizedBox(width: 5),
+                  Text(
+                    "MAIS VENDIDO",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _buildBeneficioRow(
+    String texto,
+    Color corIcone,
+    Color corTexto, {
+    IconData? customIcon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: corIcone.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(customIcon ?? Icons.check, size: 14, color: corIcone),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontSize: 15,
+                color: corTexto,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

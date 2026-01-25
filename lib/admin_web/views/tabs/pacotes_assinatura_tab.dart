@@ -100,8 +100,8 @@ class _PacotesAssinaturaTabState extends State<PacotesAssinaturaTab> {
 
                 return GridView.builder(
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 380, // Largura do Card
-                    childAspectRatio: 0.75, // Altura do Card
+                    maxCrossAxisExtent: 360, // Largura do Card
+                    childAspectRatio: 0.95, // Altura do Card
                     crossAxisSpacing: 25,
                     mainAxisSpacing: 25,
                   ),

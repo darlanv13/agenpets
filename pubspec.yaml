@@ -47,6 +47,13 @@ dependencies:
   font_awesome_flutter: ^10.12.0
   cpf_cnpj_validator: ^2.0.0
   google_fonts: ^7.0.1
+  firebase_messaging: ^14.7.10
+  firebase_messaging_web: ^3.6.0
+  image_picker: ^1.2.1
+  flutter_image_compress: ^2.3.0
+  firebase_storage: ^11.7.7
+  firebase_auth: ^4.20.0
+
 
 dev_dependencies:
   flutter_test:
