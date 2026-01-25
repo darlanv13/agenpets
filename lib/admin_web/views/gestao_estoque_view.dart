@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../widgets/product_editor_dialog.dart';
 
 class GestaoEstoqueView extends StatefulWidget {
   @override
@@ -106,63 +107,105 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isSmall = constraints.maxWidth < 800;
+        return isSmall
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTitleSection(),
+                  SizedBox(height: 20),
+                  _buildActionsSection(isSmall: true),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildTitleSection(),
+                  _buildActionsSection(isSmall: false),
+                ],
+              );
+      },
+    );
+  }
+
+  Widget _buildTitleSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Gestão de Estoque",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: _corAcai,
+        Text(
+          "Gestão de Estoque",
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: _corAcai,
+          ),
+        ),
+        Text(
+          "Gerencie quantidades e valores do seu inventário",
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionsSection({required bool isSmall}) {
+    return Wrap(
+      spacing: 15,
+      runSpacing: 15,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        // Botão Novo Produto
+        ElevatedButton.icon(
+          icon: Icon(Icons.add, size: 18),
+          label: Text("NOVO PRODUTO"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _corAcai,
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => ProductEditorDialog(),
+            );
+          },
+        ),
+        // Filter Dropdown
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _filtroStatus,
+              items: ['Todos', 'Baixo Estoque', 'Sem Estoque']
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => setState(() => _filtroStatus = v!),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: isSmall ? double.infinity : 300,
+          child: TextField(
+            onChanged: (val) => setState(() => _filtroBusca = val),
+            decoration: InputDecoration(
+              hintText: "Buscar produto...",
+              prefixIcon: Icon(Icons.search, color: Colors.grey),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
               ),
             ),
-            Text(
-              "Gerencie quantidades e valores do seu inventário",
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        Row(
-            children: [
-                // Filter Dropdown
-                Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                            value: _filtroStatus,
-                            items: ['Todos', 'Baixo Estoque', 'Sem Estoque']
-                                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                                .toList(),
-                            onChanged: (v) => setState(() => _filtroStatus = v!),
-                        ),
-                    ),
-                ),
-                SizedBox(width: 20),
-                SizedBox(
-                  width: 300,
-                  child: TextField(
-                    onChanged: (val) => setState(() => _filtroBusca = val),
-                    decoration: InputDecoration(
-                      hintText: "Buscar produto...",
-                      prefixIcon: Icon(Icons.search, color: Colors.grey),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          ),
         ),
       ],
     );
@@ -174,34 +217,44 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     int baixoEstoque,
     int semEstoque,
   ) {
-    return Row(
+    // Usando LayoutBuilder ou Wrap para responsividade
+    // Aqui vamos usar um Wrap com tamanhos fixos mínimos para simular o Grid responsivo
+    // Ou simplesmente usar Expanded se for Row (padrão) e mudar para Wrap/Column se pequeno.
+    // Para simplificar "dinâmico", vamos usar Wrap.
+
+    final cardWidth = 220.0;
+
+    return Wrap(
+      spacing: 20,
+      runSpacing: 20,
       children: [
         _buildKpiCard(
           "Total de Produtos",
           "$totalItens itens",
           Colors.blue,
           FontAwesomeIcons.boxesStacked,
+          width: cardWidth,
         ),
-        SizedBox(width: 20),
         _buildKpiCard(
           "Valor em Estoque",
           "R\$ ${valorTotal.toStringAsFixed(2)}",
           Colors.green,
           FontAwesomeIcons.moneyBillTrendUp,
+          width: cardWidth,
         ),
-        SizedBox(width: 20),
         _buildKpiCard(
           "Baixo Estoque",
           "$baixoEstoque alertas",
           Colors.orange,
           FontAwesomeIcons.triangleExclamation,
+          width: cardWidth,
         ),
-        SizedBox(width: 20),
         _buildKpiCard(
           "Sem Estoque",
           "$semEstoque itens",
           Colors.red,
           FontAwesomeIcons.ban,
+          width: cardWidth,
         ),
       ],
     );
@@ -211,11 +264,12 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     String title,
     String value,
     Color color,
-    IconData icon,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.all(20),
+    IconData icon, {
+    double width = 200,
+  }) {
+    return Container(
+      width: width,
+      padding: EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(15),
@@ -254,8 +308,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildStockTable(List<DocumentSnapshot> docs) {
@@ -375,8 +428,10 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
               IconButton(
                 icon: Icon(Icons.edit, color: Colors.grey, size: 20),
                 onPressed: () {
-                  // Implementar edição completa se necessário,
-                  // ou chamar o mesmo modal da loja
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => ProductEditorDialog(produto: doc),
+                  );
                 },
                 tooltip: "Editar Detalhes",
               ),
