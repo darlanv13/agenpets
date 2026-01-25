@@ -258,13 +258,6 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           width: cardWidth,
         ),
         _buildKpiCard(
-          "Valor em Estoque",
-          "R\$ ${valorTotal.toStringAsFixed(2)}",
-          Colors.green,
-          FontAwesomeIcons.moneyBillTrendUp,
-          width: cardWidth,
-        ),
-        _buildKpiCard(
           "Baixo Estoque",
           "$baixoEstoque alertas",
           Colors.orange,
@@ -353,21 +346,25 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: SingleChildScrollView(
-          child: DataTable(
-            headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-            dataRowMinHeight: 70,
-            dataRowMaxHeight: 70,
-            columns: [
-              DataColumn(label: Text("Produto")),
-              DataColumn(label: Text("Marca")),
-              DataColumn(label: Text("Preço Custo")),
-              DataColumn(label: Text("Preço Venda")),
-              DataColumn(label: Text("Estoque")),
-              DataColumn(label: Text("Validade")),
-              DataColumn(label: Text("Status")),
-              DataColumn(label: Text("Ações")),
-            ],
-            rows: docs.map((doc) => _buildDataRow(doc)).toList(),
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: 800),
+            child: DataTable(
+              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+              dataRowMinHeight: 70,
+              dataRowMaxHeight: 70,
+              columns: [
+                DataColumn(label: Text("Produto")),
+                DataColumn(label: Text("Marca")),
+                DataColumn(label: Text("Preço Custo")),
+                DataColumn(label: Text("Preço Venda")),
+                DataColumn(label: Text("Estoque")),
+                DataColumn(label: Text("Validade")),
+                DataColumn(label: Text("Status")),
+                DataColumn(label: Text("Ações")),
+              ],
+              rows: docs.map((doc) => _buildDataRow(doc)).toList(),
+            ),
           ),
         ),
       ),
