@@ -357,32 +357,58 @@ class _CrecheScreenState extends State<CrecheScreen> {
   // --- WIDGETS ---
 
   Widget _buildPetSelector() {
-    if (_pets.isEmpty) {
-      return Container(
-        margin: EdgeInsets.symmetric(horizontal: 20),
-        padding: EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.warning, color: Colors.amber),
-            SizedBox(width: 10),
-            Text("Nenhum pet encontrado", style: TextStyle(color: Colors.white)),
-          ],
-        ),
-      );
-    }
-
     return SizedBox(
       height: 100, // Altura dos cards
       child: ListView.separated(
         padding: EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: _pets.length,
+        itemCount: _pets.length + 1, // +1 para o botão de adicionar
         separatorBuilder: (_, __) => SizedBox(width: 15),
         itemBuilder: (context, index) {
+          // Último item: Botão "Adicionar Pet"
+          if (index == _pets.length) {
+            return GestureDetector(
+              onTap: () async {
+                // Navega para 'Meus Pets' e espera retorno para recarregar
+                await Navigator.pushNamed(context, '/meus_pets',
+                    arguments: {'cpf': _userCpf});
+                _carregarPets();
+              },
+              child: Container(
+                width: 90,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.5),
+                    width: 1,
+                    style: BorderStyle.solid,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.white24,
+                      child: Icon(Icons.add, color: Colors.white, size: 24),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Novo Pet",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // Itens Normais (Pets)
           final pet = _pets[index];
           final isSelected = pet['id'] == _petId;
 
@@ -392,7 +418,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
               duration: Duration(milliseconds: 200),
               width: 90,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.1),
+                color:
+                    isSelected ? Colors.white : Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: isSelected ? Colors.transparent : Colors.white30,
@@ -413,9 +440,13 @@ class _CrecheScreenState extends State<CrecheScreen> {
                 children: [
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: isSelected ? _corAcai.withOpacity(0.1) : Colors.white24,
+                    backgroundColor: isSelected
+                        ? _corAcai.withOpacity(0.1)
+                        : Colors.white24,
                     child: Icon(
-                      pet['tipo'] == 'gato' ? FontAwesomeIcons.cat : FontAwesomeIcons.dog,
+                      pet['tipo'] == 'gato'
+                          ? FontAwesomeIcons.cat
+                          : FontAwesomeIcons.dog,
                       color: isSelected ? _corAcai : Colors.white,
                       size: 20,
                     ),
