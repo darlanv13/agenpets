@@ -9,7 +9,8 @@ import 'views/gestao_precos_view.dart';
 import 'views/equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
-import 'views/gestao_banners_view.dart'; // <--- 1. IMPORT NOVO (Verifique se o arquivo está na pasta views)
+import 'views/gestao_banners_view.dart';
+import 'views/loja_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -24,16 +25,17 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   final Color _corAcaiEnd = Color(0xFF7B1FA2);
   final Color _corFundo = Color(0xFFF0F2F5);
 
-  // --- 2. LISTA DE TELAS ATUALIZADA ---
+  // --- LISTA DE TELAS ---
   final List<Widget> _telas = [
     DashboardView(), // 0
-    AgendaView(), // 1
-    HotelView(), // 2
-    VendaAssinaturaView(), // 3
-    GestaoPrecosView(), // 4
-    GestaoBannersView(), // 5 <--- NOVA TELA AQUI
-    EquipeView(), // 6 (Índice deslocado)
-    ConfiguracaoAgendaView(), // 7 (Índice deslocado)
+    LojaView(), // 1
+    AgendaView(), // 2
+    HotelView(), // 3
+    VendaAssinaturaView(), // 4
+    GestaoPrecosView(), // 5
+    GestaoBannersView(), // 6
+    EquipeView(), // 7
+    ConfiguracaoAgendaView(), // 8
   ];
 
   @override
@@ -124,9 +126,14 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                         "Dashboard",
                         Icons.space_dashboard_rounded,
                       ),
-                      _buildMenuItem(1, "Agenda", Icons.calendar_month_rounded),
                       _buildMenuItem(
-                        2,
+                        1,
+                        "Loja / PDV",
+                        FontAwesomeIcons.cashRegister,
+                      ),
+                      _buildMenuItem(2, "Agenda", Icons.calendar_month_rounded),
+                      _buildMenuItem(
+                        3,
                         "Hotel & Estadia",
                         FontAwesomeIcons.hotel,
                       ),
@@ -134,19 +141,18 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                       SizedBox(height: 20),
                       _buildSectionTitle("VENDAS & PRODUTOS"),
                       _buildMenuItem(
-                        3,
+                        4,
                         "Venda de Planos",
                         FontAwesomeIcons.cartShopping,
                       ),
                       _buildMenuItem(
-                        4,
+                        5,
                         "Tabela de Preços",
                         Icons.price_change_rounded,
                       ),
 
-                      // --- NOVO BOTÃO AQUI ---
                       _buildMenuItem(
-                        5,
+                        6,
                         "Banners do App",
                         Icons.view_carousel_rounded,
                       ),
@@ -154,15 +160,15 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                       SizedBox(height: 20),
                       _buildSectionTitle("ADMINISTRAÇÃO"),
                       _buildMenuItem(
-                        6,
+                        7,
                         "Equipe",
                         Icons.people_alt_rounded,
-                      ), // Atualizado para 6
+                      ),
                       _buildMenuItem(
-                        7,
+                        8,
                         "Configurações",
                         Icons.settings_rounded,
-                      ), // Atualizado para 7
+                      ),
                     ],
                   ),
                 ),
