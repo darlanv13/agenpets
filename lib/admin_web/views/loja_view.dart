@@ -29,13 +29,16 @@ class _LojaViewState extends State<LojaView> {
   String _metodoSelecionado = 'Dinheiro';
   TextEditingController _valorPagamentoCtrl = TextEditingController();
 
+  // Vendedor
+  TextEditingController _vendedorCodeCtrl = TextEditingController();
+
   // Busca
   String _filtroBusca = '';
   TextEditingController _searchCtrl = TextEditingController();
 
   // Paginação
   int _paginaAtual = 0;
-  final int _itensPorPagina = 12; // Ajuste conforme necessário
+  final int _itensPorPagina = 8; // Reduzido para caber a lista embaixo
 
   @override
   Widget build(BuildContext context) {
@@ -43,27 +46,49 @@ class _LojaViewState extends State<LojaView> {
       backgroundColor: _corFundo,
       body: Row(
         children: [
-          // ESQUERDA: CATÁLOGO DE PRODUTOS
+          // ESQUERDA: PRODUTOS (CIMA) + LISTA SELECIONADOS (BAIXO)
           Expanded(
-            flex: 5, // Area menor que antes (era 2:1, agora 5:4)
+            flex: 3,
             child: Container(
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
+                  // CABEÇALHO BUSCA
                   _buildHeader(),
                   SizedBox(height: 10),
-                  Expanded(child: _buildProductGridWithPagination()),
+
+                  // GRID DE PRODUTOS
+                  Expanded(
+                    flex: 5,
+                    child: _buildProductGridWithPagination(),
+                  ),
+
+                  Divider(height: 20, thickness: 2),
+
+                  // LISTA DE ITENS SELECIONADOS (Agora aqui embaixo)
+                  Container(
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      "ITENS NO CARRINHO",
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 12, letterSpacing: 1),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 4,
+                    child: _buildCartList(),
+                  ),
                 ],
               ),
             ),
           ),
 
-          // DIREITA: CARRINHO / CAIXA (PDV ROBUSTO)
+          // DIREITA: PDV / CHECKOUT (CONTROLES)
           Expanded(
-            flex: 4,
+            flex: 1, // Area lateral compacta e focada em valores
             child: Container(
               margin: EdgeInsets.all(20),
-              padding: EdgeInsets.all(25),
+              padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -76,59 +101,45 @@ class _LojaViewState extends State<LojaView> {
               ),
               child: Column(
                 children: [
-                  // CABEÇALHO PDV
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _corAcai.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10)
-                            ),
-                            child: Icon(FontAwesomeIcons.cashRegister, color: _corAcai, size: 20)
-                          ),
-                          SizedBox(width: 15),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "PDV / CAIXA",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                  color: _corAcai,
-                                  letterSpacing: 1.0
-                                ),
-                              ),
-                              Text("Operação de Venda", style: TextStyle(fontSize: 12, color: Colors.grey))
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (_carrinho.isNotEmpty)
-                        IconButton(
-                          icon: Icon(Icons.delete_sweep, color: Colors.red[300]),
-                          tooltip: "Limpar Carrinho",
-                          onPressed: () {
-                            setState(() {
-                              _carrinho.clear();
-                              _pagamentos.clear();
-                            });
-                          },
-                        )
-                    ],
+                   // TOTAL DESTAQUE
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: _corAcai,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [BoxShadow(color: _corAcai.withOpacity(0.4), blurRadius: 10, offset: Offset(0, 5))]
+                    ),
+                    child: Column(
+                      children: [
+                        Text("TOTAL A PAGAR", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                        SizedBox(height: 5),
+                        Text(
+                          "R\$ ${_totalCart.toStringAsFixed(2)}",
+                          style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    ),
                   ),
-                  Divider(height: 30),
 
-                  // LISTA DE ITENS
-                  Expanded(child: _buildCartList()),
+                  SizedBox(height: 20),
 
-                  Divider(height: 30),
+                  // VENDEDOR
+                  TextField(
+                    controller: _vendedorCodeCtrl,
+                    decoration: InputDecoration(
+                      labelText: "Cód. Vendedor",
+                      prefixIcon: Icon(Icons.badge, size: 20, color: Colors.grey),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 15, vertical: 0),
+                    ),
+                  ),
 
-                  // CHECKOUT
+                  SizedBox(height: 20),
+                  Divider(),
+                  SizedBox(height: 10),
+
+                  // RESUMO PAGAMENTO
                   _buildCheckoutSection(),
                 ],
               ),
@@ -149,23 +160,16 @@ class _LojaViewState extends State<LojaView> {
       ),
       child: TextField(
         controller: _searchCtrl,
-        autofocus: true, // FOCO NO LEITOR DE CÓDIGO
+        autofocus: true,
         textInputAction: TextInputAction.search,
         onChanged: (val) {
            setState(() {
              _filtroBusca = val;
-             _paginaAtual = 0; // Resetar paginação ao buscar
+             _paginaAtual = 0;
            });
         },
-        onSubmitted: (val) {
-          // Lógica para adicionar direto se encontrar match exato (comum em leitores)
-          // Implementaremos isso dentro do StreamBuilder se possível ou aqui se tivéssemos a lista.
-          // Como dependemos do stream, o ideal é o usuário ver e clicar, ou implementarmos uma busca assíncrona aqui.
-          // Para simplificar: foca de volta.
-          _searchCtrl.selection = TextSelection(baseOffset: 0, extentOffset: _searchCtrl.text.length);
-        },
         decoration: InputDecoration(
-          hintText: "LEITOR DE CÓDIGO DE BARRAS / BUSCA (F1)",
+          hintText: "LEITOR DE CÓDIGO DE BARRAS (F1)",
           hintStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[400], fontSize: 13),
           prefixIcon: Icon(Icons.qr_code_scanner, color: _corAcai),
           suffixIcon: IconButton(icon: Icon(Icons.clear), onPressed: () {
@@ -198,14 +202,6 @@ class _LojaViewState extends State<LojaView> {
             String codigo = (data['codigo_barras'] ?? '').toString();
             String marca = (data['marca'] ?? '').toString().toLowerCase();
             String busca = _filtroBusca.toLowerCase();
-
-            // Match exato de código para adicionar direto? (Opcional, mas robusto)
-            /*
-            if (codigo == _filtroBusca) {
-               // Poderia adicionar auto
-            }
-            */
-
             return nome.contains(busca) ||
                    codigo.contains(busca) ||
                    marca.contains(busca);
@@ -217,9 +213,8 @@ class _LojaViewState extends State<LojaView> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(FontAwesomeIcons.boxOpen, size: 50, color: Colors.grey[300]),
-                SizedBox(height: 15),
-                Text("Nenhum produto encontrado.", style: TextStyle(color: Colors.grey)),
+                Icon(FontAwesomeIcons.boxOpen, size: 30, color: Colors.grey[300]),
+                Text("Nada encontrado.", style: TextStyle(color: Colors.grey)),
               ],
             ),
           );
@@ -236,7 +231,7 @@ class _LojaViewState extends State<LojaView> {
 
         var paginatedDocs = docs.sublist(start, end);
 
-        // Identificar Mais Vendido (Global ou Local? Global é melhor)
+        // Identificar Mais Vendido
         String bestSellerId = '';
         int maxVendas = -1;
         for (var doc in docs) {
@@ -251,13 +246,13 @@ class _LojaViewState extends State<LojaView> {
 
         return Column(
           children: [
-            // GRID (Sem Scroll na área de produtos, usa paginação)
+            // GRID
             Expanded(
               child: GridView.builder(
-                physics: NeverScrollableScrollPhysics(), // Evita rolagem interna
+                physics: NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 160, // Cards menores
-                  childAspectRatio: 0.8, // Mais quadrado/compacto
+                  maxCrossAxisExtent: 220, // Um pouco maior já que tem mais espaço na esquerda
+                  childAspectRatio: 1.2, // Mais "wide"
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                 ),
@@ -267,26 +262,23 @@ class _LojaViewState extends State<LojaView> {
               ),
             ),
 
-            SizedBox(height: 10),
-
-            // CONTROLES DE PAGINAÇÃO
+            // PAGINAÇÃO COMPACTA
             if (totalPaginas > 1)
             Container(
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              height: 30,
+              margin: EdgeInsets.only(top: 5),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.chevron_left),
+                    icon: Icon(Icons.chevron_left, size: 20),
+                    padding: EdgeInsets.zero,
                     onPressed: _paginaAtual > 0 ? () => setState(() => _paginaAtual--) : null,
                   ),
-                  Text("Página ${_paginaAtual + 1} de $totalPaginas", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text("${_paginaAtual + 1}/$totalPaginas", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   IconButton(
-                    icon: Icon(Icons.chevron_right),
+                    icon: Icon(Icons.chevron_right, size: 20),
+                    padding: EdgeInsets.zero,
                     onPressed: _paginaAtual < totalPaginas - 1 ? () => setState(() => _paginaAtual++) : null,
                   ),
                 ],
@@ -310,6 +302,7 @@ class _LojaViewState extends State<LojaView> {
       child: Stack(
         children: [
           Container(
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
@@ -318,44 +311,37 @@ class _LojaViewState extends State<LojaView> {
               ],
               border: isBestSeller ? Border.all(color: Colors.amber, width: 2) : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isBestSeller ? Colors.amber.withOpacity(0.1) : _corAcai.withOpacity(0.05),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
-                    ),
-                    child: Center(
-                      child: FaIcon(
-                        FontAwesomeIcons.store,
-                        size: 25, // Icone menor
-                        color: isBestSeller ? Colors.amber[800] : _corAcai.withOpacity(0.5),
-                      ),
+                // Icone
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: isBestSeller ? Colors.amber.withOpacity(0.1) : _corAcai.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: FaIcon(
+                      FontAwesomeIcons.store,
+                      size: 20,
+                      color: isBestSeller ? Colors.amber[800] : _corAcai.withOpacity(0.5),
                     ),
                   ),
                 ),
+                SizedBox(width: 10),
+                // Info
                 Expanded(
-                  flex: 4,
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (marca.isNotEmpty)
-                              Text(marca.toUpperCase(), style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                            Text(nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800]), maxLines: 2, overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
-                        Text("R\$ ${preco.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: _corAcai)),
-                      ],
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                       if (marca.isNotEmpty)
+                          Text(marca.toUpperCase(), style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                       Text(nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey[800]), maxLines: 2, overflow: TextOverflow.ellipsis),
+                       SizedBox(height: 2),
+                       Text("R\$ ${preco.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: _corAcai)),
+                    ],
                   ),
                 ),
               ],
@@ -365,7 +351,7 @@ class _LojaViewState extends State<LojaView> {
             Positioned(
               top: 5,
               right: 5,
-              child: Icon(FontAwesomeIcons.trophy, size: 12, color: Colors.amber[800]),
+              child: Icon(FontAwesomeIcons.trophy, size: 10, color: Colors.amber[800]),
             ),
         ],
       ),
@@ -438,219 +424,195 @@ class _LojaViewState extends State<LojaView> {
   Widget _buildCartList() {
     if (_carrinho.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shopping_cart, size: 60, color: Colors.grey[200]),
-            SizedBox(height: 10),
-            Text("CAIXA LIVRE", style: TextStyle(color: Colors.grey[400], fontSize: 18, fontWeight: FontWeight.bold)),
-            Text("Passe os produtos", style: TextStyle(fontSize: 12, color: Colors.grey[400])),
-          ],
-        ),
+        child: Text("O carrinho está vazio.", style: TextStyle(color: Colors.grey[400])),
       );
     }
 
-    return ListView.builder(
-      itemCount: _carrinho.length,
-      itemBuilder: (ctx, i) {
-        final item = _carrinho[i];
-        return Container(
-          margin: EdgeInsets.only(bottom: 8),
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[200]!),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[200]!)
+      ),
+      child: Column(
+        children: [
+          // Header da Tabela
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(flex: 4, child: Text("PRODUTO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+                Expanded(flex: 2, child: Text("QTD", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+                Expanded(flex: 2, child: Text("UNIT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey), textAlign: TextAlign.right)),
+                Expanded(flex: 2, child: Text("TOTAL", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey), textAlign: TextAlign.right)),
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item['nome'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text("Unit: R\$ ${item['preco'].toStringAsFixed(2)}", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(5)
-                ),
-                child: Row(
-                  children: [
-                    InkWell(
-                      onTap: () => _updateQtd(i, -1),
-                      child: Padding(padding: EdgeInsets.all(5), child: Icon(Icons.remove, size: 16)),
-                    ),
-                    Text("${item['qtd']}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    InkWell(
-                      onTap: () => _updateQtd(i, 1),
-                      child: Padding(padding: EdgeInsets.all(5), child: Icon(Icons.add, size: 16)),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 80,
-                alignment: Alignment.centerRight,
-                child: Text(
-                  "R\$ ${(item['preco'] * item['qtd']).toStringAsFixed(2)}",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-              ),
-            ],
+          Divider(height: 1),
+          // Lista
+          Expanded(
+            child: ListView.separated(
+              itemCount: _carrinho.length,
+              separatorBuilder: (ctx, i) => Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final item = _carrinho[i];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text(item['nome'], style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500))
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Row(
+                          children: [
+                            InkWell(onTap: () => _updateQtd(i, -1), child: Icon(Icons.remove_circle_outline, size: 16, color: Colors.grey)),
+                            SizedBox(width: 5),
+                            Text("${item['qtd']}", style: TextStyle(fontWeight: FontWeight.bold)),
+                            SizedBox(width: 5),
+                            InkWell(onTap: () => _updateQtd(i, 1), child: Icon(Icons.add_circle_outline, size: 16, color: _corAcai)),
+                          ],
+                        )
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text("R\$ ${item['preco'].toStringAsFixed(2)}", textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Colors.grey[600]))
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text("R\$ ${(item['preco'] * item['qtd']).toStringAsFixed(2)}", textAlign: TextAlign.right, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold))
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
   Widget _buildCheckoutSection() {
-    // Se o carrinho estiver vazio, não mostra muita coisa ou desabilita
-    if (_carrinho.isEmpty) return SizedBox.shrink();
-
-    return Container(
-      // Altura dinâmica ou flexível
+    return Expanded(
       child: Column(
         children: [
-          // TOTAIS GRANDES
-          Container(
-            padding: EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey[200]!)
-            ),
-            child: Column(
-              children: [
-                _buildRowTotal("Subtotal", _totalCart, fontSize: 16),
-                Divider(),
-                _buildRowTotal("Pago", _totalPago, color: Colors.green[700], fontSize: 16),
-                _buildRowTotal("Restante", _restante, color: Colors.red[700], fontSize: 20, isBold: true),
-                if (_troco > 0)
-                  _buildRowTotal("Troco", _troco, color: Colors.blue[700], fontSize: 18, isBold: true),
-              ],
-            ),
-          ),
+          // PAGAMENTO INFO
+          _buildRowTotal("Pago", _totalPago, color: Colors.green[700]),
+          _buildRowTotal("Restante", _restante, color: Colors.red[700], isBold: true),
+          if (_troco > 0)
+            _buildRowTotal("Troco", _troco, color: Colors.blue[700], isBold: true),
 
-          SizedBox(height: 15),
+          SizedBox(height: 10),
 
-          // PAGAMENTOS
+          // INPUT PAGAMENTO COMPACTO
           if (_restante > 0 || _pagamentos.isEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Text("Adicionar Pagamento", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-              SizedBox(height: 5),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      height: 45,
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8)
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _metodoSelecionado,
-                          isExpanded: true,
-                          items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
-                              .map((e) => DropdownMenuItem(value: e, child: Text(e, style: TextStyle(fontSize: 13))))
-                              .toList(),
-                          onChanged: (v) => setState(() => _metodoSelecionado = v!),
-                        ),
-                      ),
+              Expanded(
+                flex: 3,
+                child: Container(
+                  height: 40,
+                  padding: EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(8)
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _metodoSelecionado,
+                      isExpanded: true,
+                      style: TextStyle(fontSize: 12, color: Colors.black),
+                      items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
+                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _metodoSelecionado = v!),
                     ),
                   ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      height: 45,
-                      child: TextField(
-                        controller: _valorPagamentoCtrl,
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          hintText: "R\$ 0,00",
-                          contentPadding: EdgeInsets.only(top: 5, left: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onSubmitted: (_) => _adicionarPagamento(),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 5),
-                  Container(
-                    height: 45,
-                    width: 45,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-                      ),
-                      onPressed: _adicionarPagamento,
-                      child: Icon(Icons.add, color: Colors.white),
-                    ),
-                  )
-                ],
+                ),
               ),
+              SizedBox(width: 5),
+              Expanded(
+                flex: 4,
+                child: Container(
+                  height: 40,
+                  child: TextField(
+                    controller: _valorPagamentoCtrl,
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: "R\$",
+                      contentPadding: EdgeInsets.only(top: 0, left: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onSubmitted: (_) => _adicionarPagamento(),
+                  ),
+                ),
+              ),
+              SizedBox(width: 5),
+              SizedBox(
+                height: 40,
+                width: 40,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    backgroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                  ),
+                  onPressed: _adicionarPagamento,
+                  child: Icon(Icons.add, color: Colors.white, size: 20),
+                ),
+              )
             ],
           ),
 
-          // LISTA DE PAGAMENTOS
-          if (_pagamentos.isNotEmpty) ...[
-             SizedBox(height: 10),
-             Container(
-               height: 60,
-               child: ListView.builder(
-                 itemCount: _pagamentos.length,
-                 itemBuilder: (ctx, i) {
-                   final pag = _pagamentos[i];
-                   return Padding(
-                     padding: const EdgeInsets.only(bottom: 2),
-                     child: Row(
-                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                       children: [
-                         Text("• ${pag['metodo']}", style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                         Row(
-                           children: [
-                             Text("R\$ ${pag['valor'].toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                             SizedBox(width: 5),
-                             InkWell(onTap: () => _removerPagamento(i), child: Icon(Icons.close, size: 12, color: Colors.red))
-                           ],
-                         )
-                       ],
-                     ),
-                   );
-                 },
-               ),
-             )
-          ],
+          SizedBox(height: 10),
 
-          SizedBox(height: 15),
+          // LISTA PAGAMENTOS MINI
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(5)),
+              child: ListView.builder(
+                padding: EdgeInsets.all(5),
+                itemCount: _pagamentos.length,
+                itemBuilder: (ctx, i) {
+                  final pag = _pagamentos[i];
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("${pag['metodo']}", style: TextStyle(fontSize: 11)),
+                      Row(
+                        children: [
+                          Text("R\$ ${pag['valor'].toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          SizedBox(width: 5),
+                          InkWell(onTap: () => _removerPagamento(i), child: Icon(Icons.close, size: 12, color: Colors.red))
+                        ],
+                      )
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
 
-          // BOTÃO FINALIZAR
+          SizedBox(height: 10),
+
           SizedBox(
             width: double.infinity,
-            height: 55,
+            height: 50,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _restante <= 0 ? _corAcai : Colors.grey[300],
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                elevation: _restante <= 0 ? 5 : 0,
               ),
               onPressed: (_carrinho.isNotEmpty && _restante <= 0) ? _finalizarVenda : null,
               child: Text(
-                "FINALIZAR (ENTER)",
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: _restante <= 0 ? Colors.white : Colors.grey),
+                "FINALIZAR",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _restante <= 0 ? Colors.white : Colors.grey),
               ),
             ),
           ),
@@ -659,18 +621,18 @@ class _LojaViewState extends State<LojaView> {
     );
   }
 
-  Widget _buildRowTotal(String label, double val, {Color? color, bool isBold = false, double fontSize = 14}) {
+  Widget _buildRowTotal(String label, double val, {Color? color, bool isBold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[700], fontSize: fontSize, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(label, style: TextStyle(color: Colors.grey[700], fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
           Text(
             "R\$ ${val.toStringAsFixed(2)}",
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: fontSize,
+              fontSize: 14,
               color: color ?? Colors.black87,
             ),
           ),
@@ -680,21 +642,25 @@ class _LojaViewState extends State<LojaView> {
   }
 
   void _finalizarVenda() async {
+    if (_vendedorCodeCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Informe o CÓDIGO DO VENDEDOR para finalizar.")));
+      return;
+    }
+
     try {
       WriteBatch batch = _db.batch();
 
-      // 1. Salvar venda no Firestore
       var vendaRef = _db.collection('vendas').doc();
       batch.set(vendaRef, {
         'itens': _carrinho,
         'valor_total': _totalCart,
         'pagamentos': _pagamentos,
         'troco': _troco,
+        'vendedor_codigo': _vendedorCodeCtrl.text, // Salva o vendedor
         'data_venda': FieldValue.serverTimestamp(),
         'status': 'concluido',
       });
 
-      // 2. Atualizar contagem de vendas nos produtos
       for (var item in _carrinho) {
         var prodRef = _db.collection('produtos').doc(item['id']);
         batch.update(prodRef, {
@@ -704,7 +670,6 @@ class _LojaViewState extends State<LojaView> {
 
       await batch.commit();
 
-      // Limpar carrinho e pagamentos
       setState(() {
         _carrinho.clear();
         _pagamentos.clear();
@@ -712,17 +677,15 @@ class _LojaViewState extends State<LojaView> {
         _valorPagamentoCtrl.clear();
         _searchCtrl.clear();
         _filtroBusca = '';
+        // _vendedorCodeCtrl.clear(); // Opcional: Manter o vendedor para a proxima venda? Melhor limpar por segurança.
+        _vendedorCodeCtrl.clear();
       });
-
-      // Focar busca novamente para próxima venda
-      // Idealmente usar FocusNode, mas o autofocus do header deve pegar se for reconstruido ou se usarmos requestFocus.
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("VENDA REALIZADA COM SUCESSO!"),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
         ),
       );
     } catch (e) {
