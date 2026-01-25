@@ -304,6 +304,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             Colors.orange,
                             () => _navegar('/hotel'),
                           ),
+                          _buildMenuCard(
+                            "Creche",
+                            FontAwesomeIcons.school,
+                            Colors.teal,
+                            () => _navegar('/creche'),
+                          ),
                           // --- BOTÃO NOVO: MINHAS AGENDAS ---
                           _buildMenuCard(
                             "Minhas Agendas", // Nome atualizado
