@@ -206,4 +206,50 @@ class FirebaseService {
       return []; // Se der erro, não bloqueia nada (melhor que travar)
     }
   }
+
+  // --- CRECHE ---
+  Future<Map<String, dynamic>> reservarCreche({
+    required String petId,
+    required String cpfUser,
+    required DateTime checkIn,
+    required DateTime checkOut,
+  }) async {
+    try {
+      final result = await _functions.httpsCallable('reservarCreche').call({
+        'pet_id': petId,
+        'cpf_user': cpfUser,
+        'check_in': checkIn.toIso8601String(),
+        'check_out': checkOut.toIso8601String(),
+      });
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      print("Erro detalhado reservarCreche: $e");
+      if (e is FirebaseFunctionsException) {
+        throw Exception(e.message);
+      }
+      throw Exception("Erro ao reservar creche: $e");
+    }
+  }
+
+  Future<List<DateTime>> buscarDiasLotadosCreche() async {
+    try {
+      final result =
+          await _functions.httpsCallable('obterDiasLotadosCreche').call();
+      final List<dynamic> datasStrings = result.data['dias_lotados'] ?? [];
+      return datasStrings.map((s) => DateTime.parse(s)).toList();
+    } catch (e) {
+      print("Erro ao buscar lotação creche: $e");
+      return [];
+    }
+  }
+
+  Future<double> getPrecoCreche() async {
+    try {
+      final result = await _functions.httpsCallable('obterPrecoCreche').call();
+      return (result.data['preco'] ?? 0).toDouble();
+    } catch (e) {
+      print("Erro ao buscar preço creche: $e");
+      return 0.0;
+    }
+  }
 }

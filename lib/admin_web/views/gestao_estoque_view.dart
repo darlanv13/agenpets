@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
+import '../widgets/product_editor_dialog.dart';
 
 class GestaoEstoqueView extends StatefulWidget {
   @override
@@ -66,25 +68,44 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             int estoque = (data['qtd_estoque'] ?? 0);
+            DateTime? validade;
+            if (data['data_validade'] != null) {
+              validade = (data['data_validade'] as Timestamp).toDate();
+            }
+
             if (_filtroStatus == 'Sem Estoque') return estoque <= 0;
             if (_filtroStatus == 'Baixo Estoque')
               return estoque > 0 && estoque < 5;
+            if (_filtroStatus == 'Vencidos') {
+              if (validade == null) return false;
+              return validade.isBefore(DateTime.now());
+            }
             return true;
           }).toList();
         }
 
-        // Cálculos de Resumo
+        // Cálculos de Resumo (Calcula sobre TUDO antes do filtro de status ou sobre o filtrado?
+        // Geralmente KPI é sobre o todo, mas aqui estamos iterando sobre 'docs' que já pode estar filtrado por busca.
+        // Vamos iterar sobre o resultado atual para manter consistência visual.)
         double valorTotalEstoque = 0;
         int itensBaixoEstoque = 0;
         int itensSemEstoque = 0;
+        int itensVencidos = 0;
 
         for (var doc in docs) {
           var data = doc.data() as Map<String, dynamic>;
           int estoque = (data['qtd_estoque'] ?? 0);
           double custo = (data['preco_custo'] ?? 0).toDouble();
+          DateTime? validade;
+          if (data['data_validade'] != null) {
+            validade = (data['data_validade'] as Timestamp).toDate();
+          }
 
           if (estoque <= 0) itensSemEstoque++;
           if (estoque > 0 && estoque < 5) itensBaixoEstoque++;
+          if (validade != null && validade.isBefore(DateTime.now())) {
+            itensVencidos++;
+          }
 
           valorTotalEstoque += (estoque * custo);
         }
@@ -96,6 +117,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
               valorTotalEstoque,
               itensBaixoEstoque,
               itensSemEstoque,
+              itensVencidos,
             ),
             SizedBox(height: 30),
             Expanded(child: _buildStockTable(docs)),
@@ -106,63 +128,108 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isSmall = constraints.maxWidth < 800;
+        return isSmall
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTitleSection(),
+                  SizedBox(height: 20),
+                  _buildActionsSection(isSmall: true),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildTitleSection(),
+                  _buildActionsSection(isSmall: false),
+                ],
+              );
+      },
+    );
+  }
+
+  Widget _buildTitleSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Gestão de Estoque",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: _corAcai,
+        Text(
+          "Gestão de Estoque",
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: _corAcai,
+          ),
+        ),
+        Text(
+          "Gerencie quantidades e valores do seu inventário",
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionsSection({required bool isSmall}) {
+    return Wrap(
+      spacing: 15,
+      runSpacing: 15,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        // Botão Novo Produto
+        ElevatedButton.icon(
+          icon: Icon(Icons.add, size: 18),
+          label: Text("NOVO PRODUTO"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _corAcai,
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => ProductEditorDialog(),
+            );
+          },
+        ),
+        // Filter Dropdown
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _filtroStatus,
+              items: [
+                'Todos',
+                'Baixo Estoque',
+                'Sem Estoque',
+                'Vencidos',
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) => setState(() => _filtroStatus = v!),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: isSmall ? double.infinity : 300,
+          child: TextField(
+            onChanged: (val) => setState(() => _filtroBusca = val),
+            decoration: InputDecoration(
+              hintText: "Buscar produto...",
+              prefixIcon: Icon(Icons.search, color: Colors.grey),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
               ),
             ),
-            Text(
-              "Gerencie quantidades e valores do seu inventário",
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-        Row(
-            children: [
-                // Filter Dropdown
-                Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                            value: _filtroStatus,
-                            items: ['Todos', 'Baixo Estoque', 'Sem Estoque']
-                                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                                .toList(),
-                            onChanged: (v) => setState(() => _filtroStatus = v!),
-                        ),
-                    ),
-                ),
-                SizedBox(width: 20),
-                SizedBox(
-                  width: 300,
-                  child: TextField(
-                    onChanged: (val) => setState(() => _filtroBusca = val),
-                    decoration: InputDecoration(
-                      hintText: "Buscar produto...",
-                      prefixIcon: Icon(Icons.search, color: Colors.grey),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          ),
         ),
       ],
     );
@@ -173,35 +240,46 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     double valorTotal,
     int baixoEstoque,
     int semEstoque,
+    int vencidos,
   ) {
-    return Row(
+    // Usando LayoutBuilder ou Wrap para responsividade
+    // Aqui vamos usar um Wrap com tamanhos fixos mínimos para simular o Grid responsivo
+    // Ou simplesmente usar Expanded se for Row (padrão) e mudar para Wrap/Column se pequeno.
+    // Para simplificar "dinâmico", vamos usar Wrap.
+
+    final cardWidth = 220.0;
+
+    return Wrap(
+      spacing: 20,
+      runSpacing: 20,
       children: [
         _buildKpiCard(
           "Total de Produtos",
           "$totalItens itens",
           Colors.blue,
           FontAwesomeIcons.boxesStacked,
+          width: cardWidth,
         ),
-        SizedBox(width: 20),
-        _buildKpiCard(
-          "Valor em Estoque",
-          "R\$ ${valorTotal.toStringAsFixed(2)}",
-          Colors.green,
-          FontAwesomeIcons.moneyBillTrendUp,
-        ),
-        SizedBox(width: 20),
         _buildKpiCard(
           "Baixo Estoque",
           "$baixoEstoque alertas",
           Colors.orange,
           FontAwesomeIcons.triangleExclamation,
+          width: cardWidth,
         ),
-        SizedBox(width: 20),
         _buildKpiCard(
           "Sem Estoque",
           "$semEstoque itens",
           Colors.red,
           FontAwesomeIcons.ban,
+          width: cardWidth,
+        ),
+        _buildKpiCard(
+          "Vencidos",
+          "$vencidos itens",
+          Colors.purple,
+          FontAwesomeIcons.calendarXmark,
+          width: cardWidth,
         ),
       ],
     );
@@ -211,49 +289,49 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     String title,
     String value,
     Color color,
-    IconData icon,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-          ],
-          border: Border(left: BorderSide(color: color, width: 5)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
+    IconData icon, {
+    double width = 200,
+  }) {
+    return Container(
+      width: width,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+        ],
+        border: Border(left: BorderSide(color: color, width: 5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
-                Icon(icon, color: color.withOpacity(0.5), size: 20),
-              ],
-            ),
-            SizedBox(height: 10),
-            Text(
-              value,
-              style: TextStyle(
-                color: Colors.black87,
-                fontSize: 20, // Ajustado para caber melhor
-                fontWeight: FontWeight.bold,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              Icon(icon, color: color.withOpacity(0.5), size: 20),
+            ],
+          ),
+          SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: 20, // Ajustado para caber melhor
+              fontWeight: FontWeight.bold,
             ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -271,20 +349,25 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: SingleChildScrollView(
-          child: DataTable(
-            headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-            dataRowMinHeight: 70,
-            dataRowMaxHeight: 70,
-            columns: [
-              DataColumn(label: Text("Produto")),
-              DataColumn(label: Text("Marca")),
-              DataColumn(label: Text("Preço Custo")),
-              DataColumn(label: Text("Preço Venda")),
-              DataColumn(label: Text("Estoque")),
-              DataColumn(label: Text("Status")),
-              DataColumn(label: Text("Ações")),
-            ],
-            rows: docs.map((doc) => _buildDataRow(doc)).toList(),
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: 800),
+            child: DataTable(
+              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+              dataRowMinHeight: 70,
+              dataRowMaxHeight: 70,
+              columns: [
+                DataColumn(label: Text("Produto")),
+                DataColumn(label: Text("Marca")),
+                DataColumn(label: Text("Preço Custo")),
+                DataColumn(label: Text("Preço Venda")),
+                DataColumn(label: Text("Estoque")),
+                DataColumn(label: Text("Validade")),
+                DataColumn(label: Text("Status")),
+                DataColumn(label: Text("Ações")),
+              ],
+              rows: docs.map((doc) => _buildDataRow(doc)).toList(),
+            ),
           ),
         ),
       ),
@@ -298,11 +381,20 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
     double custo = (data['preco_custo'] ?? 0).toDouble();
     double venda = (data['preco'] ?? 0).toDouble();
     int estoque = (data['qtd_estoque'] ?? 0);
+    DateTime? validade;
+    if (data['data_validade'] != null) {
+      validade = (data['data_validade'] as Timestamp).toDate();
+    }
 
     // Status
     Color statusColor = Colors.green;
     String statusText = "Em Estoque";
-    if (estoque <= 0) {
+
+    // Lógica de Prioridade de Status
+    if (validade != null && validade.isBefore(DateTime.now())) {
+      statusColor = Colors.purple;
+      statusText = "Vencido";
+    } else if (estoque <= 0) {
       statusColor = Colors.red;
       statusText = "Esgotado";
     } else if (estoque < 5) {
@@ -353,6 +445,20 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           ),
         ),
         DataCell(
+          Text(
+            validade != null ? DateFormat('dd/MM/yy').format(validade) : "-",
+            style: TextStyle(
+              color: (validade != null && validade.isBefore(DateTime.now()))
+                  ? Colors.red
+                  : Colors.black87,
+              fontWeight:
+                  (validade != null && validade.isBefore(DateTime.now()))
+                  ? FontWeight.bold
+                  : FontWeight.normal,
+            ),
+          ),
+        ),
+        DataCell(
           Container(
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -375,8 +481,10 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
               IconButton(
                 icon: Icon(Icons.edit, color: Colors.grey, size: 20),
                 onPressed: () {
-                  // Implementar edição completa se necessário, 
-                  // ou chamar o mesmo modal da loja
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => ProductEditorDialog(produto: doc),
+                  );
                 },
                 tooltip: "Editar Detalhes",
               ),
@@ -420,7 +528,8 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                     children: [
                       Expanded(
                         child: InkWell(
-                          onTap: () => setStateDialog(() => _isAdicionar = true),
+                          onTap: () =>
+                              setStateDialog(() => _isAdicionar = true),
                           child: Container(
                             padding: EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
@@ -530,10 +639,9 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                     int novoEstoque = _isAdicionar ? atual + qtd : atual - qtd;
                     if (novoEstoque < 0) novoEstoque = 0;
 
-                    await _db
-                        .collection('produtos')
-                        .doc(docId)
-                        .update({'qtd_estoque': novoEstoque});
+                    await _db.collection('produtos').doc(docId).update({
+                      'qtd_estoque': novoEstoque,
+                    });
 
                     // Idealmente aqui salvaríamos no histórico 'movimentacoes_estoque'
                     // Mas para manter simples e dentro do escopo do pedido, ficamos por aqui.

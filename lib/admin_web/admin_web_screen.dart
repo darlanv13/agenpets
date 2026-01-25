@@ -84,6 +84,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         EquipeView(), // 7
         ConfiguracaoAgendaView(), // 8
         CrecheView(), // 9
+        GestaoEstoqueView(), // 10
       ];
 
       _menuItems = [
@@ -105,7 +106,11 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
         _MenuItem("Creche", FontAwesomeIcons.dog),
-        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
+        _MenuItem(
+          "Gestão de Estoque",
+          Icons.inventory_rounded,
+          section: "ADMINISTRAÇÃO",
+        ),
       ];
     }
   }

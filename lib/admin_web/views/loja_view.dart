@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../widgets/product_editor_dialog.dart';
 
 class LojaView extends StatefulWidget {
   final bool isMaster;
@@ -33,64 +34,134 @@ class _LojaViewState extends State<LojaView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _corFundo,
-      body: Row(
-        children: [
-          // ESQUERDA: CATÁLOGO DE PRODUTOS
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  SizedBox(height: 20),
-                  Expanded(child: _buildProductGrid()),
-                ],
-              ),
-            ),
-          ),
-
-          // DIREITA: CARRINHO / CAIXA
-          Expanded(
-            flex: 1,
-            child: Container(
-              margin: EdgeInsets.all(20),
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          bool isSmall = constraints.maxWidth < 900;
+          if (isSmall) {
+            // Layout Mobile / Pequeno: Coluna
+            return Column(
+              children: [
+                // CATÁLOGO
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    padding: EdgeInsets.all(10),
+                    child: Column(
+                      children: [
+                        _buildHeader(),
+                        SizedBox(height: 10),
+                        Expanded(child: _buildProductGrid()),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Icon(FontAwesomeIcons.cashRegister, color: _corAcai),
-                      SizedBox(width: 10),
-                      Text(
-                        "Caixa / PDV",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: _corAcai,
-                        ),
+                ),
+                // CARRINHO (Menor altura ou toggle)
+                Container(
+                  height:
+                      300, // Altura fixa para carrinho em mobile por enquanto
+                  margin: EdgeInsets.all(10),
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
                       ),
                     ],
                   ),
-                  Divider(height: 30),
-                  Expanded(child: _buildCartList()),
-                  Divider(height: 30),
-                  _buildCheckoutSection(),
-                ],
-              ),
-            ),
-          ),
-        ],
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(FontAwesomeIcons.cashRegister, color: _corAcai),
+                          SizedBox(width: 10),
+                          Text(
+                            "Caixa / PDV",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _corAcai,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Divider(height: 10),
+                      Expanded(child: _buildCartList()),
+                      Divider(height: 10),
+                      _buildCheckoutSection(),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // Layout Desktop: Linha
+            return Row(
+              children: [
+                // ESQUERDA: CATÁLOGO DE PRODUTOS
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        _buildHeader(),
+                        SizedBox(height: 20),
+                        Expanded(child: _buildProductGrid()),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // DIREITA: CARRINHO / CAIXA
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    margin: EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              FontAwesomeIcons.cashRegister,
+                              color: _corAcai,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              "Caixa / PDV",
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: _corAcai,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Divider(height: 30),
+                        Expanded(child: _buildCartList()),
+                        Divider(height: 30),
+                        _buildCheckoutSection(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+        },
       ),
     );
   }
@@ -125,7 +196,12 @@ class _LojaViewState extends State<LojaView> {
                 borderRadius: BorderRadius.circular(15),
               ),
             ),
-            onPressed: () => _abrirEditorProduto(context),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => ProductEditorDialog(),
+              );
+            },
           ),
         ],
       ],
@@ -141,10 +217,23 @@ class _LojaViewState extends State<LojaView> {
 
         var docs = snapshot.data!.docs;
 
-        // Filtro local
-        if (_filtroBusca.isNotEmpty) {
-          docs = docs.where((doc) {
-            var data = doc.data() as Map<String, dynamic>;
+        // Filtro local (Busca + Validade)
+        docs = docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+
+          // Filtro de Validade: Não mostrar vencidos
+          if (data['data_validade'] != null) {
+            DateTime validade = (data['data_validade'] as Timestamp).toDate();
+            // Considera vencido se for antes de hoje (começo do dia)
+            // Ou se quiser ser estrito, antes de agora.
+            // Vamos considerar vencido se validade < hoje
+            if (validade.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
+              return false;
+            }
+          }
+
+          // Filtro de Texto
+          if (_filtroBusca.isNotEmpty) {
             String nome = (data['nome'] ?? '').toString().toLowerCase();
             String codigo = (data['codigo_barras'] ?? '').toString();
             String marca = (data['marca'] ?? '').toString().toLowerCase();
@@ -152,8 +241,10 @@ class _LojaViewState extends State<LojaView> {
             return nome.contains(busca) ||
                 codigo.contains(busca) ||
                 marca.contains(busca);
-          }).toList();
-        }
+          }
+
+          return true;
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
@@ -648,199 +739,5 @@ class _LojaViewState extends State<LojaView> {
         ),
       );
     }
-  }
-
-  // --- EDITOR DE PRODUTO (MODAL) ---
-  void _abrirEditorProduto(BuildContext context) {
-    // Controladores
-    final _nomeCtrl = TextEditingController();
-    final _marcaCtrl = TextEditingController();
-    final _codigoCtrl = TextEditingController();
-    final _custoCtrl = TextEditingController();
-    final _margemCtrl = TextEditingController();
-    final _precoCtrl = TextEditingController(); // Preço Final
-    final _estoqueCtrl = TextEditingController(text: '0');
-
-    void _calcularPrecoFinal() {
-      double custo =
-          double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-      double margem =
-          double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
-
-      if (custo > 0) {
-        double lucro = custo * (margem / 100);
-        double finalPrice = custo + lucro;
-        _precoCtrl.text = finalPrice.toStringAsFixed(2);
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: Text("Cadastrar Novo Produto"),
-        content: Container(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _nomeCtrl,
-                  decoration: InputDecoration(
-                    labelText: "Nome do Produto",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _marcaCtrl,
-                        decoration: InputDecoration(
-                          labelText: "Marca",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: TextField(
-                        controller: _codigoCtrl,
-                        decoration: InputDecoration(
-                          labelText: "Cód. Barras",
-                          prefixIcon: Icon(FontAwesomeIcons.barcode, size: 16),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _custoCtrl,
-                        keyboardType: TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: "Preço Custo (R\$)",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onChanged: (_) => _calcularPrecoFinal(),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: TextField(
-                        controller: _margemCtrl,
-                        keyboardType: TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: "Lucro (%)",
-                          suffixText: "%",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onChanged: (_) => _calcularPrecoFinal(),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _estoqueCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: "Estoque Inicial",
-                          prefixIcon: Icon(Icons.inventory_2, size: 18),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 15),
-                    Expanded(
-                      child: TextField(
-                        controller: _precoCtrl,
-                        keyboardType: TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: "Preço Final (R\$)",
-                          prefixIcon: Icon(Icons.attach_money, size: 18),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          filled: true,
-                          fillColor: Colors.green[50],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () async {
-              if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
-
-              double custo =
-                  double.tryParse(_custoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              double margem =
-                  double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              double preco =
-                  double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              int estoque = int.tryParse(_estoqueCtrl.text) ?? 0;
-
-              await _db.collection('produtos').add({
-                'nome': _nomeCtrl.text,
-                'marca': _marcaCtrl.text,
-                'codigo_barras': _codigoCtrl.text,
-                'preco_custo': custo,
-                'margem_lucro': margem,
-                'preco': preco, // Preço Final de Venda
-                'qtd_vendida': 0, // Inicializa contador
-                'qtd_estoque': estoque,
-                'criado_em': FieldValue.serverTimestamp(),
-              });
-              if (!context.mounted) return;
-              Navigator.pop(ctx);
-            },
-            child: Text("Salvar Produto"),
-          ),
-        ],
-      ),
-    );
   }
 }

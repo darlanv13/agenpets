@@ -33,6 +33,7 @@ exports.registrarPagamentoHotel = hotelController.registrarPagamentoHotel;
 // --- Módulo de Creche ---
 exports.reservarCreche = crecheController.reservarCreche;
 exports.obterDiasLotadosCreche = crecheController.obterDiasLotadosCreche;
+exports.obterPrecoCreche = crecheController.obterPrecoCreche;
 exports.realizarCheckoutCreche = crecheController.realizarCheckoutCreche;
 exports.registrarPagamentoCreche = crecheController.registrarPagamentoCreche;
 
