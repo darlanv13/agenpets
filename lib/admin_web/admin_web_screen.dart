@@ -10,6 +10,7 @@ import 'views/equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
+import 'views/gestao_estoque_view.dart';
 import 'views/loja_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
@@ -43,9 +44,10 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       HotelView(), // 3
       VendaAssinaturaView(), // 4
       GestaoPrecosView(), // 5
-      GestaoBannersView(), // 6
-      EquipeView(), // 7
-      ConfiguracaoAgendaView(), // 8
+      GestaoEstoqueView(), // 6
+      GestaoBannersView(), // 7
+      EquipeView(), // 8
+      ConfiguracaoAgendaView(), // 9
     ];
   }
 
@@ -161,18 +163,23 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                         "Tabela de Preços",
                         Icons.price_change_rounded,
                       ),
-
                       _buildMenuItem(
                         6,
+                        "Gestão de Estoque",
+                        FontAwesomeIcons.boxesStacked,
+                      ),
+
+                      _buildMenuItem(
+                        7,
                         "Banners do App",
                         Icons.view_carousel_rounded,
                       ),
 
                       SizedBox(height: 20),
                       _buildSectionTitle("ADMINISTRAÇÃO"),
-                      _buildMenuItem(7, "Equipe", Icons.people_alt_rounded),
+                      _buildMenuItem(8, "Equipe", Icons.people_alt_rounded),
                       _buildMenuItem(
-                        8,
+                        9,
                         "Configurações",
                         Icons.settings_rounded,
                       ),

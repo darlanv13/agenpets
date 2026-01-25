@@ -209,10 +209,10 @@ class _LojaViewState extends State<LojaView> {
     String nome = data['nome'] ?? 'Produto';
     String marca = data['marca'] ?? '';
     double preco = (data['preco'] ?? 0).toDouble();
-    // Foto não existe na especificação, então usamos ícone padrão
+    int estoque = (data['qtd_estoque'] ?? 0);
 
     return InkWell(
-      onTap: () => _addToCart(doc.id, data),
+      onTap: estoque > 0 ? () => _addToCart(doc.id, data) : null,
       borderRadius: BorderRadius.circular(15),
       child: Stack(
         children: [
@@ -282,6 +282,15 @@ class _LojaViewState extends State<LojaView> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       SizedBox(height: 5),
+                      Text(
+                        estoque > 0 ? "Estoque: $estoque" : "Sem Estoque",
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: estoque > 0 ? Colors.grey[600] : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 5),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -293,7 +302,10 @@ class _LojaViewState extends State<LojaView> {
                               color: _corAcai,
                             ),
                           ),
-                          Icon(Icons.add_circle, color: _corAcai, size: 24),
+                          if (estoque > 0)
+                            Icon(Icons.add_circle, color: _corAcai, size: 24)
+                          else
+                            Icon(Icons.block, color: Colors.grey, size: 24),
                         ],
                       ),
                     ],
@@ -340,8 +352,26 @@ class _LojaViewState extends State<LojaView> {
   // --- LÓGICA DO CARRINHO ---
 
   void _addToCart(String id, Map<String, dynamic> data) {
+    int estoque = (data['qtd_estoque'] ?? 0);
+    int noCarrinho = 0;
+
+    int index = _carrinho.indexWhere((item) => item['id'] == id);
+    if (index >= 0) {
+      noCarrinho = _carrinho[index]['qtd'];
+    }
+
+    if (noCarrinho + 1 > estoque) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Estoque insuficiente! Apenas $estoque itens."),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     setState(() {
-      int index = _carrinho.indexWhere((item) => item['id'] == id);
       if (index >= 0) {
         _carrinho[index]['qtd']++;
       } else {
@@ -352,12 +382,6 @@ class _LojaViewState extends State<LojaView> {
           'qtd': 1,
         });
       }
-    });
-  }
-
-  void _removeFromCart(int index) {
-    setState(() {
-      _carrinho.removeAt(index);
     });
   }
 
@@ -594,10 +618,13 @@ class _LojaViewState extends State<LojaView> {
         var prodRef = _db.collection('produtos').doc(item['id']);
         batch.update(prodRef, {
           'qtd_vendida': FieldValue.increment(item['qtd']),
+          'qtd_estoque': FieldValue.increment(-item['qtd']),
         });
       }
 
       await batch.commit();
+
+      if (!mounted) return;
 
       // Limpar carrinho
       setState(() {
@@ -632,6 +659,7 @@ class _LojaViewState extends State<LojaView> {
     final _custoCtrl = TextEditingController();
     final _margemCtrl = TextEditingController();
     final _precoCtrl = TextEditingController(); // Preço Final
+    final _estoqueCtrl = TextEditingController(text: '0');
 
     void _calcularPrecoFinal() {
       double custo =
@@ -733,18 +761,39 @@ class _LojaViewState extends State<LojaView> {
                   ],
                 ),
                 SizedBox(height: 15),
-                TextField(
-                  controller: _precoCtrl,
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: "Preço de Venda Final (R\$)",
-                    prefixIcon: Icon(Icons.attach_money, size: 18),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _estoqueCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: "Estoque Inicial",
+                          prefixIcon: Icon(Icons.inventory_2, size: 18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
                     ),
-                    filled: true,
-                    fillColor: Colors.green[50],
-                  ),
+                    SizedBox(width: 15),
+                    Expanded(
+                      child: TextField(
+                        controller: _precoCtrl,
+                        keyboardType:
+                            TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: "Preço Final (R\$)",
+                          prefixIcon: Icon(Icons.attach_money, size: 18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          filled: true,
+                          fillColor: Colors.green[50],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -771,6 +820,7 @@ class _LojaViewState extends State<LojaView> {
                   double.tryParse(_margemCtrl.text.replaceAll(',', '.')) ?? 0.0;
               double preco =
                   double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+              int estoque = int.tryParse(_estoqueCtrl.text) ?? 0;
 
               await _db.collection('produtos').add({
                 'nome': _nomeCtrl.text,
@@ -780,8 +830,10 @@ class _LojaViewState extends State<LojaView> {
                 'margem_lucro': margem,
                 'preco': preco, // Preço Final de Venda
                 'qtd_vendida': 0, // Inicializa contador
+                'qtd_estoque': estoque,
                 'criado_em': FieldValue.serverTimestamp(),
               });
+              if (!context.mounted) return;
               Navigator.pop(ctx);
             },
             child: Text("Salvar Produto"),
