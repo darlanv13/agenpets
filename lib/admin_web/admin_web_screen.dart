@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'views/dashboard_view.dart';
 import 'views/agenda_view.dart';
 import 'views/hotel_view.dart';
+import 'views/creche_view.dart';
 import 'views/gestao_precos_view.dart';
 import 'views/equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
@@ -41,11 +42,12 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       LojaView(isMaster: _isMaster), // 1 - Passando o parâmetro
       AgendaView(), // 2
       HotelView(), // 3
-      VendaAssinaturaView(), // 4
-      GestaoPrecosView(), // 5
-      GestaoBannersView(), // 6
-      EquipeView(), // 7
-      ConfiguracaoAgendaView(), // 8
+      CrecheView(), // 4
+      VendaAssinaturaView(), // 5
+      GestaoPrecosView(), // 6
+      GestaoBannersView(), // 7
+      EquipeView(), // 8
+      ConfiguracaoAgendaView(), // 9
     ];
   }
 
@@ -148,31 +150,36 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                         "Hotel & Estadia",
                         FontAwesomeIcons.hotel,
                       ),
+                      _buildMenuItem(
+                        4,
+                        "Creche / Daycare",
+                        FontAwesomeIcons.school,
+                      ),
 
                       SizedBox(height: 20),
                       _buildSectionTitle("VENDAS & PRODUTOS"),
                       _buildMenuItem(
-                        4,
+                        5,
                         "Venda de Planos",
                         FontAwesomeIcons.cartShopping,
                       ),
                       _buildMenuItem(
-                        5,
+                        6,
                         "Tabela de Preços",
                         Icons.price_change_rounded,
                       ),
 
                       _buildMenuItem(
-                        6,
+                        7,
                         "Banners do App",
                         Icons.view_carousel_rounded,
                       ),
 
                       SizedBox(height: 20),
                       _buildSectionTitle("ADMINISTRAÇÃO"),
-                      _buildMenuItem(7, "Equipe", Icons.people_alt_rounded),
+                      _buildMenuItem(8, "Equipe", Icons.people_alt_rounded),
                       _buildMenuItem(
-                        8,
+                        9,
                         "Configurações",
                         Icons.settings_rounded,
                       ),
