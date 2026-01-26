@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../services/firebase_service.dart';
 
 class HotelScreen extends StatefulWidget {
@@ -28,7 +29,13 @@ class _HotelScreenState extends State<HotelScreen> {
 
   String? _userCpf;
   String? _petId;
-  DateTimeRange? _periodoSelecionado;
+
+  // Controle do Calendário (Range)
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
+  RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.toggledOn;
+
   Set<DateTime> _diasLotados = {};
 
   bool _isLoading = false;
@@ -79,7 +86,6 @@ class _HotelScreenState extends State<HotelScreen> {
       final doc = await _db.collection('config').doc('parametros').get();
       if (doc.exists) {
         setState(() {
-          // Tenta ler 'preco_hotel_diaria', fallback para 80.0
           _valorDiaria = (doc.data()!['preco_hotel_diaria'] ?? 80.00)
               .toDouble();
         });
@@ -89,46 +95,29 @@ class _HotelScreenState extends State<HotelScreen> {
     }
   }
 
-  // --- LÓGICA DE SELEÇÃO DE DATAS ---
-  Future<void> _escolherDatas() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 90)),
-      selectableDayPredicate: (DateTime day, DateTime? start, DateTime? end) {
-        final normalizedDay = DateTime(day.year, day.month, day.day);
-        if (_diasLotados.contains(normalizedDay)) return false;
-        return true;
-      },
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            primaryColor: _corAcai,
-            colorScheme: ColorScheme.light(
-              primary: _corAcai,
-              onPrimary: Colors.white,
-              onSurface: Colors.black87,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
+  // --- AÇÕES ---
 
-    if (picked != null) {
-      // Validação: Intervalo não pode conter dias lotados no meio
+  bool _isDayLotado(DateTime day) {
+    final normalized = DateTime(day.year, day.month, day.day);
+    return _diasLotados.contains(normalized);
+  }
+
+  void _onRangeSelected(DateTime? start, DateTime? end, DateTime focusedDay) {
+    setState(() {
+      _focusedDay = focusedDay;
+      _rangeStart = start;
+      _rangeEnd = end;
+      _rangeSelectionMode = RangeSelectionMode.toggledOn;
+    });
+
+    // Validação: Intervalo não pode conter dias lotados no meio
+    if (start != null && end != null) {
       bool intervaloInvalido = false;
-      int diasNoIntervalo = picked.end.difference(picked.start).inDays;
+      int diasNoIntervalo = end.difference(start).inDays;
 
       for (int i = 0; i <= diasNoIntervalo; i++) {
-        DateTime diaVerificado = picked.start.add(Duration(days: i));
-        DateTime diaNormalizado = DateTime(
-          diaVerificado.year,
-          diaVerificado.month,
-          diaVerificado.day,
-        );
-
-        if (_diasLotados.contains(diaNormalizado)) {
+        DateTime diaVerificado = start.add(Duration(days: i));
+        if (_isDayLotado(diaVerificado)) {
           intervaloInvalido = true;
           break;
         }
@@ -138,16 +127,20 @@ class _HotelScreenState extends State<HotelScreen> {
         _mostrarErroDialog(
           "O período selecionado contém dias sem vaga.\nPor favor, escolha outras datas.",
         );
-      } else {
         setState(() {
-          _periodoSelecionado = picked;
+          _rangeStart = null;
+          _rangeEnd = null;
         });
       }
     }
   }
 
   Future<void> _fazerReserva() async {
-    if (_petId == null || _periodoSelecionado == null) return;
+    if (_petId == null || _rangeStart == null) return;
+
+    // Se só selecionou um dia (start == end ou end == null), define end = start
+    DateTime checkIn = _rangeStart!;
+    DateTime checkOut = _rangeEnd ?? _rangeStart!;
 
     setState(() => _isLoading = true);
 
@@ -155,8 +148,8 @@ class _HotelScreenState extends State<HotelScreen> {
       await _firebaseService.reservarHotel(
         petId: _petId!,
         cpfUser: _userCpf!,
-        checkIn: _periodoSelecionado!.start,
-        checkOut: _periodoSelecionado!.end,
+        checkIn: checkIn,
+        checkOut: checkOut,
       );
 
       _mostrarSucessoDialog();
@@ -168,6 +161,8 @@ class _HotelScreenState extends State<HotelScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  // --- DIALOGS ---
 
   void _mostrarSucessoDialog() {
     showDialog(
@@ -248,16 +243,25 @@ class _HotelScreenState extends State<HotelScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int dias = _periodoSelecionado?.duration.inDays ?? 0;
-    if (dias == 0 && _periodoSelecionado != null) dias = 1;
-    double total = dias * _valorDiaria;
+    // Cálculo do total
+    int dias = 0;
+    double total = 0.0;
+
+    if (_rangeStart != null) {
+      if (_rangeEnd != null) {
+        dias = _rangeEnd!.difference(_rangeStart!).inDays;
+      }
+      // Pelo menos 1 dia se selecionou start (mesmo que start==end)
+      if (dias == 0) dias = 1;
+      total = dias * _valorDiaria;
+    }
 
     return Scaffold(
       backgroundColor: _corFundo,
       appBar: AppBar(
         title: Text(
-          "Hotelzinho Pet",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          "Reservar Hotel",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         backgroundColor: _corAcai,
         elevation: 0,
@@ -273,184 +277,231 @@ class _HotelScreenState extends State<HotelScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 1. CABEÇALHO / BANNER
-                        _buildHeaderBanner(),
-
-                        SizedBox(height: 25),
-
-                        // 2. SELEÇÃO DE PET
-                        _buildSectionHeader("Quem vai se hospedar?"),
-                        SizedBox(height: 10),
-                        _buildPetList(),
-
-                        SizedBox(height: 25),
-
-                        // 3. SELEÇÃO DE DATAS
-                        _buildSectionHeader("Período da estadia"),
-                        SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: _buildDateSelector(),
+                        // 1. SELEÇÃO DE PET (HEADER CUSTOMIZADO)
+                        Container(
+                          padding: EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: _corAcai,
+                            borderRadius: BorderRadius.only(
+                              bottomLeft: Radius.circular(30),
+                              bottomRight: Radius.circular(30),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      FontAwesomeIcons.paw,
+                                      color: Colors.white70,
+                                      size: 18,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      "Quem vai se hospedar?",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 15),
+                              _buildPetSelector(),
+                            ],
+                          ),
                         ),
 
                         SizedBox(height: 25),
 
-                        // 4. RESUMO / ORÇAMENTO
-                        if (_periodoSelecionado != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: _buildSummaryCard(dias, total),
+                        // 2. CALENDÁRIO
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
                           ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Período da estadia",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Text(
+                                "Selecione a data de entrada e saída",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 15),
+                        _buildCalendar(),
 
-                        SizedBox(height: 100), // Espaço para botão
+                        SizedBox(height: 20),
+
+                        // Legenda
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                          ),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildLegendItem(
+                                _corAcai,
+                                "Selecionado",
+                              ),
+                              _buildLegendItem(
+                                Colors.red[100]!,
+                                "Lotado",
+                              ),
+                              _buildLegendItem(
+                                Colors.grey[200]!,
+                                "Disponível",
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        SizedBox(height: 100), // Espaço para o bottom sheet
                       ],
                     ),
                   ),
                 ),
               ],
             ),
-      bottomSheet: _buildBottomButton(total),
+      bottomSheet: _buildBottomSummary(dias, total),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
-      ),
-    );
-  }
+  // --- WIDGETS ---
 
-  // --- WIDGETS VISUAIS ---
-
-  Widget _buildHeaderBanner() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20, 10, 20, 30),
-      decoration: BoxDecoration(
-        color: _corAcai,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: FaIcon(
-              FontAwesomeIcons.hotel,
-              size: 40,
-              color: Colors.white,
-            ),
-          ),
-          SizedBox(height: 15),
-          Text(
-            "Hospedagem com Amor",
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          SizedBox(height: 5),
-          Text(
-            "Monitoramento 24h, brincadeiras e muito conforto para seu melhor amigo.",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPetList() {
-    if (_pets.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          padding: EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange),
-              SizedBox(width: 8),
-              Text(
-                "Nenhum pet cadastrado.",
-                style: TextStyle(color: Colors.grey[700]),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+  Widget _buildPetSelector() {
     return SizedBox(
-      height: 90,
-      child: ListView.builder(
+      height: 100, // Altura dos cards
+      child: ListView.separated(
+        padding: EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 15),
-        itemCount: _pets.length,
+        itemCount: _pets.length + 1, // +1 para o botão de adicionar
+        separatorBuilder: (_, __) => SizedBox(width: 15),
         itemBuilder: (context, index) {
+          // Último item: Botão "Adicionar Pet"
+          if (index == _pets.length) {
+            return GestureDetector(
+              onTap: () async {
+                // Navega para 'Meus Pets' e espera retorno para recarregar
+                await Navigator.pushNamed(
+                  context,
+                  '/meus_pets',
+                  arguments: {'cpf': _userCpf},
+                );
+                _carregarPets();
+              },
+              child: Container(
+                width: 90,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.5),
+                    width: 1,
+                    style: BorderStyle.solid,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.white24,
+                      child: Icon(Icons.add, color: Colors.white, size: 24),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Novo Pet",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // Itens Normais (Pets)
           final pet = _pets[index];
           final isSelected = pet['id'] == _petId;
 
           return GestureDetector(
             onTap: () => setState(() => _petId = pet['id']),
-            child: Column(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  margin: EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? _corAcai : Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? _corAcai : Colors.grey[300]!,
-                      width: 2,
+            child: AnimatedContainer(
+              duration: Duration(milliseconds: 200),
+              width: 90,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isSelected ? Colors.transparent : Colors.white30,
+                  width: 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 10,
+                          offset: Offset(0, 5),
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: isSelected
+                        ? _corAcai.withOpacity(0.1)
+                        : Colors.white24,
+                    child: Icon(
+                      pet['tipo'] == 'gato'
+                          ? FontAwesomeIcons.cat
+                          : FontAwesomeIcons.dog,
+                      color: isSelected ? _corAcai : Colors.white,
+                      size: 20,
                     ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: _corAcai.withOpacity(0.4),
-                              blurRadius: 8,
-                            ),
-                          ]
-                        : [],
                   ),
-                  child: Icon(
-                    pet['tipo'] == 'gato'
-                        ? FontAwesomeIcons.cat
-                        : FontAwesomeIcons.dog,
-                    color: isSelected ? Colors.white : Colors.grey[400],
-                    size: 24,
+                  SizedBox(height: 8),
+                  Text(
+                    pet['nome'],
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? _corAcai : Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                SizedBox(height: 5),
-                Text(
-                  pet['nome'],
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                    color: isSelected ? _corAcai : Colors.grey,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -458,247 +509,205 @@ class _HotelScreenState extends State<HotelScreen> {
     );
   }
 
-  Widget _buildDateSelector() {
-    bool hasDates = _periodoSelecionado != null;
-
-    return GestureDetector(
-      onTap: _escolherDatas,
-      child: Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(
-            color: hasDates ? _corAcai : Colors.grey[300]!,
-            width: hasDates ? 1.5 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _corLilas,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(Icons.calendar_month, color: _corAcai),
-            ),
-            SizedBox(width: 20),
-            Expanded(
-              child: !hasDates
-                  ? Text(
-                      "Toque para selecionar as datas de entrada e saída",
-                      style: TextStyle(color: Colors.grey[600]),
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Entrada",
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              Text(
-                                DateFormat(
-                                  'dd/MM/yyyy',
-                                ).format(_periodoSelecionado!.start),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          height: 30,
-                          width: 1,
-                          color: Colors.grey[300],
-                          margin: EdgeInsets.symmetric(horizontal: 10),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Saída",
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              Text(
-                                DateFormat(
-                                  'dd/MM/yyyy',
-                                ).format(_periodoSelecionado!.end),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard(int dias, double total) {
+  Widget _buildCalendar() {
     return Container(
-      padding: EdgeInsets.all(25),
+      margin: EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_corAcai, Color(0xFF6A1B9A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _corAcai.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 15,
             offset: Offset(0, 5),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Valor da Diária", style: TextStyle(color: Colors.white70)),
-              Text(
-                "R\$ ${_valorDiaria.toStringAsFixed(2)}",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+      child: TableCalendar(
+        locale: 'pt_BR',
+        firstDay: DateTime.now(),
+        lastDay: DateTime.now().add(Duration(days: 90)),
+        focusedDay: _focusedDay,
+
+        // Range Configuration
+        rangeStartDay: _rangeStart,
+        rangeEndDay: _rangeEnd,
+        rangeSelectionMode: _rangeSelectionMode,
+        onRangeSelected: _onRangeSelected,
+
+        // Disable individual days (past and blocked)
+        enabledDayPredicate: (day) {
+          if (day.isBefore(DateTime.now().subtract(Duration(days: 1))))
+            return false;
+          return !_isDayLotado(day);
+        },
+
+        // Styling (similar to Creche but adapting for Range)
+        headerStyle: HeaderStyle(
+          titleCentered: true,
+          formatButtonVisible: false,
+          titleTextStyle: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: _corAcai,
           ),
-          SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Dias selecionados",
-                style: TextStyle(color: Colors.white70),
-              ),
-              Text(
-                "$dias dias",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+        ),
+        calendarStyle: CalendarStyle(
+          todayDecoration: BoxDecoration(
+            color: _corAcai.withOpacity(0.3),
+            shape: BoxShape.circle,
           ),
-          Divider(color: Colors.white24, height: 25),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "TOTAL ESTIMADO",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-              Text(
-                "R\$ ${total.toStringAsFixed(2)}",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
-              ),
-            ],
+          todayTextStyle: TextStyle(
+            color: _corAcai,
+            fontWeight: FontWeight.bold,
           ),
-        ],
+
+          // Range Styles
+          rangeStartDecoration: BoxDecoration(
+             color: _corAcai,
+             shape: BoxShape.circle,
+          ),
+          rangeEndDecoration: BoxDecoration(
+             color: _corAcai,
+             shape: BoxShape.circle,
+          ),
+          rangeHighlightColor: _corAcai.withOpacity(0.2),
+
+          disabledTextStyle: TextStyle(color: Colors.red[200]),
+          disabledDecoration: BoxDecoration(shape: BoxShape.circle),
+        ),
+        calendarBuilders: CalendarBuilders(
+          disabledBuilder: (context, day, focusedDay) {
+            if (_isDayLotado(day)) {
+              return Center(
+                child: Container(
+                  width: 35,
+                  height: 35,
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${day.day}',
+                      style: TextStyle(
+                        color: Colors.red[300],
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+            return null;
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildBottomButton(double total) {
-    bool canSubmit =
-        _petId != null && _periodoSelecionado != null && !_isLoading;
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        SizedBox(width: 5),
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildBottomSummary(int dias, double total) {
+    bool canSubmit = _petId != null && dias > 0 && !_isLoading;
 
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 20,
             offset: Offset(0, -5),
           ),
         ],
       ),
       child: SafeArea(
-        child: SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            onPressed: canSubmit ? _fazerReserva : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green, // Botão Verde para confirmar
-              disabledBackgroundColor: Colors.grey[300],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              elevation: 0,
-            ),
-            child: _isLoading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "SOLICITAR RESERVA",
+                        "Total a Pagar",
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 12,
+                          color: Colors.grey[600],
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
                         ),
                       ),
-                      if (canSubmit) ...[
-                        SizedBox(width: 10),
-                        Container(width: 1, height: 15, color: Colors.white30),
-                        SizedBox(width: 10),
-                        Text(
-                          "R\$ ${total.toStringAsFixed(2)}",
-                          style: TextStyle(fontSize: 14, color: Colors.white),
+                      Text(
+                        "R\$ ${total.toStringAsFixed(2)}",
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: _corAcai,
                         ),
-                      ],
+                      ),
+                      Text(
+                         dias == 1
+                            ? "1 diária"
+                            : "$dias diárias",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _corAcai.withOpacity(0.7),
+                        ),
+                      ),
                     ],
                   ),
-          ),
+                ),
+                SizedBox(width: 20),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: canSubmit ? _fazerReserva : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            "RESERVAR",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
