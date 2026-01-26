@@ -161,7 +161,7 @@ exports.obterPrecoCreche = onCall(async (request) => {
     try {
         const doc = await db.collection("config").doc("parametros").get();
         if (doc.exists) {
-            return { preco: Number(doc.data().preco_creche_diaria || 0) };
+            return { preco: Number(doc.data().preco_creche || 0) };
         }
         return { preco: 0 };
     } catch (error) {
@@ -213,7 +213,7 @@ exports.realizarCheckoutCreche = onCall(async (request) => {
 
     // 1. Cálculos de Custo (Diária + Extras)
     const configDoc = await db.collection("config").doc("parametros").get();
-    const valorDiaria = configDoc.exists ? (configDoc.data().preco_creche_diaria || 0) : 0;
+    const valorDiaria = configDoc.exists ? (configDoc.data().preco_creche || 0) : 0;
 
     const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
     const dataCheckOut = new Date();

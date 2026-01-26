@@ -45,7 +45,7 @@ class _CrecheViewState extends State<CrecheView> {
     final doc = await _db.collection('config').doc('parametros').get();
     if (doc.exists) {
       setState(() {
-        _precoDiariaCache = (doc.data()?['preco_creche_diaria'] ?? 0)
+        _precoDiariaCache = (doc.data()?['preco_creche'] ?? 0)
             .toDouble();
       });
     }
