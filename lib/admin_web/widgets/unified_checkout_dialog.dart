@@ -393,27 +393,37 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
 
             // RIGHT: PAYMENT & VOUCHERS
             Expanded(
-              flex: 4,
+              flex: 5,
               child: Container(
                 color: Colors.grey[50],
                 padding: EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      "Pagamento & Vouchers",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Pagamento & Vouchers",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, color: Colors.grey),
+                          onPressed: () => Navigator.pop(context),
+                          tooltip: "Fechar",
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 15),
+                    SizedBox(height: 8),
 
                     // VOUCHERS SECTION
                     if (_voucherConsumedPreviously)
                       Container(
-                        padding: EdgeInsets.all(12),
-                        margin: EdgeInsets.only(bottom: 15),
+                        padding: EdgeInsets.all(10),
+                        margin: EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: Colors.green[50],
                           borderRadius: BorderRadius.circular(10),
@@ -462,8 +472,8 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                       ),
                       SizedBox(height: 8),
                       Container(
-                        height: 140, // Scrollable Area fixed height
-                        margin: EdgeInsets.only(bottom: 15),
+                        height: 100, // Scrollable Area fixed height
+                        margin: EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
@@ -605,10 +615,10 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                       ),
                       color: Colors.blue,
                     ),
-                    SizedBox(height: 10),
+                    SizedBox(height: 5),
 
                     Container(
-                      padding: EdgeInsets.all(10),
+                      padding: EdgeInsets.all(5),
                       decoration: BoxDecoration(
                         color: _remainingToPay <= 0.01
                             ? Colors.green[100]

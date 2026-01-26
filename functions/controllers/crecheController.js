@@ -5,50 +5,91 @@ const { db, admin } = require("../config/firebase");
 exports.reservarCreche = onCall(async (request) => {
     try {
         console.log("Iniciando reserva creche...", request.data);
-        const { check_in, check_out, pet_id, cpf_user } = request.data;
+        const { dates, pet_id, cpf_user } = request.data;
 
-        // Converte strings para Objetos Date
-        const start = new Date(check_in);
-        const end = new Date(check_out);
-
-        const reservasRef = db.collection("reservas_creche");
-
-        // Só usamos filtro de desigualdade (>) no check_out.
-        const snapshot = await reservasRef
-            .where("status", "in", ["reservado", "hospedado"])
-            .where("check_out", ">", start)
-            .get();
-
-        let vagasOcupadas = 0;
-
-        snapshot.forEach(doc => {
-            const r = doc.data();
-            const rIn = r.check_in.toDate();
-
-            // A filtragem do check_in é feita aqui no código (Javascript), não no banco
-            if (rIn < end) {
-                vagasOcupadas++;
-            }
-        });
-
-        console.log(`Vagas creche ocupadas detectadas: ${vagasOcupadas}`);
-
-        // Capacidade da creche pode ser diferente do hotel
-        if (vagasOcupadas >= 60) {
-            throw new HttpsError('resource-exhausted', 'Creche lotada para este período.');
+        if (!dates || !Array.isArray(dates) || dates.length === 0) {
+            throw new HttpsError('invalid-argument', 'Nenhuma data selecionada.');
         }
 
-        // Criar a reserva
-        await reservasRef.add({
-            cpf_user,
-            pet_id,
-            check_in: admin.firestore.Timestamp.fromDate(start),
-            check_out: admin.firestore.Timestamp.fromDate(end),
-            status: 'reservado',
-            payment_status: 'pending',
-            created_at: admin.firestore.FieldValue.serverTimestamp(),
-            origem: 'app_cliente'
-        });
+        const reservasRef = db.collection("reservas_creche");
+        const userRef = db.collection("users").doc(cpf_user);
+
+        // 1. Verificar Vouchers Disponíveis
+        const userDoc = await userRef.get();
+        let vouchersDisponiveis = 0;
+        if (userDoc.exists) {
+            vouchersDisponiveis = userDoc.data().vouchers_creche || 0;
+        }
+
+        let vouchersAUsar = 0;
+        if (vouchersDisponiveis > 0) {
+            vouchersAUsar = Math.min(dates.length, vouchersDisponiveis);
+        }
+
+        // 2. Processar disponibilidade para cada data
+        for (const dateStr of dates) {
+            const dayStart = startOfDay(new Date(dateStr));
+            const dayEnd = addDays(dayStart, 1);
+
+            const snapshot = await reservasRef
+                .where("status", "in", ["reservado", "hospedado"])
+                .where("check_out", ">", dayStart)
+                .get();
+
+            let vagasOcupadas = 0;
+            snapshot.forEach(doc => {
+                const r = doc.data();
+                const rIn = r.check_in.toDate();
+                if (rIn < dayEnd) {
+                    vagasOcupadas++;
+                }
+            });
+
+            if (vagasOcupadas >= 60) {
+                throw new HttpsError('resource-exhausted', `Creche lotada para o dia ${format(dayStart, 'dd/MM/yyyy')}.`);
+            }
+        }
+
+        // 3. Criar Reservas e Deduzir Vouchers
+        const batch = db.batch();
+
+        if (vouchersAUsar > 0) {
+            batch.update(userRef, {
+                vouchers_creche: admin.firestore.FieldValue.increment(-vouchersAUsar)
+            });
+        }
+
+        let vouchersRestantesParaAplicar = vouchersAUsar;
+
+        for (const dateStr of dates) {
+            const dayStart = startOfDay(new Date(dateStr));
+            // check_in = 00:00, check_out = 23:59:59 para garantir compatibilidade com queries
+            const startTimestamp = admin.firestore.Timestamp.fromDate(dayStart);
+            const endTimestamp = admin.firestore.Timestamp.fromDate(new Date(dayStart.getTime() + 86399000));
+
+            const newReservaRef = reservasRef.doc();
+
+            let paymentStatus = 'pending';
+
+            if (vouchersRestantesParaAplicar > 0) {
+                paymentStatus = 'paid_voucher';
+                vouchersRestantesParaAplicar--;
+            }
+
+            batch.set(newReservaRef, {
+                cpf_user,
+                pet_id,
+                check_in: startTimestamp,
+                check_out: endTimestamp,
+                status: 'reservado',
+                payment_status: paymentStatus,
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                origem: 'app_cliente',
+                pago_com_voucher: paymentStatus === 'paid_voucher'
+            });
+        }
+
+        await batch.commit();
 
         return { success: true };
 
@@ -120,7 +161,7 @@ exports.obterPrecoCreche = onCall(async (request) => {
     try {
         const doc = await db.collection("config").doc("parametros").get();
         if (doc.exists) {
-            return { preco: Number(doc.data().preco_creche_diaria || 0) };
+            return { preco: Number(doc.data().preco_creche || 0) };
         }
         return { preco: 0 };
     } catch (error) {
@@ -172,7 +213,7 @@ exports.realizarCheckoutCreche = onCall(async (request) => {
 
     // 1. Cálculos de Custo (Diária + Extras)
     const configDoc = await db.collection("config").doc("parametros").get();
-    const valorDiaria = configDoc.exists ? (configDoc.data().preco_creche_diaria || 0) : 0;
+    const valorDiaria = configDoc.exists ? (configDoc.data().preco_creche || 0) : 0;
 
     const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
     const dataCheckOut = new Date();
