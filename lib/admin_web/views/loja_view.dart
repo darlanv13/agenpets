@@ -23,6 +23,7 @@ class _LojaViewState extends State<LojaView> {
 
   // Carrinho
   List<Map<String, dynamic>> _carrinho = [];
+  final ScrollController _cartScrollCtrl = ScrollController();
 
   // Pagamentos Multiplos
   List<Map<String, dynamic>> _pagamentos = [];
@@ -32,13 +33,32 @@ class _LojaViewState extends State<LojaView> {
   // Vendedor
   TextEditingController _vendedorCodeCtrl = TextEditingController();
 
-  // Busca
+  // Busca e Foco
   String _filtroBusca = '';
   TextEditingController _searchCtrl = TextEditingController();
+  FocusNode _searchFocus = FocusNode();
 
   // Paginação
-  int _paginaAtual = 0;
   final int _itensPorPagina = 4;
+
+  @override
+  void initState() {
+    super.initState();
+    // Garante foco inicial no campo de busca
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _cartScrollCtrl.dispose();
+    _valorPagamentoCtrl.dispose();
+    _vendedorCodeCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +73,7 @@ class _LojaViewState extends State<LojaView> {
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
+                  // CABEÇALHO BUSCA (SCANNER)
                   _buildHeader(),
                   SizedBox(height: 10),
 
@@ -67,12 +88,21 @@ class _LojaViewState extends State<LojaView> {
                   Container(
                     alignment: Alignment.centerLeft,
                     padding: EdgeInsets.only(bottom: 10),
-                    child: Text(
-                      "ITENS NO CARRINHO",
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 14, letterSpacing: 1),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "ITENS NO CARRINHO",
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600], fontSize: 14, letterSpacing: 1),
+                        ),
+                        Text(
+                          "${_carrinho.length} itens",
+                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                        ),
+                      ],
                     ),
                   ),
-                  // LISTA (MENOR PROPORCIONALMENTE MAS VISIVEL)
+                  // LISTA DE CARRINHO
                   Expanded(
                     flex: 3,
                     child: _buildCartList(),
@@ -84,10 +114,10 @@ class _LojaViewState extends State<LojaView> {
 
           // DIREITA: PDV / CHECKOUT (AUMENTADO)
           Expanded(
-            flex: 2, // AUMENTADO (Era 1, agora é 2 em relação a 3 -> 40% da tela)
+            flex: 2,
             child: Container(
               margin: EdgeInsets.all(20),
-              padding: EdgeInsets.all(25), // Mais padding
+              padding: EdgeInsets.all(25),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -105,7 +135,11 @@ class _LojaViewState extends State<LojaView> {
                     width: double.infinity,
                     padding: EdgeInsets.all(30),
                     decoration: BoxDecoration(
-                      color: _corAcai,
+                      gradient: LinearGradient(
+                        colors: [_corAcai, Color(0xFF6A1B9A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [BoxShadow(color: _corAcai.withValues(alpha: 0.4), blurRadius: 10, offset: Offset(0, 5))]
                     ),
@@ -132,7 +166,7 @@ class _LojaViewState extends State<LojaView> {
                     style: TextStyle(fontSize: 18),
                     decoration: InputDecoration(
                       labelText: "CÓDIGO DO VENDEDOR",
-                      labelStyle: TextStyle(fontWeight: FontWeight.bold),
+                      labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       prefixIcon: Icon(Icons.badge, size: 28, color: Colors.grey),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
                       contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -156,38 +190,91 @@ class _LojaViewState extends State<LojaView> {
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.all(5),
+      padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)]
+        border: Border.all(color: _corAcai.withValues(alpha: 0.2), width: 2),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 4))]
       ),
       child: TextField(
         controller: _searchCtrl,
-        autofocus: true,
-        textInputAction: TextInputAction.search,
+        focusNode: _searchFocus, // Controle de Foco
+        textInputAction: TextInputAction.go, // Botão de ação "Ir"
         onChanged: (val) {
-           setState(() {
-             _filtroBusca = val;
-             _paginaAtual = 0;
-           });
+           setState(() => _filtroBusca = val);
         },
-        style: TextStyle(fontSize: 18),
+        onSubmitted: (val) => _handleScanSubmit(val),
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
-          hintText: "LEITOR DE CÓDIGO (F1)",
+          hintText: "ESCANEIE O CÓDIGO DE BARRAS...",
           hintStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[400], fontSize: 16),
           prefixIcon: Icon(Icons.qr_code_scanner, color: _corAcai, size: 30),
-          suffixIcon: IconButton(icon: Icon(Icons.clear), onPressed: () {
-            setState(() {
-              _searchCtrl.clear();
-              _filtroBusca = '';
-            });
-          }),
+          suffixIcon: IconButton(
+            icon: Icon(Icons.clear),
+            onPressed: () {
+              setState(() {
+                _searchCtrl.clear();
+                _filtroBusca = '';
+                _searchFocus.requestFocus();
+              });
+            }
+          ),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          contentPadding: EdgeInsets.symmetric(vertical: 20),
         ),
       ),
     );
+  }
+
+  // Lógica "Scan & Add"
+  Future<void> _handleScanSubmit(String value) async {
+    if (value.isEmpty) {
+      _searchFocus.requestFocus();
+      return;
+    }
+
+    try {
+      // 1. Tenta buscar por Código de Barras Exato
+      var queryBarra = await _db.collection('produtos')
+          .where('codigo_barras', isEqualTo: value)
+          .limit(1)
+          .get();
+
+      if (queryBarra.docs.isNotEmpty) {
+        var doc = queryBarra.docs.first;
+        _addToCart(doc.id, doc.data());
+        _clearAndRefocus();
+        return;
+      }
+
+      // 2. Se não achou, tenta por Nome Exato (caso digite)
+      // Nota: Firestore é Case Sensitive por padrão. Para busca robusta por nome, o ideal é o Grid.
+      // Mas "Enter" deve ser ação rápida.
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Produto não encontrado pelo código: $value"),
+          backgroundColor: Colors.redAccent,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Mantém o texto para correção, mas seleciona tudo para facilitar redigitar
+      _searchCtrl.selection = TextSelection(baseOffset: 0, extentOffset: _searchCtrl.text.length);
+      _searchFocus.requestFocus();
+
+    } catch (e) {
+      print("Erro ao buscar: $e");
+    }
+  }
+
+  void _clearAndRefocus() {
+    setState(() {
+      _searchCtrl.clear();
+      _filtroBusca = '';
+    });
+    _searchFocus.requestFocus();
   }
 
   Widget _buildProductGridWithPagination() {
@@ -224,16 +311,10 @@ class _LojaViewState extends State<LojaView> {
           );
         }
 
-        int totalItens = docs.length;
-        int totalPaginas = (totalItens / _itensPorPagina).ceil();
-        if (_paginaAtual >= totalPaginas) _paginaAtual = 0;
+        // LIMITA A 4 ITENS INICIAIS COMO SOLICITADO
+        var displayDocs = docs.take(_itensPorPagina).toList();
 
-        int start = _paginaAtual * _itensPorPagina;
-        int end = start + _itensPorPagina;
-        if (end > totalItens) end = totalItens;
-
-        var paginatedDocs = docs.sublist(start, end);
-
+        // Identificar Mais Vendido
         String bestSellerId = '';
         int maxVendas = -1;
         for (var doc in docs) {
@@ -252,47 +333,18 @@ class _LojaViewState extends State<LojaView> {
               child: GridView.builder(
                 physics: NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 4 por linha, 1 linha = 4 itens
-                  childAspectRatio: 2.9, // Cards bem largos e grandes
+                  crossAxisCount: 2, // 2 por linha
+                  childAspectRatio: 2.9, // Cards largos
                   crossAxisSpacing: 15,
                   mainAxisSpacing: 15,
                 ),
-                itemCount: paginatedDocs.length,
+                itemCount: displayDocs.length,
                 itemBuilder: (ctx, i) => _buildProductCard(
-                  paginatedDocs[i],
-                  paginatedDocs[i].id == bestSellerId,
+                  displayDocs[i],
+                  displayDocs[i].id == bestSellerId,
                 ),
               ),
             ),
-
-            if (totalPaginas > 1)
-            Container(
-              height: 40,
-              margin: EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.chevron_left, size: 24),
-                    onPressed: _paginaAtual > 0 ? () => setState(() => _paginaAtual--) : null,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: Text("${_paginaAtual + 1} / $totalPaginas", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.chevron_right, size: 24),
-                    onPressed: _paginaAtual < totalPaginas - 1 ? () => setState(() => _paginaAtual++) : null,
-                  ),
-                ],
-              ),
-            )
           ],
         );
       },
@@ -306,7 +358,10 @@ class _LojaViewState extends State<LojaView> {
     double preco = (data['preco'] ?? 0).toDouble();
 
     return InkWell(
-      onTap: () => _addToCart(doc.id, data),
+      onTap: () {
+        _addToCart(doc.id, data);
+        _clearAndRefocus(); // Ao clicar, também limpa a busca para nova ação
+      },
       borderRadius: BorderRadius.circular(15),
       child: Stack(
         children: [
@@ -380,6 +435,16 @@ class _LojaViewState extends State<LojaView> {
           'preco': data['preco'],
           'qtd': 1,
         });
+        // Scroll to bottom when new item added
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_cartScrollCtrl.hasClients) {
+            _cartScrollCtrl.animateTo(
+              _cartScrollCtrl.position.maxScrollExtent,
+              duration: Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
       }
     });
   }
@@ -432,7 +497,13 @@ class _LojaViewState extends State<LojaView> {
   Widget _buildCartList() {
     if (_carrinho.isEmpty) {
       return Center(
-        child: Text("O carrinho está vazio.", style: TextStyle(color: Colors.grey[400], fontSize: 16)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.shopping_basket_outlined, size: 40, color: Colors.grey[300]),
+            Text("Aguardando produtos...", style: TextStyle(color: Colors.grey[400], fontSize: 16)),
+          ],
+        ),
       );
     }
 
@@ -457,6 +528,7 @@ class _LojaViewState extends State<LojaView> {
           Divider(height: 1),
           Expanded(
             child: ListView.separated(
+              controller: _cartScrollCtrl,
               itemCount: _carrinho.length,
               separatorBuilder: (ctx, i) => Divider(height: 1),
               itemBuilder: (ctx, i) {
@@ -683,6 +755,7 @@ class _LojaViewState extends State<LojaView> {
         _filtroBusca = '';
         _vendedorCodeCtrl.clear();
       });
+      _searchFocus.requestFocus();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
