@@ -18,7 +18,8 @@ exports.realizarCheckout = onCall(async (request) => {
             metodoPagamento,
             vouchersParaUsar,
             responsavel,
-            apenasMarcarComoPronto // <--- NOVO PARÂMETRO
+            apenasMarcarComoPronto, // <--- NOVO PARÂMETRO
+            produtos // <--- NOVO: Lista de produtos [{id, qtd}]
         } = request.data;
 
         if (!agendamentoId) throw new HttpsError('invalid-argument', 'ID obrigatório');
@@ -110,6 +111,43 @@ exports.realizarCheckout = onCall(async (request) => {
             }
         }
 
+        // 3. Processa Produtos (Store Integration)
+        let produtosConsumidos = [];
+        const batch = db.batch(); // Já usamos batch, vamos aproveitar
+
+        if (produtos && produtos.length > 0) {
+            for (const item of produtos) {
+                if (!item.id || !item.qtd) continue;
+
+                const prodRef = db.collection('produtos').doc(item.id);
+                const prodDoc = await prodRef.get();
+
+                if (prodDoc.exists) {
+                    const prodData = prodDoc.data();
+                    const preco = Number(prodData.preco || 0);
+                    const qtd = Number(item.qtd);
+
+                    const subtotal = preco * qtd;
+                    valorFinal += subtotal;
+
+                    produtosConsumidos.push({
+                        id: item.id,
+                        nome: prodData.nome,
+                        qtd: qtd,
+                        precoUnitario: preco,
+                        subtotal: subtotal,
+                        adicionado_em: admin.firestore.Timestamp.now()
+                    });
+
+                    // Atualiza Estoque (Decrementa Estoque, Incrementa Vendas)
+                    batch.update(prodRef, {
+                        qtd_estoque: admin.firestore.FieldValue.increment(-qtd),
+                        qtd_vendida: admin.firestore.FieldValue.increment(qtd)
+                    });
+                }
+            }
+        }
+
         // --- DEFINIÇÃO DE STATUS ---
         // Se apenasMarcarComoPronto for true (App Profissional), o status vira 'pronto'.
         // Caso contrário (Painel Caixa), vira 'concluido'.
@@ -131,7 +169,7 @@ exports.realizarCheckout = onCall(async (request) => {
             : (dadosAgendamento.metodo_pagamento || 'voucher');
 
         // Atualiza Banco
-        const batch = db.batch();
+        // Nota: O batch já foi inicializado acima para produtos
         batch.update(agendamentoRef, {
             status: novoStatus,
             status_pagamento: statusPagamento,
@@ -139,6 +177,7 @@ exports.realizarCheckout = onCall(async (request) => {
             valor_final_cobrado: valorFinal,
             vouchers_consumidos: vouchersConsumidosLog,
             extras: todosExtras,
+            produtos_consumidos: produtosConsumidos, // Salva os produtos
             usou_voucher: usouVoucherBase,
             // Só data final se for concluído mesmo
             ...(novoStatus === 'concluido' ? { finalizado_em: admin.firestore.FieldValue.serverTimestamp() } : {})

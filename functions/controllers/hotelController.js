@@ -222,7 +222,7 @@ exports.registrarPagamentoHotel = onCall(async (request) => {
 
 // --- ATUALIZADO: Checkout Hotel (Considerando saldo já pago) ---
 exports.realizarCheckoutHotel = onCall(async (request) => {
-    const { reservaId, extrasIds, metodoPagamentoDiferenca } = request.data;
+    const { reservaId, extrasIds, metodoPagamentoDiferenca, produtos } = request.data;
 
     const reservaRef = db.collection('reservas_hotel').doc(reservaId);
     const reservaSnap = await reservaRef.get();
@@ -254,7 +254,43 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
         }
     }
 
-    const valorTotalServico = custoDiarias + custoExtras;
+    // --- PROCESSAMENTO DE PRODUTOS ---
+    let custoProdutos = 0;
+    let produtosConsumidos = [];
+    const batch = db.batch();
+
+    if (produtos && produtos.length > 0) {
+        for (const item of produtos) {
+            if (!item.id || !item.qtd) continue;
+
+            const prodRef = db.collection('produtos').doc(item.id);
+            const prodDoc = await prodRef.get();
+
+            if (prodDoc.exists) {
+                const prodData = prodDoc.data();
+                const p = Number(prodData.preco || 0);
+                const qtd = Number(item.qtd);
+                const subtotal = p * qtd;
+
+                custoProdutos += subtotal;
+                produtosConsumidos.push({
+                    id: item.id,
+                    nome: prodData.nome,
+                    qtd: qtd,
+                    precoUnitario: p,
+                    subtotal: subtotal
+                });
+
+                // Atualiza Estoque
+                batch.update(prodRef, {
+                    qtd_estoque: admin.firestore.FieldValue.increment(-qtd),
+                    qtd_vendida: admin.firestore.FieldValue.increment(qtd)
+                });
+            }
+        }
+    }
+
+    const valorTotalServico = custoDiarias + custoExtras + custoProdutos;
     const valorJaPago = Number(dadosReserva.valor_pago || 0);
 
     // AQUI ESTÁ O SEGULRO: Calculamos a diferença
@@ -266,8 +302,8 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
         // O frontend deve tratar isso, mas aqui garantimos
     }
 
-    // Atualização Final
-    await reservaRef.update({
+    // Atualização Final (Usando Batch)
+    batch.update(reservaRef, {
         status: 'concluido',
         payment_status: valorRestanteAPagar <= 0 ? 'paid' : 'pending_audit', // Se pagou tudo, ok
         check_out_real: admin.firestore.FieldValue.serverTimestamp(),
@@ -281,7 +317,10 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
         metodo_pagamento_final: metodoPagamentoDiferenca || 'ja_pago', // Registra como pagou o resto
 
         extras_consumidos: extrasProcessados,
+        produtos_consumidos: produtosConsumidos, // Salva produtos
     });
+
+    await batch.commit();
 
     return {
         sucesso: true,
