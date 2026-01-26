@@ -106,11 +106,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
         _MenuItem("Creche", FontAwesomeIcons.dog),
-        _MenuItem(
-          "Gestão de Estoque",
-          Icons.inventory_rounded,
-          section: "ADMINISTRAÇÃO",
-        ),
+        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
       ];
     }
   }

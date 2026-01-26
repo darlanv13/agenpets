@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../widgets/product_editor_dialog.dart';
 
 class LojaView extends StatefulWidget {
   final bool isMaster;
@@ -24,191 +23,208 @@ class _LojaViewState extends State<LojaView> {
 
   // Carrinho
   List<Map<String, dynamic>> _carrinho = [];
-  String _metodoPagamento = 'Dinheiro';
-  double _valorRecebido = 0.0;
+
+  // Pagamentos Multiplos
+  List<Map<String, dynamic>> _pagamentos = [];
+  String _metodoSelecionado = 'Dinheiro';
+  TextEditingController _valorPagamentoCtrl = TextEditingController();
+
+  // Vendedor
+  TextEditingController _vendedorCodeCtrl = TextEditingController();
 
   // Busca
   String _filtroBusca = '';
+  TextEditingController _searchCtrl = TextEditingController();
+
+  // Paginação
+  int _paginaAtual = 0;
+  final int _itensPorPagina = 4;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _corFundo,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          bool isSmall = constraints.maxWidth < 900;
-          if (isSmall) {
-            // Layout Mobile / Pequeno: Coluna
-            return Column(
-              children: [
-                // CATÁLOGO
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    padding: EdgeInsets.all(10),
-                    child: Column(
-                      children: [
-                        _buildHeader(),
-                        SizedBox(height: 10),
-                        Expanded(child: _buildProductGrid()),
-                      ],
-                    ),
-                  ),
-                ),
-                // CARRINHO (Menor altura ou toggle)
-                Container(
-                  height:
-                      300, // Altura fixa para carrinho em mobile por enquanto
-                  margin: EdgeInsets.all(10),
-                  padding: EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Icon(FontAwesomeIcons.cashRegister, color: _corAcai),
-                          SizedBox(width: 10),
-                          Text(
-                            "Caixa / PDV",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _corAcai,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Divider(height: 10),
-                      Expanded(child: _buildCartList()),
-                      Divider(height: 10),
-                      _buildCheckoutSection(),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          } else {
-            // Layout Desktop: Linha
-            return Row(
-              children: [
-                // ESQUERDA: CATÁLOGO DE PRODUTOS
-                Expanded(
-                  flex: 2,
-                  child: Container(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        _buildHeader(),
-                        SizedBox(height: 20),
-                        Expanded(child: _buildProductGrid()),
-                      ],
-                    ),
-                  ),
-                ),
+      body: Row(
+        children: [
+          // ESQUERDA: PRODUTOS + LISTA
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  SizedBox(height: 10),
 
-                // DIREITA: CARRINHO / CAIXA
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    margin: EdgeInsets.all(20),
-                    padding: EdgeInsets.all(20),
+                  // GRID DE PRODUTOS (AREA MAIOR PARA OS CARDS)
+                  Expanded(flex: 4, child: _buildProductGridWithPagination()),
+
+                  Divider(height: 20, thickness: 2),
+
+                  Container(
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      "ITENS NO CARRINHO",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  // LISTA (MENOR PROPORCIONALMENTE MAS VISIVEL)
+                  Expanded(flex: 3, child: _buildCartList()),
+                ],
+              ),
+            ),
+          ),
+
+          // DIREITA: PDV / CHECKOUT (AUMENTADO)
+          Expanded(
+            flex:
+                2, // AUMENTADO (Era 1, agora é 2 em relação a 3 -> 40% da tela)
+            child: Container(
+              margin: EdgeInsets.all(20),
+              padding: EdgeInsets.all(25), // Mais padding
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // TOTAL DESTAQUE GIGANTE
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(30),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: _corAcai,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: _corAcai.withValues(alpha: 0.4),
                           blurRadius: 10,
+                          offset: Offset(0, 5),
                         ),
                       ],
                     ),
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              FontAwesomeIcons.cashRegister,
-                              color: _corAcai,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              "Caixa / PDV",
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: _corAcai,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          "TOTAL A PAGAR",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                        Divider(height: 30),
-                        Expanded(child: _buildCartList()),
-                        Divider(height: 30),
-                        _buildCheckoutSection(),
+                        SizedBox(height: 10),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "R\$ ${_totalCart.toStringAsFixed(2)}",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 50,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            );
-          }
-        },
+
+                  SizedBox(height: 30),
+
+                  // VENDEDOR MAIOR
+                  TextField(
+                    controller: _vendedorCodeCtrl,
+                    style: TextStyle(fontSize: 18),
+                    decoration: InputDecoration(
+                      labelText: "CÓDIGO DO VENDEDOR",
+                      labelStyle: TextStyle(fontWeight: FontWeight.bold),
+                      prefixIcon: Icon(
+                        Icons.badge,
+                        size: 28,
+                        color: Colors.grey,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 20,
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: 20),
+                  Divider(),
+                  SizedBox(height: 10),
+
+                  // RESUMO PAGAMENTO
+                  _buildCheckoutSection(),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            onChanged: (val) => setState(() => _filtroBusca = val),
-            decoration: InputDecoration(
-              hintText: "Buscar produto por nome, código ou marca...",
-              prefixIcon: Icon(Icons.search, color: Colors.grey),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
-                borderSide: BorderSide.none,
-              ),
-            ),
+    return Container(
+      padding: EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+      ),
+      child: TextField(
+        controller: _searchCtrl,
+        autofocus: true,
+        textInputAction: TextInputAction.search,
+        onChanged: (val) {
+          setState(() {
+            _filtroBusca = val;
+            _paginaAtual = 0;
+          });
+        },
+        style: TextStyle(fontSize: 18),
+        decoration: InputDecoration(
+          hintText: "LEITOR DE CÓDIGO (F1)",
+          hintStyle: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[400],
+            fontSize: 16,
           ),
-        ),
-        if (widget.isMaster) ...[
-          SizedBox(width: 15),
-          ElevatedButton.icon(
-            icon: Icon(Icons.add, size: 20),
-            label: Text("NOVO PRODUTO"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-            ),
+          prefixIcon: Icon(Icons.qr_code_scanner, color: _corAcai, size: 30),
+          suffixIcon: IconButton(
+            icon: Icon(Icons.clear),
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => ProductEditorDialog(),
-              );
+              setState(() {
+                _searchCtrl.clear();
+                _filtroBusca = '';
+              });
             },
           ),
-        ],
-      ],
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        ),
+      ),
     );
   }
 
-  Widget _buildProductGrid() {
+  Widget _buildProductGridWithPagination() {
     return StreamBuilder<QuerySnapshot>(
       stream: _db.collection('produtos').orderBy('nome').snapshots(),
       builder: (context, snapshot) {
@@ -217,23 +233,9 @@ class _LojaViewState extends State<LojaView> {
 
         var docs = snapshot.data!.docs;
 
-        // Filtro local (Busca + Validade)
-        docs = docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-
-          // Filtro de Validade: Não mostrar vencidos
-          if (data['data_validade'] != null) {
-            DateTime validade = (data['data_validade'] as Timestamp).toDate();
-            // Considera vencido se for antes de hoje (começo do dia)
-            // Ou se quiser ser estrito, antes de agora.
-            // Vamos considerar vencido se validade < hoje
-            if (validade.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
-              return false;
-            }
-          }
-
-          // Filtro de Texto
-          if (_filtroBusca.isNotEmpty) {
+        if (_filtroBusca.isNotEmpty) {
+          docs = docs.where((doc) {
+            var data = doc.data() as Map<String, dynamic>;
             String nome = (data['nome'] ?? '').toString().toLowerCase();
             String codigo = (data['codigo_barras'] ?? '').toString();
             String marca = (data['marca'] ?? '').toString().toLowerCase();
@@ -241,10 +243,8 @@ class _LojaViewState extends State<LojaView> {
             return nome.contains(busca) ||
                 codigo.contains(busca) ||
                 marca.contains(busca);
-          }
-
-          return true;
-        }).toList();
+          }).toList();
+        }
 
         if (docs.isEmpty) {
           return Center(
@@ -253,20 +253,28 @@ class _LojaViewState extends State<LojaView> {
               children: [
                 Icon(
                   FontAwesomeIcons.boxOpen,
-                  size: 50,
+                  size: 40,
                   color: Colors.grey[300],
                 ),
-                SizedBox(height: 15),
                 Text(
-                  "Nenhum produto encontrado.",
-                  style: TextStyle(color: Colors.grey),
+                  "Nada encontrado.",
+                  style: TextStyle(color: Colors.grey, fontSize: 16),
                 ),
               ],
             ),
           );
         }
 
-        // Identificar Mais Vendido
+        int totalItens = docs.length;
+        int totalPaginas = (totalItens / _itensPorPagina).ceil();
+        if (_paginaAtual >= totalPaginas) _paginaAtual = 0;
+
+        int start = _paginaAtual * _itensPorPagina;
+        int end = start + _itensPorPagina;
+        if (end > totalItens) end = totalItens;
+
+        var paginatedDocs = docs.sublist(start, end);
+
         String bestSellerId = '';
         int maxVendas = -1;
         for (var doc in docs) {
@@ -277,19 +285,66 @@ class _LojaViewState extends State<LojaView> {
             bestSellerId = doc.id;
           }
         }
-        // Se ninguém vendeu nada, não destaca
         if (maxVendas <= 0) bestSellerId = '';
 
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            childAspectRatio: 0.75, // Card mais alto para caber marca/codigo
-            crossAxisSpacing: 15,
-            mainAxisSpacing: 15,
-          ),
-          itemCount: docs.length,
-          itemBuilder: (ctx, i) =>
-              _buildProductCard(docs[i], docs[i].id == bestSellerId),
+        return Column(
+          children: [
+            Expanded(
+              child: GridView.builder(
+                physics: NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2, // 4 por linha, 1 linha = 4 itens
+                  childAspectRatio: 2.9, // Cards bem largos e grandes
+                  crossAxisSpacing: 15,
+                  mainAxisSpacing: 15,
+                ),
+                itemCount: paginatedDocs.length,
+                itemBuilder: (ctx, i) => _buildProductCard(
+                  paginatedDocs[i],
+                  paginatedDocs[i].id == bestSellerId,
+                ),
+              ),
+            ),
+
+            if (totalPaginas > 1)
+              Container(
+                height: 40,
+                margin: EdgeInsets.only(top: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.chevron_left, size: 24),
+                      onPressed: _paginaAtual > 0
+                          ? () => setState(() => _paginaAtual--)
+                          : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      child: Text(
+                        "${_paginaAtual + 1} / $totalPaginas",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.chevron_right, size: 24),
+                      onPressed: _paginaAtual < totalPaginas - 1
+                          ? () => setState(() => _paginaAtual++)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+          ],
         );
       },
     );
@@ -300,73 +355,70 @@ class _LojaViewState extends State<LojaView> {
     String nome = data['nome'] ?? 'Produto';
     String marca = data['marca'] ?? '';
     double preco = (data['preco'] ?? 0).toDouble();
-    int estoque = (data['qtd_estoque'] ?? 0);
 
     return InkWell(
-      onTap: estoque > 0 ? () => _addToCart(doc.id, data) : null,
+      onTap: () => _addToCart(doc.id, data),
       borderRadius: BorderRadius.circular(15),
       child: Stack(
         children: [
           Container(
+            padding: EdgeInsets.all(15),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(15),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 5,
-                  offset: Offset(0, 2),
+                  offset: Offset(0, 3),
                 ),
               ],
               border: isBestSeller
-                  ? Border.all(color: Colors.amber, width: 2)
+                  ? Border.all(color: Colors.amber, width: 3)
                   : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: isBestSeller
+                        ? Colors.amber.withOpacity(0.1)
+                        : _corAcai.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: FaIcon(
+                      FontAwesomeIcons.store,
+                      size: 35,
                       color: isBestSeller
-                          ? Colors.amber.withOpacity(0.1)
-                          : _corAcai.withOpacity(0.05),
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(15),
-                      ),
-                    ),
-                    child: Center(
-                      // Ícone de Mercado Personalizado
-                      child: FaIcon(
-                        FontAwesomeIcons.store, // Ícone de mercadinho/loja
-                        size: 40,
-                        color: isBestSeller
-                            ? Colors.amber[800]
-                            : _corAcai.withOpacity(0.5),
-                      ),
+                          ? Colors.amber[800]
+                          : _corAcai.withOpacity(0.5),
                     ),
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.all(12),
+                SizedBox(width: 15),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (marca.isNotEmpty)
                         Text(
                           marca.toUpperCase(),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: Colors.grey,
                             fontWeight: FontWeight.bold,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       Text(
                         nome,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 18,
                           color: Colors.grey[800],
                         ),
                         maxLines: 2,
@@ -374,33 +426,20 @@ class _LojaViewState extends State<LojaView> {
                       ),
                       SizedBox(height: 5),
                       Text(
-                        estoque > 0 ? "Estoque: $estoque" : "Sem Estoque",
+                        "R\$ ${preco.toStringAsFixed(2)}",
                         style: TextStyle(
-                          fontSize: 10,
-                          color: estoque > 0 ? Colors.grey[600] : Colors.red,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          color: _corAcai,
                         ),
-                      ),
-                      SizedBox(height: 5),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "R\$ ${preco.toStringAsFixed(2)}",
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                              color: _corAcai,
-                            ),
-                          ),
-                          if (estoque > 0)
-                            Icon(Icons.add_circle, color: _corAcai, size: 24)
-                          else
-                            Icon(Icons.block, color: Colors.grey, size: 24),
-                        ],
                       ),
                     ],
                   ),
+                ),
+                Icon(
+                  Icons.add_circle,
+                  size: 35,
+                  color: _corAcai.withOpacity(0.8),
                 ),
               ],
             ),
@@ -409,30 +448,10 @@ class _LojaViewState extends State<LojaView> {
             Positioned(
               top: 10,
               right: 10,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.amber,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      FontAwesomeIcons.trophy,
-                      size: 10,
-                      color: Colors.white,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      "Mais Vendido",
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+              child: Icon(
+                FontAwesomeIcons.trophy,
+                size: 16,
+                color: Colors.amber[800],
               ),
             ),
         ],
@@ -443,26 +462,8 @@ class _LojaViewState extends State<LojaView> {
   // --- LÓGICA DO CARRINHO ---
 
   void _addToCart(String id, Map<String, dynamic> data) {
-    int estoque = (data['qtd_estoque'] ?? 0);
-    int noCarrinho = 0;
-
-    int index = _carrinho.indexWhere((item) => item['id'] == id);
-    if (index >= 0) {
-      noCarrinho = _carrinho[index]['qtd'];
-    }
-
-    if (noCarrinho + 1 > estoque) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Estoque insuficiente! Apenas $estoque itens."),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
     setState(() {
+      int index = _carrinho.indexWhere((item) => item['id'] == id);
       if (index >= 0) {
         _carrinho[index]['qtd']++;
       } else {
@@ -488,245 +489,432 @@ class _LojaViewState extends State<LojaView> {
   double get _totalCart =>
       _carrinho.fold(0, (sum, item) => sum + (item['preco'] * item['qtd']));
 
-  double get _troco =>
-      _valorRecebido > _totalCart ? _valorRecebido - _totalCart : 0.0;
+  // --- LÓGICA DE MÚLTIPLOS PAGAMENTOS ---
+
+  double get _totalPago =>
+      _pagamentos.fold(0, (sum, item) => sum + item['valor']);
+
+  double get _restante {
+    double diff = _totalCart - _totalPago;
+    return diff > 0 ? diff : 0.0;
+  }
+
+  double get _troco {
+    return _totalPago > _totalCart ? _totalPago - _totalCart : 0.0;
+  }
+
+  void _adicionarPagamento() {
+    double valor =
+        double.tryParse(_valorPagamentoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+    if (valor <= 0) return;
+
+    setState(() {
+      _pagamentos.add({'metodo': _metodoSelecionado, 'valor': valor});
+      _valorPagamentoCtrl.clear();
+    });
+  }
+
+  void _removerPagamento(int index) {
+    setState(() {
+      _pagamentos.removeAt(index);
+    });
+  }
 
   Widget _buildCartList() {
     if (_carrinho.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.shopping_basket_outlined,
-              size: 50,
-              color: Colors.grey[300],
-            ),
-            SizedBox(height: 10),
-            Text("Carrinho vazio", style: TextStyle(color: Colors.grey)),
-            Text(
-              "Selecione produtos ao lado",
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-            ),
-          ],
+        child: Text(
+          "O carrinho está vazio.",
+          style: TextStyle(color: Colors.grey[400], fontSize: 16),
         ),
       );
     }
 
-    return ListView.builder(
-      itemCount: _carrinho.length,
-      itemBuilder: (ctx, i) {
-        final item = _carrinho[i];
-        return Container(
-          margin: EdgeInsets.only(bottom: 10),
-          padding: EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['nome'],
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      "Unit: R\$ ${item['preco'].toStringAsFixed(2)}",
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  InkWell(
-                    onTap: () => _updateQtd(i, -1),
-                    child: Icon(
-                      Icons.remove_circle_outline,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: Text(
+                    "PRODUTO",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                       color: Colors.grey,
-                      size: 20,
                     ),
                   ),
-                  SizedBox(width: 10),
-                  Text(
-                    "${item['qtd']}",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(width: 10),
-                  InkWell(
-                    onTap: () => _updateQtd(i, 1),
-                    child: Icon(Icons.add_circle, color: _corAcai, size: 20),
-                  ),
-                ],
-              ),
-              SizedBox(width: 15),
-              Text(
-                "R\$ ${(item['preco'] * item['qtd']).toStringAsFixed(2)}",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
                 ),
-              ),
-            ],
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    "QTD",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    "TOTAL",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              itemCount: _carrinho.length,
+              separatorBuilder: (ctx, i) => Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final item = _carrinho[i];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          item['nome'],
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Row(
+                          children: [
+                            InkWell(
+                              onTap: () => _updateQtd(i, -1),
+                              child: Icon(
+                                Icons.remove_circle_outline,
+                                size: 20,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              "${item['qtd']}",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            InkWell(
+                              onTap: () => _updateQtd(i, 1),
+                              child: Icon(
+                                Icons.add_circle_outline,
+                                size: 20,
+                                color: _corAcai,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          "R\$ ${(item['preco'] * item['qtd']).toStringAsFixed(2)}",
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCheckoutSection() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text("Subtotal", style: TextStyle(color: Colors.grey)),
-            Text(
-              "R\$ ${_totalCart.toStringAsFixed(2)}",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 15),
-
-        // Seletor de Pagamento
-        DropdownButtonFormField<String>(
-          value: _metodoPagamento,
-          decoration: InputDecoration(
-            labelText: "Forma de Pagamento",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding: EdgeInsets.symmetric(horizontal: 15),
+    return Expanded(
+      child: Column(
+        children: [
+          // PAGAMENTO INFO MAIOR
+          _buildRowTotal(
+            "Pago",
+            _totalPago,
+            color: Colors.green[700],
+            fontSize: 16,
           ),
-          items: [
-            'Dinheiro',
-            'Pix',
-            'Cartão',
-            'Outro',
-          ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-          onChanged: (v) {
-            setState(() {
-              _metodoPagamento = v!;
-              _valorRecebido = 0; // Resetar valor recebido se mudar método
-            });
-          },
-        ),
-
-        // Campo de Valor Recebido (Apenas se Dinheiro)
-        if (_metodoPagamento == 'Dinheiro') ...[
-          SizedBox(height: 15),
-          TextField(
-            keyboardType: TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: "Valor Recebido (R\$)",
-              prefixIcon: Icon(Icons.money, color: Colors.green),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onChanged: (val) {
-              setState(() {
-                _valorRecebido =
-                    double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
-              });
-            },
+          _buildRowTotal(
+            "Restante",
+            _restante,
+            color: Colors.red[700],
+            isBold: true,
+            fontSize: 20,
           ),
-          if (_valorRecebido > 0) ...[
-            SizedBox(height: 10),
+          if (_troco > 0)
+            _buildRowTotal(
+              "Troco",
+              _troco,
+              color: Colors.blue[700],
+              isBold: true,
+              fontSize: 20,
+            ),
+
+          SizedBox(height: 20),
+
+          // INPUT PAGAMENTO
+          if (_restante > 0 || _pagamentos.isEmpty)
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Troco:", style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  "R\$ ${_troco.toStringAsFixed(2)}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _troco >= 0 ? Colors.green : Colors.red,
-                    fontSize: 16,
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    height: 50,
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _metodoSelecionado,
+                        isExpanded: true,
+                        style: TextStyle(fontSize: 16, color: Colors.black),
+                        items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
+                            .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _metodoSelecionado = v!),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  flex: 4,
+                  child: Container(
+                    height: 50,
+                    child: TextField(
+                      controller: _valorPagamentoCtrl,
+                      keyboardType: TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: TextStyle(fontSize: 18),
+                      decoration: InputDecoration(
+                        hintText: "R\$",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onSubmitted: (_) => _adicionarPagamento(),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 10),
+                SizedBox(
+                  height: 50,
+                  width: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      backgroundColor: Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: _adicionarPagamento,
+                    child: Icon(Icons.add, color: Colors.white, size: 30),
                   ),
                 ),
               ],
             ),
-          ],
-        ],
 
-        SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              shape: RoundedRectangleBorder(
+          SizedBox(height: 15),
+
+          // LISTA PAGAMENTOS MINI
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(10),
               ),
-              elevation: 5,
-            ),
-            onPressed: _carrinho.isEmpty ? null : _finalizarVenda,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle_outline),
-                SizedBox(width: 10),
-                Text(
-                  "FINALIZAR VENDA",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ],
+              child: ListView.builder(
+                padding: EdgeInsets.all(10),
+                itemCount: _pagamentos.length,
+                itemBuilder: (ctx, i) {
+                  final pag = _pagamentos[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "• ${pag['metodo']}",
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              "R\$ ${pag['valor'].toStringAsFixed(2)}",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            InkWell(
+                              onTap: () => _removerPagamento(i),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ],
+
+          SizedBox(height: 15),
+
+          SizedBox(
+            width: double.infinity,
+            height: 60,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _restante <= 0 ? _corAcai : Colors.grey[300],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                elevation: 8,
+              ),
+              onPressed: (_carrinho.isNotEmpty && _restante <= 0)
+                  ? _finalizarVenda
+                  : null,
+              child: Text(
+                "FINALIZAR VENDA",
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  color: _restante <= 0 ? Colors.white : Colors.grey,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRowTotal(
+    String label,
+    double val, {
+    Color? color,
+    bool isBold = false,
+    double fontSize = 14,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[700],
+              fontSize: fontSize,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            "R\$ ${val.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: fontSize,
+              color: color ?? Colors.black87,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   void _finalizarVenda() async {
+    if (_vendedorCodeCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Informe o CÓDIGO DO VENDEDOR.")));
+      return;
+    }
+
     try {
       WriteBatch batch = _db.batch();
 
-      // 1. Salvar venda no Firestore
       var vendaRef = _db.collection('vendas').doc();
       batch.set(vendaRef, {
         'itens': _carrinho,
         'valor_total': _totalCart,
-        'valor_recebido': _valorRecebido,
+        'pagamentos': _pagamentos,
         'troco': _troco,
-        'metodo_pagamento': _metodoPagamento,
+        'vendedor_codigo': _vendedorCodeCtrl.text,
         'data_venda': FieldValue.serverTimestamp(),
         'status': 'concluido',
       });
 
-      // 2. Atualizar contagem de vendas nos produtos
       for (var item in _carrinho) {
         var prodRef = _db.collection('produtos').doc(item['id']);
         batch.update(prodRef, {
           'qtd_vendida': FieldValue.increment(item['qtd']),
-          'qtd_estoque': FieldValue.increment(-item['qtd']),
         });
       }
 
       await batch.commit();
 
-      if (!mounted) return;
-
-      // Limpar carrinho
       setState(() {
         _carrinho.clear();
-        _metodoPagamento = 'Dinheiro';
-        _valorRecebido = 0.0;
+        _pagamentos.clear();
+        _metodoSelecionado = 'Dinheiro';
+        _valorPagamentoCtrl.clear();
+        _searchCtrl.clear();
+        _filtroBusca = '';
+        _vendedorCodeCtrl.clear();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Venda registrada com sucesso!"),
+          content: Text("VENDA REALIZADA COM SUCESSO!"),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),

@@ -354,8 +354,8 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
             constraints: BoxConstraints(minWidth: 800),
             child: DataTable(
               headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-              dataRowMinHeight: 70,
-              dataRowMaxHeight: 70,
+              dataRowMinHeight: 50,
+              dataRowMaxHeight: 50,
               columns: [
                 DataColumn(label: Text("Produto")),
                 DataColumn(label: Text("Marca")),
