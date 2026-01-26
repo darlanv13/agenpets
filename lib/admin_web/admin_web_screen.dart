@@ -8,7 +8,7 @@ import 'views/dashboard_view.dart';
 import 'views/agenda_view.dart';
 import 'views/hotel_view.dart';
 import 'views/gestao_precos_view.dart';
-import 'views/equipe_view.dart';
+import 'views/gestao_equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
@@ -81,7 +81,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         VendaAssinaturaView(), // 4
         GestaoPrecosView(), // 5
         GestaoBannersView(), // 6
-        EquipeView(), // 7
+        GestaoEquipeView(), // 7
         ConfiguracaoAgendaView(), // 8
         CrecheView(), // 9
         GestaoEstoqueView(), // 10
