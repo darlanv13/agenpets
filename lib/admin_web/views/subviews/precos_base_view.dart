@@ -3,22 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-class PrecosBaseTab extends StatefulWidget {
+class PrecosBaseView extends StatefulWidget {
   @override
-  _PrecosBaseTabState createState() => _PrecosBaseTabState();
+  _PrecosBaseViewState createState() => _PrecosBaseViewState();
 }
 
-class _PrecosBaseTabState extends State<PrecosBaseTab> {
+class _PrecosBaseViewState extends State<PrecosBaseView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
-  // Controladores
   final _precoHotelCtrl = TextEditingController();
   final _precoCrecheCtrl = TextEditingController();
 
-  // Cores
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF5F7FA);
 
@@ -35,7 +33,6 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
         final data = doc.data()!;
         setState(() {
           _precoHotelCtrl.text = (data['preco_hotel_diaria'] ?? 0).toString();
-          // Carrega o novo campo 'preco_creche'
           _precoCrecheCtrl.text = (data['preco_creche'] ?? 0).toString();
         });
       }
@@ -54,7 +51,9 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
               double.tryParse(_precoCrecheCtrl.text.replaceAll(',', '.')) ?? 0,
         },
         SetOptions(merge: true),
-      ); // Merge para não apagar o preço de banho/tosa se ainda existirem no banco
+      );
+
+      if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -63,6 +62,7 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
         ),
       );
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Erro ao salvar: $e"),
@@ -74,37 +74,37 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: _corFundo,
-      child: Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(30),
-          child: Column(
-            children: [
-              Text(
-                "Tabela de Hospedagem",
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: _corAcai,
-                ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Tabela Base",
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: _corAcai,
               ),
-              SizedBox(height: 10),
-              Text(
-                "Defina os valores base para estadia e day care",
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              SizedBox(height: 40),
+            ),
+            Text(
+              "Defina os valores padrão para serviços recorrentes (Hotel e Creche)",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            SizedBox(height: 40),
 
-              Container(
-                constraints: BoxConstraints(maxWidth: 600),
-                padding: EdgeInsets.all(30),
+            Center(
+              child: Container(
+                constraints: BoxConstraints(maxWidth: 800),
+                padding: EdgeInsets.all(40),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 20,
                       offset: Offset(0, 5),
                     ),
@@ -112,49 +112,38 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
                 ),
                 child: Column(
                   children: [
-                    // ITEM 1: HOTEL
                     _buildInput(
                       "Diária Hotel",
-                      "Valor por noite (24h)",
+                      "Valor cobrado por noite (24h)",
                       _precoHotelCtrl,
                       FontAwesomeIcons.hotel,
                       Colors.blue,
                     ),
-
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 25),
                       child: Divider(height: 1),
                     ),
-
-                    // ITEM 2: CRECHE
                     _buildInput(
                       "Diária Creche",
-                      "Day Care (apenas dia)",
+                      "Valor cobrado pelo Day Care (apenas dia)",
                       _precoCrecheCtrl,
                       FontAwesomeIcons.dog,
                       Colors.orange,
                     ),
-
-                    SizedBox(height: 40),
-
-                    // BOTÃO SALVAR
+                    SizedBox(height: 50),
                     SizedBox(
                       width: double.infinity,
-                      height: 55,
+                      height: 60,
                       child: ElevatedButton.icon(
-                        icon: Icon(Icons.save_as, size: 20),
+                        icon: Icon(Icons.save, size: 22),
                         label: Text(
                           "SALVAR ALTERAÇÕES",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
-                          elevation: 5,
-                          shadowColor: Colors.green.withOpacity(0.4),
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(15),
                           ),
@@ -165,8 +154,8 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -182,14 +171,14 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
     return Row(
       children: [
         Container(
-          padding: EdgeInsets.all(18),
+          padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(18),
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: FaIcon(icon, color: color, size: 24),
+          child: FaIcon(icon, color: color, size: 28),
         ),
-        SizedBox(width: 20),
+        SizedBox(width: 25),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,26 +186,26 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey[800],
                 ),
               ),
-              SizedBox(height: 2),
+              SizedBox(height: 5),
               Text(
                 sublabel,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               ),
             ],
           ),
         ),
-        SizedBox(width: 15),
+        SizedBox(width: 20),
         Container(
-          width: 130,
+          width: 150,
           padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
           decoration: BoxDecoration(
             color: _corFundo,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(color: Colors.grey[200]!),
           ),
           child: TextField(
@@ -225,14 +214,14 @@ class _PrecosBaseTabState extends State<PrecosBaseTab> {
             textAlign: TextAlign.right,
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 20,
+              fontSize: 22,
               color: _corAcai,
             ),
             decoration: InputDecoration(
               prefixText: "R\$ ",
               prefixStyle: TextStyle(
                 color: Colors.grey[500],
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w500,
               ),
               border: InputBorder.none,
