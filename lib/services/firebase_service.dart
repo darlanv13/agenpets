@@ -104,11 +104,12 @@ class FirebaseService {
   Stream<Map<String, int>> getSaldoVouchers(String cpf) {
     return _db.collection('users').doc(cpf).snapshots().map((doc) {
       final data = doc.data();
-      if (data == null) return {'banho': 0, 'tosa': 0};
+      if (data == null) return {'banho': 0, 'tosa': 0, 'creche': 0};
 
       return {
         'banho': (data['vouchers_banho'] ?? 0) as int,
         'tosa': (data['vouchers_tosa'] ?? 0) as int,
+        'creche': (data['vouchers_creche'] ?? 0) as int,
       };
     });
   }
@@ -211,15 +212,13 @@ class FirebaseService {
   Future<Map<String, dynamic>> reservarCreche({
     required String petId,
     required String cpfUser,
-    required DateTime checkIn,
-    required DateTime checkOut,
+    required List<DateTime> dates,
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarCreche').call({
         'pet_id': petId,
         'cpf_user': cpfUser,
-        'check_in': checkIn.toIso8601String(),
-        'check_out': checkOut.toIso8601String(),
+        'dates': dates.map((d) => d.toIso8601String()).toList(),
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {

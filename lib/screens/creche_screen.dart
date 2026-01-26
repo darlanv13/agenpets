@@ -32,9 +32,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
 
   // Controle do Calendário
   DateTime _focusedDay = DateTime.now();
-  DateTime? _rangeStart;
-  DateTime? _rangeEnd;
-  RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.toggledOn;
+  final Set<DateTime> _selectedDays = {};
+  RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.disabled;
 
   Set<DateTime> _diasLotados = {};
 
@@ -99,36 +98,25 @@ class _CrecheScreenState extends State<CrecheScreen> {
     return _diasLotados.contains(normalized);
   }
 
-  void _onRangeSelected(DateTime? start, DateTime? end, DateTime focusedDay) {
+  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
     setState(() {
       _focusedDay = focusedDay;
-      _rangeStart = start;
-      _rangeEnd = end;
-      _rangeSelectionMode = RangeSelectionMode.toggledOn;
-    });
+      final normalized = DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
 
-    // Validação de dias lotados no meio do range
-    if (start != null && end != null) {
-      int days = end.difference(start).inDays;
-      for (int i = 0; i <= days; i++) {
-        if (_isDayLotado(start.add(Duration(days: i)))) {
-          setState(() {
-            _rangeStart = null;
-            _rangeEnd = null;
-          });
-          _mostrarErroDialog("O período selecionado contém dias sem vaga.");
-          break;
-        }
+      if (_isDayLotado(normalized)) {
+        return;
       }
-    }
+
+      if (_selectedDays.contains(normalized)) {
+        _selectedDays.remove(normalized);
+      } else {
+        _selectedDays.add(normalized);
+      }
+    });
   }
 
   Future<void> _fazerReserva() async {
-    if (_petId == null || _rangeStart == null) return;
-
-    // Se só selecionou um dia (start), assume que é start e end no mesmo dia (day use)
-    DateTime checkIn = _rangeStart!;
-    DateTime checkOut = _rangeEnd ?? _rangeStart!;
+    if (_petId == null || _selectedDays.isEmpty) return;
 
     setState(() => _isLoading = true);
 
@@ -136,8 +124,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
       await _firebaseService.reservarCreche(
         petId: _petId!,
         cpfUser: _userCpf!,
-        checkIn: checkIn,
-        checkOut: checkOut,
+        dates: _selectedDays.toList(),
       );
 
       _mostrarSucessoDialog();
@@ -231,20 +218,22 @@ class _CrecheScreenState extends State<CrecheScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Cálculos de Preço
-    int dias = 0;
-    if (_rangeStart != null) {
-      if (_rangeEnd != null) {
-        dias =
-            _rangeEnd!.difference(_rangeStart!).inDays +
-            1; // Inclui o dia final
-      } else {
-        dias = 1;
-      }
-    }
-    double total = dias * _valorDiaria;
+    return StreamBuilder<Map<String, int>>(
+      stream: _userCpf != null
+          ? _firebaseService.getSaldoVouchers(_userCpf!)
+          : Stream.value({'banho': 0, 'tosa': 0, 'creche': 0}),
+      builder: (context, snapshot) {
+        final vouchers = snapshot.data ?? {'banho': 0, 'tosa': 0, 'creche': 0};
+        final int vouchersCreche = vouchers['creche'] ?? 0;
 
-    return Scaffold(
+        // Cálculos de Preço
+        int diasTotais = _selectedDays.length;
+        int diasPagantes = (diasTotais - vouchersCreche).clamp(0, diasTotais);
+        int vouchersUsados = (diasTotais - diasPagantes).clamp(0, vouchersCreche);
+
+        double total = diasPagantes * _valorDiaria;
+
+        return Scaffold(
       backgroundColor: _corFundo,
       appBar: AppBar(
         title: Text(
@@ -324,7 +313,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
                               ),
                               SizedBox(height: 5),
                               Text(
-                                "Selecione o dia de entrada e saída (ou apenas um dia)",
+                                "Selecione os dias desejados no calendário",
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey[600],
@@ -364,7 +353,9 @@ class _CrecheScreenState extends State<CrecheScreen> {
                 ),
               ],
             ),
-      bottomSheet: _buildBottomSummary(dias, total),
+      bottomSheet: _buildBottomSummary(diasTotais, total, vouchersUsados),
+    );
+      },
     );
   }
 
@@ -508,16 +499,9 @@ class _CrecheScreenState extends State<CrecheScreen> {
         firstDay: DateTime.now(),
         lastDay: DateTime.now().add(Duration(days: 90)),
         focusedDay: _focusedDay,
-        selectedDayPredicate: (day) => isSameDay(_rangeStart, day),
-        rangeStartDay: _rangeStart,
-        rangeEndDay: _rangeEnd,
-        rangeSelectionMode: _rangeSelectionMode,
-        onRangeSelected: _onRangeSelected,
-        onDaySelected: (selectedDay, focusedDay) {
-          if (!_isDayLotado(selectedDay)) {
-            _onRangeSelected(selectedDay, null, focusedDay);
-          }
-        },
+        selectedDayPredicate: (day) => _selectedDays.contains(DateTime(day.year, day.month, day.day)),
+        rangeSelectionMode: RangeSelectionMode.disabled,
+        onDaySelected: _onDaySelected,
         enabledDayPredicate: (day) {
           // Desabilita dias passados e lotados
           if (day.isBefore(DateTime.now().subtract(Duration(days: 1))))
@@ -544,17 +528,12 @@ class _CrecheScreenState extends State<CrecheScreen> {
             fontWeight: FontWeight.bold,
           ),
 
-          // Estilo do Range Selecionado
-          rangeStartDecoration: BoxDecoration(
+          // Estilo de dias selecionados
+          selectedDecoration: BoxDecoration(
             color: _corAcai,
             shape: BoxShape.circle,
           ),
-          rangeEndDecoration: BoxDecoration(
-            color: _corAcai,
-            shape: BoxShape.circle,
-          ),
-          rangeHighlightColor: _corAcai.withOpacity(0.15),
-          withinRangeTextStyle: TextStyle(color: _corAcai),
+          selectedTextStyle: TextStyle(color: Colors.white),
 
           // Estilo de dias bloqueados/desabilitados
           disabledTextStyle: TextStyle(color: Colors.red[200]),
@@ -605,8 +584,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
     );
   }
 
-  Widget _buildBottomSummary(int dias, double total) {
-    bool canSubmit = _petId != null && _rangeStart != null && !_isLoading;
+  Widget _buildBottomSummary(int dias, double total, int vouchersUsados) {
+    bool canSubmit = _petId != null && dias > 0 && !_isLoading;
 
     return Container(
       padding: EdgeInsets.all(25),
@@ -625,6 +604,20 @@ class _CrecheScreenState extends State<CrecheScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (vouchersUsados > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.discount, size: 16, color: Colors.orange),
+                    SizedBox(width: 5),
+                    Text(
+                      "$vouchersUsados vouchers aplicados",
+                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               children: [
                 Expanded(
@@ -632,7 +625,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Total Estimado",
+                        "Total a Pagar",
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -648,7 +641,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
                         ),
                       ),
                       Text(
-                        dias == 1 ? "1 diária" : "$dias diárias",
+                        dias == 1 ? "1 dia selecionado" : "$dias dias selecionados",
                         style: TextStyle(
                           fontSize: 12,
                           color: _corAcai.withOpacity(0.7),
