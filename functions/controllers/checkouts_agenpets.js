@@ -89,9 +89,15 @@ exports.realizarCheckout = onCall(async (request) => {
         let todosExtras = dadosAgendamento.extras || [];
         if (extrasIds && extrasIds.length > 0) {
             for (const extraId of extrasIds) {
-                const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
-                if (extraDoc.exists) {
-                    const extraData = extraDoc.data();
+                let extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+                let extraData = extraDoc.exists ? extraDoc.data() : null;
+
+                if (!extraDoc.exists) {
+                    extraDoc = await db.collection('produtos').doc(extraId).get();
+                    if (extraDoc.exists) extraData = extraDoc.data();
+                }
+
+                if (extraDoc.exists && extraData) {
                     let precoRaw = extraData.preco;
                     if (typeof precoRaw === 'string') precoRaw = precoRaw.replace(',', '.');
                     const precoReal = Number(precoRaw || 0);

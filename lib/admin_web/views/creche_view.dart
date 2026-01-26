@@ -1,4 +1,4 @@
-import 'package:agenpet/admin_web/views/components/checkout_creche_dialog.dart';
+import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/admin_web/views/components/nova_reserva_creche_dialog.dart';
 import 'package:agenpet/admin_web/views/components/registrar_pagamento_creche_dialog.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +45,8 @@ class _CrecheViewState extends State<CrecheView> {
     final doc = await _db.collection('config').doc('parametros').get();
     if (doc.exists) {
       setState(() {
-        _precoDiariaCache = (doc.data()?['preco_creche_diaria'] ?? 0).toDouble();
+        _precoDiariaCache = (doc.data()?['preco_creche_diaria'] ?? 0)
+            .toDouble();
       });
     }
   }
@@ -70,7 +71,8 @@ class _CrecheViewState extends State<CrecheView> {
 
   void _fazerCheckIn(String docId) async {
     await _db.collection('reservas_creche').doc(docId).update({
-      'status': 'hospedado', // Mantemos 'hospedado' ou usamos 'presente' - para consistência com Hotel, manterei 'hospedado'
+      'status':
+          'hospedado', // Mantemos 'hospedado' ou usamos 'presente' - para consistência com Hotel, manterei 'hospedado'
       'check_in_real': FieldValue.serverTimestamp(),
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -82,6 +84,23 @@ class _CrecheViewState extends State<CrecheView> {
   }
 
   void _abrirCheckoutCreche(String docId, Map<String, dynamic> data) async {
+    // 1. Calculate Base Price
+    final checkIn = data['check_in_real'] != null
+        ? (data['check_in_real'] as Timestamp).toDate()
+        : (data['check_in'] as Timestamp).toDate();
+    final checkOut = DateTime.now();
+    int dias = checkOut.difference(checkIn).inDays;
+    if (dias < 1) dias = 1;
+    double totalEstadia = dias * _precoDiariaCache;
+
+    // 2. Fetch User Data
+    Map<String, dynamic> clientData = {};
+    if (data['cpf_user'] != null) {
+      final userDoc = await _db.collection('users').doc(data['cpf_user']).get();
+      if (userDoc.exists) clientData = userDoc.data()!;
+    }
+
+    // 3. Fetch Extras
     final extrasSnap = await _db
         .collection('servicos_extras')
         .where('ativo', isEqualTo: true)
@@ -99,12 +118,14 @@ class _CrecheViewState extends State<CrecheView> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => CheckoutCrecheDialog(
-        reservaId: docId,
-        dadosReserva: data,
-        precoDiaria: _precoDiariaCache,
-        listaExtras: extrasDisponiveis,
-        corAcai: _corAcai,
+      builder: (ctx) => UnifiedCheckoutDialog(
+        contextType: CheckoutContext.creche,
+        referenceId: docId,
+        clientData: clientData,
+        baseItem: {'nome': "Creche ($dias dias)", 'preco': totalEstadia},
+        availableServices: extrasDisponiveis,
+        totalAlreadyPaid: (data['valor_pago'] ?? 0).toDouble(),
+        themeColor: _corAcai,
         onSuccess: () => ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Diária finalizada! 🏠"),

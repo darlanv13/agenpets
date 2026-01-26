@@ -1,4 +1,4 @@
-import 'package:agenpet/admin_web/views/components/checkput_dialog_premium.dart';
+import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/admin_web/views/components/novo_agendamento_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -135,14 +135,15 @@ class _AgendaViewState extends State<AgendaView> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => CheckoutDialogPremium(
-        agendamentoId: agendamentoDoc.id,
-        dadosAgendamento: dataAgendamento,
-        servicoNome: servicoNome,
-        valorBase: valorBase,
-        userData: userData,
-        listaExtras: listaExtras,
-        corAcai: _corAcai,
+      builder: (ctx) => UnifiedCheckoutDialog(
+        contextType: CheckoutContext.agenda,
+        referenceId: agendamentoDoc.id,
+        clientData: userData,
+        baseItem: {'nome': servicoNome, 'preco': valorBase},
+        availableServices: listaExtras,
+        totalAlreadyPaid: 0, // Agenda typically pays at checkout
+        vouchersConsumedHistory: dataAgendamento['vouchers_consumidos'],
+        themeColor: _corAcai,
         onSuccess: () {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
