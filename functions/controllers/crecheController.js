@@ -164,7 +164,7 @@ exports.registrarPagamentoCreche = onCall(async (request) => {
 
 // --- Checkout Creche ---
 exports.realizarCheckoutCreche = onCall(async (request) => {
-    const { reservaId, extrasIds, metodoPagamentoDiferenca, produtos } = request.data;
+    const { reservaId, extrasIds, metodoPagamentoDiferenca, produtos, pagamentos } = request.data;
 
     const reservaRef = db.collection('reservas_creche').doc(reservaId);
     const reservaSnap = await reservaRef.get();
@@ -238,16 +238,38 @@ exports.realizarCheckoutCreche = onCall(async (request) => {
     // Calculamos a diferença
     const valorRestanteAPagar = valorTotalServico - valorJaPago;
 
-    // Se ainda deve algo e não mandou método de pagamento, erro (segurança)
-    // Mas permitimos margem de erro pequena (ex: centavos)
-    if (valorRestanteAPagar > 0.1 && !metodoPagamentoDiferenca) {
-        // O frontend deve tratar isso, mas aqui garantimos
+    // Processa Pagamentos (Multiplos ou Legacy)
+    let pagamentosFinais = [];
+    let totalPagoAgora = 0;
+
+    if (pagamentos && Array.isArray(pagamentos)) {
+        pagamentos.forEach(p => {
+            totalPagoAgora += Number(p.valor || 0);
+            pagamentosFinais.push(p);
+        });
+    } else if (metodoPagamentoDiferenca) {
+        // Legacy: Se mandou um método, assume que pagou a diferença toda
+        totalPagoAgora = valorRestanteAPagar > 0 ? valorRestanteAPagar : 0;
+        if (totalPagoAgora > 0) {
+            pagamentosFinais.push({ metodo: metodoPagamentoDiferenca, valor: totalPagoAgora });
+        }
     }
+
+    // Validação: Se devia algo e não pagou o suficiente
+    // Tolerância de 0.1
+    const saldoFinalDevido = valorRestanteAPagar - totalPagoAgora;
+    if (saldoFinalDevido > 0.1) {
+       // Opcional: Lançar erro ou marcar como 'pending_audit'
+    }
+
+    const metodoFinal = pagamentosFinais.length > 0
+        ? pagamentosFinais.map(p => p.metodo).join(', ')
+        : (metodoPagamentoDiferenca || 'ja_pago');
 
     // Atualização Final (Usando Batch)
     batch.update(reservaRef, {
         status: 'concluido',
-        payment_status: valorRestanteAPagar <= 0 ? 'paid' : 'pending_audit', // Se pagou tudo, ok
+        payment_status: saldoFinalDevido <= 0.1 ? 'paid' : 'pending_audit',
         check_out_real: admin.firestore.FieldValue.serverTimestamp(),
 
         // Dados financeiros finais
@@ -255,8 +277,9 @@ exports.realizarCheckoutCreche = onCall(async (request) => {
         valor_diaria_aplicado: valorDiaria,
         custo_total_servico: valorTotalServico,
         valor_pago_anterior: valorJaPago,
-        valor_pago_checkout: valorRestanteAPagar > 0 ? valorRestanteAPagar : 0,
-        metodo_pagamento_final: metodoPagamentoDiferenca || 'ja_pago', // Registra como pagou o resto
+        valor_pago_checkout: totalPagoAgora, // Valor pago neste checkout
+        metodo_pagamento_final: metodoFinal,
+        pagamentos_detalhados: pagamentosFinais, // Array completo
 
         extras_consumidos: extrasProcessados,
         produtos_consumidos: produtosConsumidos, // Salva produtos

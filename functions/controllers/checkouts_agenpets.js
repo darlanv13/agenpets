@@ -19,7 +19,8 @@ exports.realizarCheckout = onCall(async (request) => {
             vouchersParaUsar,
             responsavel,
             apenasMarcarComoPronto, // <--- NOVO PARÂMETRO
-            produtos // <--- NOVO: Lista de produtos [{id, qtd}]
+            produtos, // <--- NOVO: Lista de produtos [{id, qtd}]
+            pagamentos // <--- NOVO: Lista de pagamentos [{metodo, valor}]
         } = request.data;
 
         if (!agendamentoId) throw new HttpsError('invalid-argument', 'ID obrigatório');
@@ -156,16 +157,30 @@ exports.realizarCheckout = onCall(async (request) => {
         // Pagamento: Se for 'pronto', o pagamento continua 'pendente' (esperando o caixa).
         // Se for 'concluido', verificamos se pagou.
         let statusPagamento = dadosAgendamento.status_pagamento || 'pendente';
+        let totalPago = 0;
 
+        // Processa Pagamentos (Array ou Single Legacy)
+        let pagamentosFinais = [];
         if (!apenasMarcarComoPronto) {
+            if (pagamentos && Array.isArray(pagamentos)) {
+                 pagamentos.forEach(p => {
+                     totalPago += Number(p.valor || 0);
+                     pagamentosFinais.push(p);
+                 });
+            } else if (metodoPagamento) {
+                // Legacy support
+                totalPago = valorFinal; // Assume full payment if single method passed
+                pagamentosFinais.push({ metodo: metodoPagamento, valor: valorFinal });
+            }
+
             // Lógica de fechamento final do Caixa
-            if (valorFinal <= 0 || (metodoPagamento && metodoPagamento !== 'voucher')) {
+            if (valorFinal <= 0 || totalPago >= (valorFinal - 0.1)) {
                 statusPagamento = 'pago';
             }
         }
 
-        const metodoFinal = (valorFinal > 0 && metodoPagamento)
-            ? metodoPagamento
+        const metodoFinal = pagamentosFinais.length > 0
+            ? pagamentosFinais.map(p => p.metodo).join(', ')
             : (dadosAgendamento.metodo_pagamento || 'voucher');
 
         // Atualiza Banco
@@ -173,7 +188,8 @@ exports.realizarCheckout = onCall(async (request) => {
         batch.update(agendamentoRef, {
             status: novoStatus,
             status_pagamento: statusPagamento,
-            metodo_pagamento: metodoFinal,
+            metodo_pagamento: metodoFinal, // String concatenada para visualização simples
+            pagamentos_detalhados: pagamentosFinais, // Array estruturado
             valor_final_cobrado: valorFinal,
             vouchers_consumidos: vouchersConsumidosLog,
             extras: todosExtras,
