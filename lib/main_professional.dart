@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AgenPet',
+      title: 'AgenPet Profissional',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -56,7 +56,9 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: [const Locale('pt', 'BR')],
-      initialRoute: '/login',
+
+      initialRoute: '/login_profissional',
+
       routes: {
         '/login': (context) => LoginScreen(),
         '/login_profissional': (context) => LoginProfissionalScreen(),
