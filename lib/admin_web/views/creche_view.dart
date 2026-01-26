@@ -71,7 +71,7 @@ class _CrecheViewState extends State<CrecheView> {
   void _fazerCheckIn(String docId) async {
     await _db.collection('reservas_creche').doc(docId).update({
       'status':
-          'hospedado', // Mantemos 'hospedado' ou usamos 'presente' - para consistência com Hotel, manterei 'hospedado'
+          'na creche', // Mantemos 'na creche' ou usamos 'presente' - para consistência com Hotel, manterei 'na creche'
       'check_in_real': FieldValue.serverTimestamp(),
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -347,7 +347,7 @@ class _CrecheViewState extends State<CrecheView> {
 
     Color corStatus = Colors.grey;
     if (status == 'reservado') corStatus = Colors.blue;
-    if (status == 'hospedado') corStatus = _corAcai;
+    if (status == 'na creche') corStatus = _corAcai;
     if (status == 'concluido') corStatus = _corSucesso;
 
     // FutureBuilder Interno para filtrar visualmente
@@ -431,7 +431,7 @@ class _CrecheViewState extends State<CrecheView> {
                       ),
                     ),
                     Icon(
-                      status == 'hospedado'
+                      status == 'na creche'
                           ? FontAwesomeIcons.dog
                           : Icons.calendar_today,
                       size: 14,
@@ -480,7 +480,7 @@ class _CrecheViewState extends State<CrecheView> {
     String textoStatus = "Reserva Confirmada";
     IconData iconeStatus = Icons.calendar_today;
 
-    if (status == 'hospedado') {
+    if (status == 'na creche') {
       corStatus = _corAcai;
       textoStatus = "Presente na Creche";
       iconeStatus = FontAwesomeIcons.dog;
@@ -788,7 +788,7 @@ class _CrecheViewState extends State<CrecheView> {
                     ),
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
-                if (status == 'hospedado')
+                if (status == 'na creche')
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
                     label: Text("CHECK-OUT E PAGAR"),
@@ -834,7 +834,7 @@ class _CrecheViewState extends State<CrecheView> {
   // --- WIDGETS AUXILIARES ---
   Widget _buildTimelineCreche(String status) {
     int step = 1;
-    if (status == 'hospedado') step = 2;
+    if (status == 'na creche') step = 2;
     if (status == 'concluido') step = 3;
 
     return Row(

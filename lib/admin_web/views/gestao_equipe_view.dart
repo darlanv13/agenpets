@@ -6,12 +6,12 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/admin_web/widgets/professional_editor_dialog.dart';
 
-class EquipeView extends StatefulWidget {
+class GestaoEquipeView extends StatefulWidget {
   @override
-  _EquipeViewState createState() => _EquipeViewState();
+  _GestaoEquipeViewState createState() => _GestaoEquipeViewState();
 }
 
-class _EquipeViewState extends State<EquipeView> {
+class _GestaoEquipeViewState extends State<GestaoEquipeView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',

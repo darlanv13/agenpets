@@ -5,7 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 // --- IMPORTS DAS VIEWS ---
 import 'views/dashboard_view.dart';
-import 'views/agenda_view.dart';
+import 'views/banho_tosa_view.dart';
 import 'views/hotel_view.dart';
 import 'views/gestao_precos_view.dart';
 import 'views/gestao_equipe_view.dart';
@@ -56,7 +56,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       // PERFIL RESTRITO (Caixa, Vendedor, Tosador, Banhista): Acesso limitado
       _telas = [
         LojaView(isMaster: false), // 0
-        AgendaView(), // 1
+        BanhosTosaView(), // 1
         HotelView(), // 2
         VendaAssinaturaView(), // 3
         CrecheView(), // 4
@@ -65,7 +65,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
 
       _menuItems = [
         _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
-        _MenuItem("Agenda", Icons.calendar_month_rounded),
+        _MenuItem("Banhos & Tosa ", FontAwesomeIcons.scissors),
         _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
         _MenuItem("Venda de Planos", FontAwesomeIcons.cartShopping),
         _MenuItem("Creche", FontAwesomeIcons.dog),
@@ -76,14 +76,14 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       _telas = [
         DashboardView(), // 0
         LojaView(isMaster: _isMaster), // 1
-        AgendaView(), // 2
+        BanhosTosaView(), // 2
         HotelView(), // 3
-        VendaAssinaturaView(), // 4
-        GestaoPrecosView(), // 5
-        GestaoBannersView(), // 6
-        GestaoEquipeView(), // 7
-        ConfiguracaoAgendaView(), // 8
-        CrecheView(), // 9
+        CrecheView(), // 4
+        VendaAssinaturaView(), // 5
+        GestaoPrecosView(), // 6
+        GestaoBannersView(), // 7
+        GestaoEquipeView(), // 8
+        ConfiguracaoAgendaView(), // 9
         GestaoEstoqueView(), // 10
       ];
 
@@ -94,8 +94,9 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
           section: "PRINCIPAL",
         ),
         _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
-        _MenuItem("Agenda", Icons.calendar_month_rounded),
+        _MenuItem("Banhos & Tosa", FontAwesomeIcons.scissors),
         _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
+        _MenuItem("Creche", FontAwesomeIcons.dog),
         _MenuItem(
           "Venda de Planos",
           FontAwesomeIcons.cartShopping,
@@ -105,7 +106,6 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Banners do App", Icons.view_carousel_rounded),
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
-        _MenuItem("Creche", FontAwesomeIcons.dog),
         _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
       ];
     }

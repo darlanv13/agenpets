@@ -7,12 +7,12 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AgendaView extends StatefulWidget {
+class BanhosTosaView extends StatefulWidget {
   @override
-  _AgendaViewState createState() => _AgendaViewState();
+  _BanhosTosaViewState createState() => _BanhosTosaViewState();
 }
 
-class _AgendaViewState extends State<AgendaView> {
+class _BanhosTosaViewState extends State<BanhosTosaView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
