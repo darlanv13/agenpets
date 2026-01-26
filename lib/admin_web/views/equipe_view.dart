@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/admin_web/widgets/professional_editor_dialog.dart';
 
 class EquipeView extends StatefulWidget {
   @override
@@ -380,7 +381,6 @@ class _EquipeViewState extends State<EquipeView> {
                             child: StreamBuilder<QuerySnapshot>(
                               stream: _db
                                   .collection('profissionais')
-                                  .where('ativo', isEqualTo: true)
                                   .snapshots(),
                               builder: (context, snapshot) {
                                 if (!snapshot.hasData)
@@ -409,88 +409,140 @@ class _EquipeViewState extends State<EquipeView> {
 
                                     // Destaque visual para Master
                                     bool isMaster = perfil == 'master';
+                                    bool isAtivo = data['ativo'] ?? true;
 
-                                    return Row(
-                                      children: [
-                                        Container(
-                                          width: 50,
-                                          height: 50,
-                                          decoration: BoxDecoration(
-                                            color: isMaster
-                                                ? Colors.amber[100]
-                                                : _corLilas,
-                                            borderRadius: BorderRadius.circular(
-                                              15,
+                                    return Opacity(
+                                      opacity: isAtivo ? 1.0 : 0.6,
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 50,
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              color: isMaster
+                                                  ? Colors.amber[100]
+                                                  : _corLilas,
+                                              borderRadius: BorderRadius.circular(
+                                                15,
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: isMaster
+                                                  ? Icon(
+                                                      FontAwesomeIcons.crown,
+                                                      color: Colors.amber[800],
+                                                      size: 22,
+                                                    )
+                                                  : Text(
+                                                      (data['nome'] as String)
+                                                              .isNotEmpty
+                                                          ? data['nome'][0]
+                                                              .toUpperCase()
+                                                          : "?",
+                                                      style: TextStyle(
+                                                        color: _corAcai,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 20,
+                                                      ),
+                                                    ),
                                             ),
                                           ),
-                                          child: Center(
-                                            child: isMaster
-                                                ? Icon(
-                                                    FontAwesomeIcons.crown,
-                                                    color: Colors.amber[800],
-                                                    size: 22,
-                                                  )
-                                                : Text(
-                                                    (data['nome'] as String)
-                                                            .isNotEmpty
-                                                        ? data['nome'][0]
-                                                              .toUpperCase()
-                                                        : "?",
-                                                    style: TextStyle(
-                                                      color: _corAcai,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 20,
+                                          SizedBox(width: 15),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      data['nome'],
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.grey[800],
+                                                        decoration: isAtivo
+                                                            ? null
+                                                            : TextDecoration
+                                                                .lineThrough,
+                                                      ),
                                                     ),
-                                                  ),
-                                          ),
-                                        ),
-                                        SizedBox(width: 15),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                data['nome'],
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 16,
-                                                  color: Colors.grey[800],
-                                                ),
-                                              ),
-                                              SizedBox(height: 5),
-                                              Text(
-                                                "CPF: ${data['cpf']}",
-                                                style: TextStyle(
-                                                  color: Colors.grey[500],
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              SizedBox(height: 8),
-                                              Wrap(
-                                                spacing: 5,
-                                                children: skills
-                                                    .map(
-                                                      (skill) =>
-                                                          _buildSkillBadge(
-                                                            skill.toString(),
+                                                    if (!isAtivo)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.only(
+                                                          left: 8.0,
+                                                        ),
+                                                        child: Container(
+                                                          margin:
+                                                              EdgeInsets.only(
+                                                            left: 8,
                                                           ),
-                                                    )
-                                                    .toList(),
-                                              ),
-                                            ],
+                                                          padding:
+                                                              EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors.red,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              4,
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            "INATIVO",
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                SizedBox(height: 5),
+                                                Text(
+                                                  "CPF: ${data['cpf']}",
+                                                  style: TextStyle(
+                                                    color: Colors.grey[500],
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                                SizedBox(height: 8),
+                                                Wrap(
+                                                  spacing: 5,
+                                                  children: skills
+                                                      .map(
+                                                        (skill) =>
+                                                            _buildSkillBadge(
+                                                              skill.toString(),
+                                                            ),
+                                                      )
+                                                      .toList(),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        IconButton(
-                                          icon: Icon(
-                                            Icons.block,
-                                            color: Colors.red[300],
+                                          IconButton(
+                                            tooltip: "Editar Profissional",
+                                            icon: Icon(
+                                              Icons.edit,
+                                              color: Colors.blue[300],
+                                            ),
+                                            onPressed: () => _editar(doc),
                                           ),
-                                          onPressed: () =>
-                                              _confirmarExclusao(doc),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     );
                                   },
                                 );
@@ -645,26 +697,10 @@ class _EquipeViewState extends State<EquipeView> {
     );
   }
 
-  void _confirmarExclusao(DocumentSnapshot doc) {
+  void _editar(DocumentSnapshot doc) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("Desativar Acesso?"),
-        content: Text("O profissional não conseguirá mais logar no sistema."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancelar"),
-          ),
-          TextButton(
-            onPressed: () {
-              doc.reference.update({'ativo': false});
-              Navigator.pop(ctx);
-            },
-            child: Text("Desativar", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      builder: (ctx) => ProfessionalEditorDialog(profissional: doc),
     );
   }
 }
