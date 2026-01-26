@@ -604,20 +604,36 @@ class _CrecheScreenState extends State<CrecheScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Feedback de Vouchers
             if (vouchersUsados > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+              Container(
+                margin: EdgeInsets.only(bottom: 15),
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.discount, size: 16, color: Colors.orange),
-                    SizedBox(width: 5),
-                    Text(
-                      "$vouchersUsados vouchers aplicados",
-                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                    Icon(Icons.confirmation_number, size: 16, color: Colors.orange[800]),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        total == 0
+                            ? "Coberto por $vouchersUsados vouchers!"
+                            : "$vouchersUsados dias cobertos por voucher.",
+                        style: TextStyle(
+                          color: Colors.orange[900],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
+
             Row(
               children: [
                 Expanded(
@@ -625,7 +641,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Total a Pagar",
+                        total == 0 && vouchersUsados > 0 ? "Custo Total" : "Valor a Pagar",
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -633,11 +649,13 @@ class _CrecheScreenState extends State<CrecheScreen> {
                         ),
                       ),
                       Text(
-                        "R\$ ${total.toStringAsFixed(2)}",
+                        total == 0 && vouchersUsados > 0
+                            ? "GRÁTIS"
+                            : "R\$ ${total.toStringAsFixed(2)}",
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: _corAcai,
+                          color: total == 0 ? Colors.green : _corAcai,
                         ),
                       ),
                       Text(

@@ -107,9 +107,9 @@ class FirebaseService {
       if (data == null) return {'banho': 0, 'tosa': 0, 'creche': 0};
 
       return {
-        'banho': (data['vouchers_banho'] ?? 0) as int,
-        'tosa': (data['vouchers_tosa'] ?? 0) as int,
-        'creche': (data['vouchers_creche'] ?? 0) as int,
+        'banho': (data['vouchers_banho'] as num?)?.toInt() ?? 0,
+        'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? 0,
+        'creche': (data['vouchers_creche'] as num?)?.toInt() ?? 0,
       };
     });
   }
