@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/admin_web/widgets/product_search_widget.dart';
 
 class CheckoutCrecheDialog extends StatefulWidget {
   final String reservaId;
@@ -31,6 +32,7 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
   );
 
   List<Map<String, dynamic>> _extrasSelecionados = [];
+  List<Map<String, dynamic>> _produtosSelecionados = [];
   List<Map<String, dynamic>> _extrasFiltrados = [];
   final TextEditingController _searchController = TextEditingController();
 
@@ -65,6 +67,28 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
     }
   }
 
+  void _adicionarProduto(Map<String, dynamic> produto) {
+    setState(() {
+      int index = _produtosSelecionados.indexWhere((p) => p['id'] == produto['id']);
+      if (index != -1) {
+        _produtosSelecionados[index]['qtd']++;
+      } else {
+        _produtosSelecionados.add({
+          'id': produto['id'],
+          'nome': produto['nome'],
+          'preco': produto['preco'],
+          'qtd': 1
+        });
+      }
+    });
+  }
+
+  void _removerProduto(int index) {
+    setState(() {
+      _produtosSelecionados.removeAt(index);
+    });
+  }
+
   void _confirmarCheckout() async {
     setState(() => _isLoading = true);
     try {
@@ -72,11 +96,17 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
           .map((e) => e['id'] as String)
           .toList();
 
+      List<Map<String, dynamic>> produtosList = _produtosSelecionados.map((p) => {
+        'id': p['id'],
+        'qtd': p['qtd']
+      }).toList();
+
       final result = await _functions
           .httpsCallable('realizarCheckoutCreche')
           .call({
             'reservaId': widget.reservaId,
             'extrasIds': extrasIds,
+            'produtos': produtosList,
             'metodoPagamentoDiferenca': _metodoPagamento,
           });
 
@@ -101,357 +131,234 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
       0,
       (sum, item) => sum + item['preco'],
     );
-    double custoTotalServico = valorDiarias + valorExtras;
+    double valorProdutos = _produtosSelecionados.fold(
+      0,
+      (sum, item) => sum + (item['preco'] * item['qtd'])
+    );
+    double custoTotalServico = valorDiarias + valorExtras + valorProdutos;
     double jaPago = (widget.dadosReserva['valor_pago'] ?? 0).toDouble();
     double restanteAPagar = custoTotalServico - jaPago;
     if (restanteAPagar < 0) restanteAPagar = 0;
 
     bool precisaPagar = restanteAPagar > 0.01;
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      contentPadding: EdgeInsets.zero, // Remove padding padrão para compactar
-      // HEADER COMPACTO
-      titlePadding: EdgeInsets.fromLTRB(20, 15, 20, 10),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(FontAwesomeIcons.school, color: widget.corAcai, size: 20),
-              SizedBox(width: 8),
-              Text(
-                "Checkout Creche",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ],
-          ),
-          if (precisaPagar)
-            Row(
-              children: [
-                _buildPaymentOption("Pix", FontAwesomeIcons.pix, "pix_balcao"),
-                SizedBox(width: 5),
-                _buildPaymentOption(
-                  "Dinheiro",
-                  FontAwesomeIcons.moneyBillWave,
-                  "dinheiro",
-                ),
-                SizedBox(width: 5),
-                _buildPaymentOption(
-                  "Cartão",
-                  FontAwesomeIcons.creditCard,
-                  "cartao_credito",
-                ),
-              ],
-            ),
-        ],
-      ),
-
-      content: Container(
-        width: 500,
-        height: 520, // Altura fixa reduzida
-        padding: EdgeInsets.symmetric(horizontal: 20),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 1000,
+        height: 700,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Divider(height: 1),
-            SizedBox(height: 10),
-
-            // 1. RESUMO DA ESTADIA (Compacto)
-            Text(
-              "Resumo da Estadia",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 5),
+            // HEADER
             Container(
-              padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              padding: EdgeInsets.symmetric(horizontal: 30, vertical: 20),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _colunaResumo("Dias", "$_diasEstadia"),
-                  _colunaResumo(
-                    "Diária",
-                    "R\$ ${widget.precoDiaria.toStringAsFixed(2)}",
+                  Row(
+                    children: [
+                      Icon(FontAwesomeIcons.school, color: widget.corAcai, size: 28),
+                      SizedBox(width: 10),
+                      Text(
+                        "Checkout Creche",
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 22),
+                      ),
+                    ],
                   ),
-                  Container(
-                    height: 20,
-                    width: 1,
-                    color: Colors.blue.withOpacity(0.3),
+                  IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                ],
+              ),
+            ),
+
+            // BODY
+            Expanded(
+              child: Row(
+                children: [
+                  // LEFT: Estadia, Extras
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      padding: EdgeInsets.all(25),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Resumo da Estadia", style: _sectionStyle),
+                            SizedBox(height: 10),
+                            _buildResumoEstadia(valorDiarias),
+
+                            Divider(height: 40),
+
+                            Text("Adicionar Extras (Serviços)", style: _sectionStyle),
+                            SizedBox(height: 10),
+                            _buildExtrasSection(),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                  Text(
-                    "Total Diárias: R\$ ${valorDiarias.toStringAsFixed(2)}",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[900],
-                      fontSize: 13,
+
+                  VerticalDivider(width: 1),
+
+                  // RIGHT: Produtos
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      color: Colors.grey[50],
+                      padding: EdgeInsets.all(25),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("Adicionar Produtos", style: _sectionStyle),
+                          SizedBox(height: 10),
+                          SizedBox(
+                            height: 300,
+                            child: ProductSearchWidget(
+                              onProductSelected: _adicionarProduto,
+                              corDestaque: widget.corAcai,
+                            ),
+                          ),
+                          Divider(),
+                          Expanded(
+                            child: _produtosSelecionados.isEmpty
+                            ? Center(child: Text("Nenhum produto adicionado", style: TextStyle(color: Colors.grey)))
+                            : ListView.builder(
+                                itemCount: _produtosSelecionados.length,
+                                itemBuilder: (context, index) {
+                                  final p = _produtosSelecionados[index];
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(p['nome'], style: TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text("Qtd: ${p['qtd']} x R\$ ${p['preco']}"),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text("R\$ ${(p['preco'] * p['qtd']).toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold)),
+                                        SizedBox(width: 5),
+                                        IconButton(
+                                          icon: Icon(Icons.delete, color: Colors.red, size: 18),
+                                          onPressed: () => _removerProduto(index),
+                                        )
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-            SizedBox(height: 15),
-
-            // 2. EXTRAS (Compacto)
-            Text(
-              "Consumo Extra",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.grey[700],
-              ),
-            ),
-            SizedBox(height: 5),
-
-            // Busca
-            SizedBox(
-              height: 35,
-              child: TextField(
-                controller: _searchController,
-                onChanged: _filtrarExtras,
-                style: TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: "Buscar item...",
-                  prefixIcon: Icon(Icons.search, size: 16, color: Colors.grey),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, size: 14),
-                          onPressed: () {
-                            _searchController.clear();
-                            _filtrarExtras('');
-                          },
-                        )
-                      : null,
-                  contentPadding: EdgeInsets.symmetric(
-                    vertical: 0,
-                    horizontal: 10,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-              ),
-            ),
-            SizedBox(height: 5),
-
-            // Lista Resultados (Pequena)
+            // FOOTER
             Container(
-              height: 90, // Altura bem reduzida
+              height: 100,
+              padding: EdgeInsets.symmetric(horizontal: 30),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[200]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _extrasFiltrados.isEmpty
-                  ? Center(
-                      child: Text(
-                        "Sem itens",
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: _extrasFiltrados.length,
-                      separatorBuilder: (_, __) => Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = _extrasFiltrados[index];
-                        return ListTile(
-                          visualDensity:
-                              VisualDensity.compact, // Compacta a linha
-                          dense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                          title: Text(
-                            item['nome'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          trailing: Text(
-                            "+ R\$ ${item['preco']}",
-                            style: TextStyle(
-                              color: widget.corAcai,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          onTap: () {
-                            setState(() {
-                              _extrasSelecionados.add(item);
-                              _searchController.clear();
-                              _filtrarExtras('');
-                            });
-                          },
-                        );
-                      },
-                    ),
-            ),
-
-            // Chips Selecionados (Horizontal Scroll se tiver muitos)
-            if (_extrasSelecionados.isNotEmpty)
-              Container(
-                height: 30,
-                margin: EdgeInsets.only(top: 5),
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _extrasSelecionados.length,
-                  separatorBuilder: (_, __) => SizedBox(width: 5),
-                  itemBuilder: (context, index) {
-                    final e = _extrasSelecionados[index];
-                    return Chip(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      label: Text(
-                        "${e['nome']} (R\$${e['preco']})",
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                      backgroundColor: widget.corAcai,
-                      deleteIcon: Icon(
-                        Icons.close,
-                        size: 12,
-                        color: Colors.white,
-                      ),
-                      onDeleted: () =>
-                          setState(() => _extrasSelecionados.removeAt(index)),
-                    );
-                  },
-                ),
-              ),
-
-            Spacer(), // Empurra o resumo financeiro para o fundo
-
-            Divider(height: 10),
-
-            // 3. RESUMO FINANCEIRO FINAL
-            _linhaFinanceira("Total Serviços", custoTotalServico, isBold: true),
-            _linhaFinanceira("(-) Já Pago", -jaPago, color: Colors.green[700]),
-
-            SizedBox(height: 5),
-
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey[200]!)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))
+                ]
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "A PAGAR",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    "R\$ ${restanteAPagar.toStringAsFixed(2)}",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: precisaPagar ? Colors.red : Colors.green,
-                    ),
-                  ),
+                   Expanded(
+                     child: Column(
+                       mainAxisAlignment: MainAxisAlignment.center,
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         _buildResumoRow("Total Diárias", "R\$ ${valorDiarias.toStringAsFixed(2)}"),
+                         if(valorExtras > 0)
+                           _buildResumoRow("Extras", "+ R\$ ${valorExtras.toStringAsFixed(2)}"),
+                         if(valorProdutos > 0)
+                            _buildResumoRow("Produtos", "+ R\$ ${valorProdutos.toStringAsFixed(2)}"),
+                         _buildResumoRow("Já Pago", "- R\$ ${jaPago.toStringAsFixed(2)}", color: Colors.green),
+                       ],
+                     ),
+                   ),
+                   Container(width: 1, height: 60, color: Colors.grey[300], margin: EdgeInsets.symmetric(horizontal: 20)),
+                   Column(
+                     mainAxisAlignment: MainAxisAlignment.center,
+                     crossAxisAlignment: CrossAxisAlignment.end,
+                     children: [
+                       Text("A PAGAR", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                       Text("R\$ ${restanteAPagar.toStringAsFixed(2)}", style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: precisaPagar ? Colors.red : Colors.green)),
+                     ],
+                   ),
+                   SizedBox(width: 30),
+                   if (precisaPagar) ...[
+                     _buildPaymentButton("Pix", FontAwesomeIcons.pix, "pix_balcao"),
+                     SizedBox(width: 10),
+                     _buildPaymentButton("Dinheiro", FontAwesomeIcons.moneyBillWave, "dinheiro"),
+                     SizedBox(width: 10),
+                     _buildPaymentButton("Cartão", FontAwesomeIcons.creditCard, "cartao_credito"),
+                     SizedBox(width: 20),
+                   ],
+                   ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: (precisaPagar && _metodoPagamento == null) ? Colors.grey[300] : Colors.green,
+                        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: _isLoading || (precisaPagar && _metodoPagamento == null) ? null : _confirmarCheckout,
+                      child: _isLoading
+                        ? CircularProgressIndicator(color: Colors.white)
+                        : Text("FINALIZAR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+                   )
                 ],
               ),
-            ),
-
-            // Aviso de Seleção
-            if (precisaPagar && _metodoPagamento == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      "Selecione o pagamento ↗",
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (!precisaPagar)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Text(
-                    "✅ Conta Quitada.",
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
+            )
           ],
         ),
       ),
-
-      actionsPadding: EdgeInsets.fromLTRB(20, 0, 20, 15),
-      actions: [
-        SizedBox(
-          height: 35,
-          child: TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              "Cancelar",
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 35,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: (precisaPagar && _metodoPagamento == null)
-                  ? Colors.grey[300]
-                  : Colors.green,
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: _isLoading || (precisaPagar && _metodoPagamento == null)
-                ? null
-                : _confirmarCheckout,
-            child: _isLoading
-                ? SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Text(
-                    "CONFIRMAR CHECKOUT",
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: (precisaPagar && _metodoPagamento == null)
-                          ? Colors.grey[600]
-                          : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-          ),
-        ),
-      ],
     );
   }
 
-  // --- WIDGETS AUXILIARES COMPACTOS ---
+  TextStyle get _sectionStyle => TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700], fontSize: 16);
+
+  Widget _buildResumoEstadia(double valorDiarias) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 15, horizontal: 15),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _colunaResumo("Dias", "$_diasEstadia"),
+          _colunaResumo(
+            "Valor Diária",
+            "R\$ ${widget.precoDiaria.toStringAsFixed(2)}",
+          ),
+          Container(
+            height: 30,
+            width: 1,
+            color: Colors.blue.withOpacity(0.3),
+          ),
+          Text(
+            "Subtotal: R\$ ${valorDiarias.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.blue[900],
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _colunaResumo(String label, String val) {
     return Column(
@@ -461,7 +368,7 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
         Text(
           val,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
             color: Colors.black87,
           ),
@@ -470,71 +377,94 @@ class _CheckoutCrecheDialogState extends State<CheckoutCrecheDialog> {
     );
   }
 
-  Widget _linhaFinanceira(
-    String label,
-    double val, {
-    bool isBold = false,
-    Color? color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[800],
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            ),
+  Widget _buildExtrasSection() {
+    return Column(
+      children: [
+        TextField(
+          controller: _searchController,
+          onChanged: _filtrarExtras,
+          decoration: InputDecoration(
+            hintText: "Buscar serviço extra...",
+            prefixIcon: Icon(Icons.search, color: Colors.grey),
+            suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: Icon(Icons.clear), onPressed: () {_searchController.clear(); _filtrarExtras('');}) : null,
+            contentPadding: EdgeInsets.symmetric(horizontal: 15),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true, fillColor: Colors.white,
           ),
-          Text(
-            "R\$ ${val.abs().toStringAsFixed(2)}",
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: color ?? Colors.black87,
-            ),
+        ),
+        SizedBox(height: 10),
+        Container(
+          height: 150,
+          decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!), borderRadius: BorderRadius.circular(8)),
+          child: ListView.separated(
+            itemCount: _extrasFiltrados.length,
+            separatorBuilder: (_, __) => Divider(height: 1),
+            itemBuilder: (context, index) {
+              final item = _extrasFiltrados[index];
+              return ListTile(
+                dense: true,
+                title: Text(item['nome']),
+                trailing: Text("+ R\$ ${item['preco']}", style: TextStyle(color: widget.corAcai, fontWeight: FontWeight.bold)),
+                onTap: () {
+                  setState(() {
+                    _extrasSelecionados.add(item);
+                    _searchController.clear();
+                    _filtrarExtras('');
+                  });
+                },
+              );
+            },
           ),
-        ],
+        ),
+        if (_extrasSelecionados.isNotEmpty) ...[
+          SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: _extrasSelecionados.asMap().entries.map((entry) => Chip(
+              label: Text("${entry.value['nome']} (R\$ ${entry.value['preco']})"),
+              backgroundColor: widget.corAcai.withOpacity(0.1),
+              deleteIcon: Icon(Icons.close, size: 14),
+              onDeleted: () => setState(() => _extrasSelecionados.removeAt(entry.key)),
+            )).toList(),
+          )
+        ]
+      ],
+    );
+  }
+
+  Widget _buildPaymentButton(String label, IconData icon, String value) {
+    bool isSelected = _metodoPagamento == value;
+    return InkWell(
+      onTap: () => setState(() => _metodoPagamento = value),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+        decoration: BoxDecoration(
+          color: isSelected ? widget.corAcai : Colors.grey[100],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? widget.corAcai : Colors.grey[300]!),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: isSelected ? Colors.white : Colors.grey[600]),
+            SizedBox(height: 5),
+            Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: isSelected ? Colors.white : Colors.grey[700])),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPaymentOption(String label, IconData icon, String value) {
-    bool isSelected = _metodoPagamento == value;
-    return InkWell(
-      onTap: () => setState(() => _metodoPagamento = value),
-      borderRadius: BorderRadius.circular(6),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? widget.corAcai : Colors.grey[100],
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isSelected ? widget.corAcai : Colors.grey[300]!,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 12,
-              color: isSelected ? Colors.white : Colors.grey[600],
-            ),
-            SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-                color: isSelected ? Colors.white : Colors.grey[700],
-              ),
-            ),
-          ],
-        ),
+  Widget _buildResumoRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label + ": ", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color ?? Colors.black87)),
+        ],
       ),
     );
   }
