@@ -299,7 +299,37 @@ class _CheckoutDialogPremiumState extends State<CheckoutDialogPremium> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 1. VOUCHERS (Compacto)
-                          if (!_jaConsumiuVoucher && _saldosDisponiveis.isNotEmpty)
+                          if (_jaConsumiuVoucher) ...[
+                            Container(
+                              margin: EdgeInsets.only(bottom: 20),
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.withOpacity(0.5)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.check_circle, size: 16, color: Colors.green),
+                                      SizedBox(width: 5),
+                                      Text("Voucher já aplicado neste agendamento", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800])),
+                                    ],
+                                  ),
+                                  if (_detalhesConsumo.isNotEmpty) ...[
+                                    SizedBox(height: 5),
+                                    ..._detalhesConsumo.entries.map((e) {
+                                        final info = e.value as Map;
+                                        final responsavel = info['responsavel'] ?? 'N/A';
+                                        return Text("Aplicado por: $responsavel", style: TextStyle(fontSize: 12, color: Colors.green[900]));
+                                    }).toList(),
+                                  ]
+                                ],
+                              ),
+                            ),
+                          ] else if (_saldosDisponiveis.isNotEmpty)
                             Container(
                               margin: EdgeInsets.only(bottom: 20),
                               padding: EdgeInsets.all(12),
