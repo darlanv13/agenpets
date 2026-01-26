@@ -1,137 +1,123 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// IMPORTANTE: Ajuste os imports conforme onde você salvar os arquivos novos
-import 'tabs/precos_base_tab.dart';
-import 'tabs/servicos_extras_tab.dart';
-import 'tabs/pacotes_assinatura_tab.dart';
+import 'subviews/precos_base_view.dart';
+import 'subviews/servicos_view.dart';
+import 'subviews/pacotes_view.dart';
 
 class GestaoPrecosView extends StatefulWidget {
   @override
   _GestaoPrecosViewState createState() => _GestaoPrecosViewState();
 }
 
-class _GestaoPrecosViewState extends State<GestaoPrecosView>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _GestaoPrecosViewState extends State<GestaoPrecosView> {
+  int _selectedIndex = 0;
   final Color _corAcai = Color(0xFF4A148C);
+  final Color _corFundo = Color(0xFFF5F7FA);
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
+  final List<Widget> _views = [PrecosBaseView(), ServicosView(), PacotesView()];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
-      body: Column(
+      backgroundColor: _corFundo,
+      body: Row(
         children: [
-          // HEADER
+          // SIDE MENU
           Container(
-            padding: EdgeInsets.symmetric(vertical: 25, horizontal: 40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
-            child: Row(
+            width: 260,
+            color: Colors.white,
+            child: Column(
               children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Color(0xFFF3E5F5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.price_change, color: _corAcai, size: 28),
-                ),
-                SizedBox(width: 15),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Gestão de Preços",
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: _corAcai,
-                      ),
-                    ),
-                    Text(
-                      "Configure serviços, preços e pacotes",
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                  ],
-                ),
+                _buildMenuHeader(),
+                SizedBox(height: 20),
+                _buildMenuItem(0, "Tabela Base", FontAwesomeIcons.table),
+                _buildMenuItem(1, "Serviços", FontAwesomeIcons.listCheck),
+                _buildMenuItem(2, "Pacotes", FontAwesomeIcons.boxesStacked),
               ],
             ),
           ),
 
-          // TABS
-          Container(
-            margin: EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(50),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5),
-              ],
-            ),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey,
-              indicator: BoxDecoration(
-                color: _corAcai,
-                borderRadius: BorderRadius.circular(50),
-              ),
-              padding: EdgeInsets.all(5),
-              tabs: [
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.tune, size: 18),
-                      SizedBox(width: 8),
-                      Text("Preços Base"),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_circle_outline, size: 18),
-                      SizedBox(width: 8),
-                      Text("Extras"),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FontAwesomeIcons.boxOpen, size: 16),
-                      SizedBox(width: 8),
-                      Text("Pacotes (Assinatura)"),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // SEPARATOR
+          VerticalDivider(width: 1, color: Colors.grey[200]),
 
-          // CONTEÚDO
+          // CONTENT
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                PrecosBaseTab(),
-                ServicosExtrasTab(),
-                PacotesAssinaturaTab(), // A mágica acontece aqui
-              ],
+            child: Container(color: _corFundo, child: _views[_selectedIndex]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuHeader() {
+    return Container(
+      padding: EdgeInsets.all(30),
+      alignment: Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _corAcai.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.price_change, color: _corAcai, size: 28),
+          ),
+          SizedBox(height: 15),
+          Text(
+            "Gestão de\nPreços",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+              height: 1.2,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(int index, String label, IconData icon) {
+    bool isSelected = _selectedIndex == index;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedIndex = index),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: 30, vertical: 18),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? _corAcai.withValues(alpha: 0.05)
+                : Colors.transparent,
+            border: Border(
+              right: BorderSide(
+                color: isSelected ? _corAcai : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? _corAcai : Colors.grey[500],
+              ),
+              SizedBox(width: 15),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? _corAcai : Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
