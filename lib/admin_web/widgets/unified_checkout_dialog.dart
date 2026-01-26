@@ -191,11 +191,17 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     List<Map<String, dynamic>> remoteResults = [];
     if (query.isNotEmpty) {
       try {
+        // Fallback for case sensitivity: Try to capitalize first letter if user typed lowercase
+        String searchQuery = query;
+        if (query.isNotEmpty && query[0] == query[0].toLowerCase()) {
+           searchQuery = query[0].toUpperCase() + query.substring(1);
+        }
+
         final snapshot = await _db.collection('produtos')
             .orderBy('nome')
-            .startAt([query])
-            .endAt([query + '\uf8ff'])
-            .limit(10)
+            .startAt([searchQuery])
+            .endAt([searchQuery + '\uf8ff'])
+            .limit(20)
             .get();
 
         remoteResults = snapshot.docs.map((doc) {
@@ -370,37 +376,91 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                     // VOUCHERS SECTION
                     if (_voucherConsumedPreviously)
                       Container(
-                        padding: EdgeInsets.all(10),
+                        padding: EdgeInsets.all(12),
                         margin: EdgeInsets.only(bottom: 15),
-                        decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
-                        child: Row(children: [Icon(Icons.check_circle, size: 16, color: Colors.green), SizedBox(width: 8), Text("Voucher já aplicado/consumido anteriormente.", style: TextStyle(fontSize: 12, color: Colors.green[800], fontWeight: FontWeight.bold))]),
+                        decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.green[200]!)),
+                        child: Row(children: [Icon(Icons.history, size: 20, color: Colors.green[700]), SizedBox(width: 10), Expanded(child: Text("Voucher já consumido nesta reserva.", style: TextStyle(fontSize: 13, color: Colors.green[800], fontWeight: FontWeight.bold)))]),
                       )
                     else if (_availableVouchers.isNotEmpty) ...[
-                      Text("Vouchers Disponíveis:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[700])),
+                      Row(
+                        children: [
+                          Icon(FontAwesomeIcons.ticket, size: 14, color: Colors.amber[800]),
+                          SizedBox(width: 8),
+                          Text("SEUS VOUCHERS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[700], letterSpacing: 1)),
+                        ],
+                      ),
+                      SizedBox(height: 8),
                       Container(
-                        padding: EdgeInsets.all(10),
-                        margin: EdgeInsets.only(top: 5, bottom: 15),
+                        height: 140, // Scrollable Area fixed height
+                        margin: EdgeInsets.only(bottom: 15),
                         decoration: BoxDecoration(
-                          color: Colors.orange[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange[200]!),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
-                        child: Column(
-                          children: _availableVouchers.keys.map((key) {
-                            return CheckboxListTile(
-                              title: Text(key.toUpperCase(), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                              subtitle: Text("Qtd: ${_availableVouchers[key]}"),
-                              value: _vouchersToUse[key] ?? false,
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              activeColor: widget.themeColor,
-                              onChanged: (val) {
-                                setState(() {
-                                  _vouchersToUse[key] = val!;
-                                });
-                              },
-                            );
-                          }).toList(),
+                        child: Scrollbar(
+                          thumbVisibility: true,
+                          child: ListView.separated(
+                            padding: EdgeInsets.all(5),
+                            itemCount: _availableVouchers.length,
+                            separatorBuilder: (_, __) => Divider(height: 1),
+                            itemBuilder: (ctx, index) {
+                              String key = _availableVouchers.keys.elementAt(index);
+                              int qtd = _availableVouchers[key]!;
+                              bool isSelected = _vouchersToUse[key] ?? false;
+
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                     setState(() {
+                                        _vouchersToUse[key] = !isSelected;
+                                     });
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Colors.amber[50] : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: isSelected ? Colors.amber[100] : Colors.grey[100],
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            isSelected ? Icons.check : FontAwesomeIcons.ticket,
+                                            size: 16,
+                                            color: isSelected ? Colors.amber[800] : Colors.grey,
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(key.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
+                                              Text("Disponíveis: $qtd", style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                            ],
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(10)),
+                                            child: Text("USAR", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ],
