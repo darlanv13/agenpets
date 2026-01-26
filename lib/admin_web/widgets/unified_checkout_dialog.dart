@@ -370,8 +370,18 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text("Pagamento & Vouchers", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    SizedBox(height: 15),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("Pagamento & Vouchers", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        IconButton(
+                          icon: Icon(Icons.close, color: Colors.grey),
+                          onPressed: () => Navigator.pop(context),
+                          tooltip: "Fechar",
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
 
                     // VOUCHERS SECTION
                     if (_voucherConsumedPreviously)
@@ -582,6 +592,16 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                         child: _isLoading
                           ? CircularProgressIndicator(color: Colors.white)
                           : Text("FINALIZAR CHECKOUT", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      ),
+                    ),
+
+                    SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text("CANCELAR / VOLTAR", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
