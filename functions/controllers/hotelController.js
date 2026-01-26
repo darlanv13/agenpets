@@ -245,11 +245,18 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
 
     if (extrasIds && extrasIds.length > 0) {
         for (const extraId of extrasIds) {
-            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
-            if (extraDoc.exists) {
-                const p = Number(extraDoc.data().preco || 0);
+            let extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            let extraData = extraDoc.exists ? extraDoc.data() : null;
+
+            if (!extraDoc.exists) {
+                extraDoc = await db.collection('produtos').doc(extraId).get();
+                if (extraDoc.exists) extraData = extraDoc.data();
+            }
+
+            if (extraDoc.exists && extraData) {
+                const p = Number(extraData.preco || 0);
                 custoExtras += p;
-                extrasProcessados.push({ id: extraId, nome: extraDoc.data().nome, preco: p });
+                extrasProcessados.push({ id: extraId, nome: extraData.nome, preco: p });
             }
         }
     }
