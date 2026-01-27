@@ -506,6 +506,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                 Expanded(
                   child: _buildServiceBigCard(
                     "Banho",
+                    "Higiene e Relaxamento",
                     FontAwesomeIcons.shower,
                     Colors.blue,
                   ),
@@ -514,6 +515,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                 Expanded(
                   child: _buildServiceBigCard(
                     "Tosa",
+                    "Estilo e Cuidados",
                     FontAwesomeIcons.scissors,
                     Colors.orange,
                   ),
@@ -528,37 +530,65 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     );
   }
 
-  Widget _buildServiceBigCard(String label, IconData icon, Color color) {
+  Widget _buildServiceBigCard(
+    String label,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
     bool isSelected = _servicoSelecionado == label;
     return GestureDetector(
       onTap: () {
         setState(() => _servicoSelecionado = label);
         _proximoPasso();
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.2),
-              blurRadius: 20,
-              offset: Offset(0, 10),
+              color: color.withOpacity(0.15),
+              blurRadius: 15,
+              offset: Offset(0, 8),
             ),
           ],
-          border: isSelected ? null : Border.all(color: Colors.grey[200]!),
+          border: isSelected ? null : Border.all(color: Colors.grey[100]!),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            FaIcon(icon, size: 50, color: isSelected ? Colors.white : color),
-            SizedBox(height: 20),
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withOpacity(0.2)
+                    : color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: FaIcon(
+                icon,
+                size: 30,
+                color: isSelected ? Colors.white : color,
+              ),
+            ),
+            SizedBox(height: 15),
             Text(
               label,
               style: GoogleFonts.poppins(
-                fontSize: 22,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: isSelected ? Colors.white : Colors.grey[800],
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: isSelected ? Colors.white70 : Colors.grey[500],
               ),
             ),
           ],
@@ -734,14 +764,14 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // TICKET STYLE CARD
           Container(
-            padding: EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withOpacity(0.1),
                   blurRadius: 20,
                   offset: Offset(0, 10),
                 ),
@@ -749,29 +779,83 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             ),
             child: Column(
               children: [
-                _buildSummaryRow(Icons.pets, "Pet", _petNome ?? ""),
-                Divider(height: 30),
-                _buildSummaryRow(
-                  Icons.cut,
-                  "Serviço",
-                  _servicoSelecionado ?? "",
+                // Top Section (Header)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                  decoration: BoxDecoration(
+                    color: _corAcai,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.confirmation_number_outlined, color: Colors.white, size: 28),
+                      SizedBox(width: 15),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Revisão do Pedido",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "Verifique os dados abaixo",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                Divider(height: 30),
-                _buildSummaryRow(
-                  Icons.calendar_today,
-                  "Data",
-                  DateFormat('dd/MM/yyyy').format(_dataSelecionada),
-                ),
-                Divider(height: 30),
-                _buildSummaryRow(
-                  Icons.access_time,
-                  "Horário",
-                  _horarioSelecionado ?? "",
+
+                // Content Section
+                Padding(
+                  padding: EdgeInsets.all(25),
+                  child: Column(
+                    children: [
+                      _buildSummaryRow(Icons.pets, "Pet", _petNome ?? ""),
+                      SizedBox(height: 20),
+                      _buildSummaryRow(
+                        Icons.cut,
+                        "Serviço",
+                        _servicoSelecionado ?? "",
+                      ),
+                      SizedBox(height: 20),
+                      Divider(style: BorderStyle.none), // Spacer
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSummaryBox(
+                              Icons.calendar_today,
+                              "Data",
+                              DateFormat('dd/MM').format(_dataSelecionada),
+                            ),
+                          ),
+                          SizedBox(width: 15),
+                          Expanded(
+                            child: _buildSummaryBox(
+                              Icons.access_time,
+                              "Horário",
+                              _horarioSelecionado ?? "",
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          SizedBox(height: 20),
+          SizedBox(height: 25),
           TextField(
             controller: _obsController,
             maxLines: 3,
@@ -822,32 +906,73 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     return Row(
       children: [
         Container(
-          padding: EdgeInsets.all(10),
+          padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: _corAcai.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(10),
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: _corAcai, size: 20),
+          child: Icon(icon, color: Colors.grey[700], size: 20),
         ),
         SizedBox(width: 15),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-            ),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
               ),
-            ),
-          ],
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
         ),
+        Icon(Icons.check_circle, color: Colors.green[400], size: 18),
       ],
+    );
+  }
+
+  Widget _buildSummaryBox(IconData icon, String label, String value) {
+    return Container(
+      padding: EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: _corAcai),
+              SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: _corAcai,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 5),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
