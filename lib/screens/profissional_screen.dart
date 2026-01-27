@@ -51,20 +51,8 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     // 1. INÍCIO DO PROCESSO (Checklist -> Banho)
     if (statusAtual == 'agendado' || statusAtual == 'aguardando_pagamento') {
       if (!checklistFeito) {
-        // FLUXO A: Fazer Checklist
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChecklistPetScreen(
-              agendamentoId: doc.id,
-              nomePet: data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
-            ),
-          ),
-        );
-        // Se voltou com sucesso (true), o StreamBuilder já atualiza a tela
-        if (result == true) {
-          // Opcional: Feedback extra
-        }
+        // FLUXO A: Selecionar Profissional -> Fazer Checklist
+        await _selecionarProfissional(doc);
       } else {
         // FLUXO B: Já fez checklist -> Iniciar Banho
         await doc.reference.update({
@@ -108,6 +96,86 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
           duration: Duration(seconds: 1),
         ),
       );
+    }
+  }
+
+  Future<void> _selecionarProfissional(DocumentSnapshot doc) async {
+    try {
+      // Busca profissionais ativos
+      QuerySnapshot prosSnapshot = await _db
+          .collection('profissionais')
+          .where('ativo', isEqualTo: true)
+          .get();
+
+      List<DocumentSnapshot> pros = prosSnapshot.docs;
+
+      if (pros.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Nenhum profissional ativo encontrado.")),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text("Quem executará o serviço?"),
+          content: Container(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: pros.length,
+              itemBuilder: (ctx, index) {
+                final proData = pros[index].data() as Map<String, dynamic>;
+                final String nome = proData['nome'] ?? 'Profissional';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _corAcai,
+                    child: Text(
+                      nome.isNotEmpty ? nome[0].toUpperCase() : '?',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  title: Text(nome),
+                  onTap: () async {
+                    Navigator.pop(ctx); // Fecha o dialog
+
+                    // Atualiza o agendamento com o profissional selecionado
+                    await doc.reference.update({
+                      'profissional_id': pros[index].id,
+                      'profissional_nome': nome,
+                    });
+
+                    // Navega para o checklist
+                    final data = doc.data() as Map<String, dynamic>;
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChecklistPetScreen(
+                          agendamentoId: doc.id,
+                          nomePet:
+                              data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text("Cancelar"),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro ao buscar profissionais: $e")));
     }
   }
 
