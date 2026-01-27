@@ -18,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final _firebaseService = FirebaseService();
   final _cpfController = TextEditingController();
 
@@ -45,9 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  // --- 1. LOGIN DE CLIENTE ---
+  // --- 1. VERIFICAÇÃO DE ACESSO ---
   Future<void> _verificarAcesso() async {
     String cpfLimpo = maskCpf.getUnmaskedText();
+    String cpfFormatado = _cpfController.text;
 
     if (!CPFValidator.isValid(cpfLimpo)) {
       _mostrarSnack("CPF Inválido. Verifique os números.", cor: Colors.red);
@@ -55,13 +57,38 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _isLoading = true);
+
+    bool isDesktop = MediaQuery.of(context).size.width >= 800;
+
+    // Se for Desktop, verifica se é Profissional para redirecionar ao Admin
+    if (isDesktop) {
+      try {
+        final proQuery = await _db
+            .collection('profissionais')
+            .where('cpf', isEqualTo: cpfFormatado)
+            .limit(1)
+            .get();
+
+        if (proQuery.docs.isNotEmpty) {
+          // É Profissional no Desktop -> Pede Senha e vai para Admin
+          setState(() => _isLoading = false);
+          _abrirDialogoSenhaProfissional(cpfLimpo, proQuery.docs.first);
+          return;
+        }
+      } catch (e) {
+        print("Erro ao verificar profissional: $e");
+        // Continua para fluxo de cliente se der erro
+      }
+    }
+
+    // Fluxo Padrão (Mobile ou Desktop não-pro) -> Cliente
     await _loginComoCliente(cpfLimpo);
   }
 
-  // --- 4. FLUXO DE CLIENTE (SEM SENHA) ---
+  // --- 2. LOGIN DE CLIENTE (SEM SENHA) ---
   Future<void> _loginComoCliente(String cpfLimpo) async {
     // Aqui usamos o serviço existente para buscar o cliente
-    final user = await _firebaseService.getUser(cpfLimpo); //
+    final user = await _firebaseService.getUser(cpfLimpo);
 
     if (user != null) {
       // Cliente já existe -> Home
@@ -77,6 +104,161 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
   }
 
+  // --- 3. FLUXO PROFISSIONAL DESKTOP (COM SENHA) ---
+  void _abrirDialogoSenhaProfissional(
+    String cpfLimpo,
+    DocumentSnapshot docPro,
+  ) {
+    final _passCtrl = TextEditingController();
+    bool _senhaVisivel = false;
+    bool _logandoDialog = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.lock, color: _corAcai),
+                SizedBox(width: 10),
+                Text(
+                  "Acesso Administrativo",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Olá, ${docPro['nome'].toString().split(' ')[0]}. Digite sua senha.",
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _passCtrl,
+                  obscureText: !_senhaVisivel,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: "Senha",
+                    border: OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _senhaVisivel ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () =>
+                          setStateDialog(() => _senhaVisivel = !_senhaVisivel),
+                    ),
+                  ),
+                ),
+                if (_logandoDialog)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 15.0),
+                    child: LinearProgressIndicator(color: _corAcai),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: _logandoDialog ? null : () => Navigator.pop(ctx),
+                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
+                onPressed: _logandoDialog
+                    ? null
+                    : () async {
+                        setStateDialog(() => _logandoDialog = true);
+
+                        Map<String, dynamic>? dadosUsuario =
+                            await _autenticarProfissionalFirebase(
+                              cpfLimpo,
+                              _passCtrl.text,
+                            );
+
+                        if (dadosUsuario != null) {
+                          Navigator.pop(ctx);
+                          _rotearParaAdminWeb(dadosUsuario);
+                        } else {
+                          setStateDialog(() => _logandoDialog = false);
+                        }
+                      },
+                child: Text("ENTRAR", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _autenticarProfissionalFirebase(
+    String cpfLimpo,
+    String senha,
+  ) async {
+    final emailLogin = "$cpfLimpo@agenpets.pro";
+
+    try {
+      UserCredential userCred = await _auth.signInWithEmailAndPassword(
+        email: emailLogin,
+        password: senha,
+      );
+
+      DocumentSnapshot doc = await _db
+          .collection('profissionais')
+          .doc(userCred.user!.uid)
+          .get();
+
+      if (!doc.exists) {
+        _mostrarSnack("Erro: Perfil não encontrado no banco.", cor: Colors.red);
+        await _auth.signOut();
+        return null;
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+
+      if (data['ativo'] == false) {
+        _mostrarSnack("Acesso revogado.", cor: Colors.red);
+        await _auth.signOut();
+        return null;
+      }
+
+      return data;
+    } on FirebaseAuthException catch (e) {
+      String msg = "Erro no login.";
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential')
+        msg = "Senha incorreta.";
+      if (e.code == 'user-not-found') msg = "Usuário não cadastrado.";
+      if (e.code == 'too-many-requests') msg = "Muitas tentativas. Aguarde.";
+      _mostrarSnack(msg, cor: Colors.red);
+      return null;
+    } catch (e) {
+      _mostrarSnack("Erro: $e", cor: Colors.red);
+      return null;
+    }
+  }
+
+  void _rotearParaAdminWeb(Map<String, dynamic> proData) {
+    String perfil = (proData['perfil'] ?? 'padrao').toString().toLowerCase();
+    List<dynamic> skills = proData['habilidades'] ?? [];
+    bool isMaster = perfil == 'master' || skills.contains('master');
+
+    Navigator.pushReplacementNamed(
+      context,
+      '/admin_web',
+      arguments: {
+        'tipo_acesso': isMaster ? 'master' : perfil,
+        'dados': proData,
+        'isMaster': isMaster,
+        'perfil': perfil,
+      },
+    );
+  }
+
   // --- WIDGETS AUXILIARES ---
 
   void _mostrarSnack(String msg, {Color cor = Colors.black87}) {
@@ -88,7 +270,6 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
