@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../models/user_model.dart';
-import '../services/firebase_service.dart';
+import '../../models/user_model.dart';
+import '../../services/firebase_service.dart';
 
 class CadastroScreen extends StatefulWidget {
   @override

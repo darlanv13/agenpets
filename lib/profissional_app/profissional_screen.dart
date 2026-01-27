@@ -1,7 +1,8 @@
-import 'package:agenpet/screens/components/checklist_pet_screen.dart';
+import 'package:agenpet/profissional_app/components/checklist_pet_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -1080,7 +1081,10 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
             ],
           ),
           IconButton(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+            },
             icon: Icon(Icons.logout, color: Colors.grey),
           ),
         ],

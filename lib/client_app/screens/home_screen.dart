@@ -1,4 +1,4 @@
-import 'package:agenpet/screens/minhas_agendas.dart';
+import 'package:agenpet/client_app/screens/minhas_agendas.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';

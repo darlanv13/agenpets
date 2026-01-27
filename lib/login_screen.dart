@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:cpf_cnpj_validator/cpf_validator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; //
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/firebase_service.dart';
@@ -19,7 +19,6 @@ class _LoginScreenState extends State<LoginScreen> {
     databaseId: 'agenpets',
   );
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
   final _firebaseService = FirebaseService();
   final _cpfController = TextEditingController();
 
@@ -47,7 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  // --- 1. CÉREBRO DO LOGIN: IDENTIFICA O TIPO DE USUÁRIO ---
+  // --- 1. VERIFICAÇÃO DE ACESSO ---
   Future<void> _verificarAcesso() async {
     String cpfLimpo = maskCpf.getUnmaskedText();
     String cpfFormatado = _cpfController.text;
@@ -59,46 +58,53 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    try {
-      // PASSO A: Verifica se é um Profissional Cadastrado
-      // Consultamos a coleção 'profissionais' para saber se pedimos senha ou não.
-      final proQuery = await _db
-          .collection('profissionais')
-          .where('cpf', isEqualTo: cpfFormatado)
-          .limit(1)
-          .get(); //
+    bool isDesktop = MediaQuery.of(context).size.width >= 800;
 
-      if (proQuery.docs.isNotEmpty) {
-        final docPro = proQuery.docs.first;
-        final dataPro = docPro.data() as Map<String, dynamic>;
-        final List<dynamic> skills = dataPro['habilidades'] ?? [];
-        final double width = MediaQuery.of(context).size.width;
-        final bool isMobile = width < 800;
+    // Se for Desktop, verifica se é Profissional para redirecionar ao Admin
+    if (isDesktop) {
+      try {
+        final proQuery = await _db
+            .collection('profissionais')
+            .where('cpf', isEqualTo: cpfFormatado)
+            .limit(1)
+            .get();
 
-        // VERIFICAÇÃO MOBILE COM HABILIDADES ESPECÍFICAS (Tosa/Banho)
-        bool temSkillMobile =
-            skills.contains('tosa') || skills.contains('banho');
-
-        if (isMobile && temSkillMobile) {
-          // Mobile + Skill -> Bifurcação ANTES da senha
+        if (proQuery.docs.isNotEmpty) {
+          // É Profissional no Desktop -> Pede Senha e vai para Admin
           setState(() => _isLoading = false);
-          _mostrarDialogoBifurcacaoPreSenha(cpfLimpo, docPro);
-        } else {
-          // Desktop ou sem skills específicas -> Fluxo Padrão (Senha direto)
-          setState(() => _isLoading = false);
-          _abrirDialogoSenhaProfissional(cpfLimpo, docPro);
+          _abrirDialogoSenhaProfissional(cpfLimpo, proQuery.docs.first);
+          return;
         }
-      } else {
-        // NÃO É PROFISSIONAL: Segue fluxo de Cliente (Sem senha)
-        await _loginComoCliente(cpfLimpo);
+      } catch (e) {
+        print("Erro ao verificar profissional: $e");
+        // Continua para fluxo de cliente se der erro
       }
-    } catch (e) {
-      _mostrarSnack("Erro de conexão: $e", cor: Colors.orange);
-      setState(() => _isLoading = false);
     }
+
+    // Fluxo Padrão (Mobile ou Desktop não-pro) -> Cliente
+    await _loginComoCliente(cpfLimpo);
   }
 
-  // --- 2. FLUXO DE PROFISSIONAL (COM AUTH SEGURO) ---
+  // --- 2. LOGIN DE CLIENTE (SEM SENHA) ---
+  Future<void> _loginComoCliente(String cpfLimpo) async {
+    // Aqui usamos o serviço existente para buscar o cliente
+    final user = await _firebaseService.getUser(cpfLimpo);
+
+    if (user != null) {
+      // Cliente já existe -> Home
+      Navigator.pushReplacementNamed(context, '/home', arguments: user.toMap());
+    } else {
+      // Cliente novo -> Cadastro (levando o CPF)
+      Navigator.pushReplacementNamed(
+        context,
+        '/cadastro',
+        arguments: {'cpf': cpfLimpo},
+      );
+    }
+    setState(() => _isLoading = false);
+  }
+
+  // --- 3. FLUXO PROFISSIONAL DESKTOP (COM SENHA) ---
   void _abrirDialogoSenhaProfissional(
     String cpfLimpo,
     DocumentSnapshot docPro,
@@ -121,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Icon(Icons.lock, color: _corAcai),
                 SizedBox(width: 10),
                 Text(
-                  "Acesso Profissional",
+                  "Acesso Administrativo",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ],
@@ -136,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _passCtrl,
                   obscureText: !_senhaVisivel,
-                  autofocus: false,
+                  autofocus: true,
                   decoration: InputDecoration(
                     labelText: "Senha",
                     border: OutlineInputBorder(),
@@ -168,7 +174,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     : () async {
                         setStateDialog(() => _logandoDialog = true);
 
-                        // 1. Tenta pegar os dados do usuário
                         Map<String, dynamic>? dadosUsuario =
                             await _autenticarProfissionalFirebase(
                               cpfLimpo,
@@ -176,13 +181,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             );
 
                         if (dadosUsuario != null) {
-                          // 2. SUCESSO: Primeiro fechamos o diálogo!
                           Navigator.pop(ctx);
-
-                          // 3. AGORA navegamos (com o contexto da tela principal livre)
-                          _rotearProfissional(dadosUsuario);
+                          _rotearParaAdminWeb(dadosUsuario);
                         } else {
-                          // ERRO: Apenas para o loading do dialog
                           setStateDialog(() => _logandoDialog = false);
                         }
                       },
@@ -226,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return null;
       }
 
-      return data; // Retorna os dados para quem chamou
+      return data;
     } on FirebaseAuthException catch (e) {
       String msg = "Erro no login.";
       if (e.code == 'wrong-password' || e.code == 'invalid-credential')
@@ -241,213 +242,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- 3. ROTEAMENTO (Aqui que decide para onde vai) ---
-  void _rotearProfissional(Map<String, dynamic> proData) {
-    double width = MediaQuery.of(context).size.width;
-    bool isMobile = width < 800;
-
-    // Verifica permissões (Normalizando para minúsculas para evitar erros de case)
+  void _rotearParaAdminWeb(Map<String, dynamic> proData) {
     String perfil = (proData['perfil'] ?? 'padrao').toString().toLowerCase();
     List<dynamic> skills = proData['habilidades'] ?? [];
-
-    // É Master se tiver perfil 'master' OU habilidade 'master'
     bool isMaster = perfil == 'master' || skills.contains('master');
-    // Caixa/Vendedor também acessam painel web, mas com restrições (isMaster=false)
-    bool isCaixaOuVendedor = perfil == 'caixa' || perfil == 'vendedor';
 
-    // Decide se vai para o admin_web (Web Panel)
-    // Desktop: SEMPRE vai para o Admin Web (se não for mobile)
-    // Mobile: Vai para Admin Web apenas se for Master ou Caixa/Vendedor
-    bool vaiParaAdminWeb = !isMobile || isMaster || isCaixaOuVendedor;
-
-    if (isMobile) {
-      // Mobile: Se já passou pela senha, vai direto pro app profissional
-      // (A bifurcação agora acontece antes da senha para Tosa/Banho)
-      Navigator.pushReplacementNamed(
-        context,
-        '/profissional',
-        arguments: proData,
-      );
-    } else {
-      // Desktop: Roteamento direto para o Painel (Admin Web)
-      // Agora TODOS os profissionais no Desktop acessam o painel,
-      // mas o AdminWebScreen vai filtrar o menu baseado no perfil/isMaster.
-      Navigator.pushReplacementNamed(
-        context,
-        '/admin_web',
-        arguments: {
-          'tipo_acesso': isMaster ? 'master' : perfil,
-          'dados': proData,
-          'isMaster': isMaster, // False para caixa/vendedor/padrao
-          'perfil': perfil, // Para filtrar menu
-        },
-      );
-    }
-  }
-
-  // Novo Dialogo: Bifurcação ANTES da Senha (para Mobile Tosa/Banho)
-  void _mostrarDialogoBifurcacaoPreSenha(
-    String cpfLimpo,
-    DocumentSnapshot docPro,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isDismissible: false,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.all(25),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 50,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              "Como deseja acessar?",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: _corAcai,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              "Você possui acesso profissional.",
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            SizedBox(height: 30),
-
-            // Opção Cliente
-            _buildBifurcacaoOption(
-              icon: FontAwesomeIcons.user,
-              color: Colors.blue,
-              title: "Entrar como Cliente",
-              subtitle: "Agendar para meus pets",
-              onTap: () {
-                Navigator.pop(ctx);
-                _loginComoCliente(cpfLimpo);
-              },
-            ),
-            SizedBox(height: 15),
-
-            // Opção Profissional -> Pede Senha
-            _buildBifurcacaoOption(
-              icon: FontAwesomeIcons.briefcase,
-              color: _corAcai,
-              title: "Área Profissional",
-              subtitle: "Minha agenda e tarefas",
-              onTap: () {
-                Navigator.pop(ctx);
-                _abrirDialogoSenhaProfissional(cpfLimpo, docPro);
-              },
-            ),
-            SizedBox(height: 20),
-          ],
-        ),
-      ),
+    Navigator.pushReplacementNamed(
+      context,
+      '/admin_web',
+      arguments: {
+        'tipo_acesso': isMaster ? 'master' : perfil,
+        'dados': proData,
+        'isMaster': isMaster,
+        'perfil': perfil,
+      },
     );
-  }
-
-  void _mostrarDialogoBifurcacao(Map<String, dynamic> proData) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isDismissible: false,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.all(25),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 50,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              "Como deseja acessar?",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: _corAcai,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              "Você possui acesso administrativo/profissional.",
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            SizedBox(height: 30),
-
-            // Opção Cliente
-            _buildBifurcacaoOption(
-              icon: FontAwesomeIcons.user,
-              color: Colors.blue,
-              title: "Entrar como Cliente",
-              subtitle: "Agendar para meus pets",
-              onTap: () {
-                Navigator.pop(ctx);
-                _loginComoCliente(maskCpf.getUnmaskedText());
-              },
-            ),
-            SizedBox(height: 15),
-
-            // Opção Profissional
-            _buildBifurcacaoOption(
-              icon: FontAwesomeIcons.briefcase,
-              color: _corAcai,
-              title: "Área Profissional",
-              subtitle: "Minha agenda e tarefas",
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.pushNamed(
-                  context,
-                  '/profissional',
-                  arguments: proData,
-                );
-              },
-            ),
-            SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- 4. FLUXO DE CLIENTE (SEM SENHA) ---
-  Future<void> _loginComoCliente(String cpfLimpo) async {
-    // Aqui usamos o serviço existente para buscar o cliente
-    final user = await _firebaseService.getUser(cpfLimpo); //
-
-    if (user != null) {
-      // Cliente já existe -> Home
-      Navigator.pushReplacementNamed(context, '/home', arguments: user.toMap());
-    } else {
-      // Cliente novo -> Cadastro (levando o CPF)
-      Navigator.pushReplacementNamed(
-        context,
-        '/cadastro',
-        arguments: {'cpf': cpfLimpo},
-      );
-    }
-    setState(() => _isLoading = false);
   }
 
   // --- WIDGETS AUXILIARES ---
@@ -458,60 +267,6 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Text(msg),
         backgroundColor: cor,
         behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Widget _buildBifurcacaoOption({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color),
-            ),
-            SizedBox(width: 15),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
-          ],
-        ),
       ),
     );
   }

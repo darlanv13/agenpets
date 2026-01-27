@@ -1,23 +1,23 @@
 import 'package:agenpet/admin_web/admin_web_screen.dart';
-import 'package:agenpet/screens/assinatura_screen.dart';
-import 'package:agenpet/screens/minhas_agendas.dart'; // Ensure this file contains MinhasAgendasScreen
-import 'package:agenpet/screens/hotel_screen.dart';
-import 'package:agenpet/screens/creche_screen.dart';
-import 'package:agenpet/screens/meus_pets_screen.dart';
-import 'package:agenpet/screens/perfil_screen.dart';
-import 'package:agenpet/screens/profissional_screen.dart';
+import 'package:agenpet/client_app/screens/assinatura_screen.dart';
+import 'package:agenpet/client_app/screens/minhas_agendas.dart'; // Ensure this file contains MinhasAgendasScreen
+import 'package:agenpet/client_app/screens/hotel_screen.dart';
+import 'package:agenpet/client_app/screens/creche_screen.dart';
+import 'package:agenpet/client_app/screens/meus_pets_screen.dart';
+import 'package:agenpet/client_app/screens/perfil_screen.dart';
+import 'package:agenpet/profissional_app/profissional_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // Para calendário em PT-BR
 import 'firebase_options.dart'; // Gerado pelo flutterfire configure
 
 // Import das telas
-import 'screens/login_screen.dart';
-import 'screens/login_profissional_screen.dart'; // Import da nova tela
-import 'screens/home_screen.dart';
-import 'screens/agendamento_screen.dart';
-import 'screens/pagamento_screen.dart';
-import 'screens/cadastro_screen.dart'; // Vamos criar abaixo
+import 'login_screen.dart';
+import 'profissional_app/login_profissional_screen.dart'; // Import da nova tela
+import 'client_app/screens/home_screen.dart';
+import 'client_app/screens/agendamento_screen.dart';
+import 'client_app/screens/pagamento_screen.dart';
+import 'client_app/screens/cadastro_screen.dart'; // Vamos criar abaixo
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

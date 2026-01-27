@@ -4,7 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../services/firebase_service.dart';
+import '../../services/firebase_service.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   @override

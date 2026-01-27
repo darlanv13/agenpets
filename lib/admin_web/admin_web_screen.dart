@@ -2,6 +2,7 @@ import 'package:agenpet/admin_web/views/creche_view.dart';
 import 'package:agenpet/admin_web/views/gestao_estoque_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // --- IMPORTS DAS VIEWS ---
 import 'views/dashboard_view.dart';
@@ -234,8 +235,14 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                 Container(
                   padding: EdgeInsets.all(20),
                   child: InkWell(
-                    onTap: () =>
-                        Navigator.pushReplacementNamed(context, '/login'),
+                    onTap: () async {
+                      await FirebaseAuth.instance.signOut();
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/',
+                        (route) => false,
+                      );
+                    },
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       padding: EdgeInsets.symmetric(vertical: 12),

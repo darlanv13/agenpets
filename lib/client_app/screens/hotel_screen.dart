@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../services/firebase_service.dart';
+import '../../services/firebase_service.dart';
 
 class HotelScreen extends StatefulWidget {
   @override
