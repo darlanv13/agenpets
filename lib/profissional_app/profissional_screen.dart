@@ -120,8 +120,14 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text("Quem executará o serviço?"),
-          content: Container(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            "Quem executará o serviço?",
+            style: TextStyle(fontSize: 18),
+          ),
+          content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
               shrinkWrap: true,

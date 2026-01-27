@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
@@ -20,94 +21,37 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- CORES DA MARCA ---
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF8F9FC);
-  final Color _corLilas = Color(0xFFF3E5F5);
 
   Map<String, dynamic>? _dadosUsuario;
   String _primeiroNome = "";
 
-  // Controle do Carrossel
-  final PageController _pageController = PageController();
-  int _currentBannerIndex = 0;
-  Timer? _timer;
-
-  // --- MAPAS PARA TRADUZIR O BANCO DE DADOS ---
-  final Map<String, IconData> _mapaIcones = {
-    'shower': FontAwesomeIcons.shower,
-    'crown': FontAwesomeIcons.crown,
-    'hotel': FontAwesomeIcons.hotel,
-    'scissors': FontAwesomeIcons.scissors,
-    'percentage': FontAwesomeIcons.percent,
-    'syringe': FontAwesomeIcons.syringe,
-    'heart': FontAwesomeIcons.heart,
-    'star': FontAwesomeIcons.star,
-  };
-
-  final Map<String, Color> _mapaCores = {
-    'acai': Color(0xFF4A148C),
-    'laranja': Colors.orange,
-    'azul': Colors.blue,
-    'verde': Colors.green,
-    'roxo': Colors.purple,
-    'rosa': Colors.pink,
-    'vermelho': Colors.red,
-  };
-
   @override
   void initState() {
     super.initState();
-    _iniciarTimerCarrossel();
     _salvarTokenNotificacao();
   }
 
-  // Adicione esta função na classe
   Future<void> _salvarTokenNotificacao() async {
     if (_dadosUsuario == null) return;
-
     try {
-      // 1. Pede permissão (iOS precisa disso, Android 13+ também)
       FirebaseMessaging messaging = FirebaseMessaging.instance;
       NotificationSettings settings = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
-
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        // 2. Pega o Token
         String? token = await messaging.getToken();
-
         if (token != null) {
-          // 3. Salva no documento do usuário no Firestore
           await _db.collection('users').doc(_dadosUsuario!['cpf']).update({
             'fcmToken': token,
             'ultimo_login': FieldValue.serverTimestamp(),
           });
-          print("Token de notificação salvo/atualizado!");
         }
       }
     } catch (e) {
       print("Erro ao salvar token FCM: $e");
     }
-  }
-
-  void _iniciarTimerCarrossel() {
-    _timer = Timer.periodic(Duration(seconds: 5), (Timer timer) {
-      if (_pageController.hasClients) {
-        int proximaPagina = _currentBannerIndex + 1;
-        _pageController.animateToPage(
-          proximaPagina,
-          duration: Duration(milliseconds: 350),
-          curve: Curves.easeIn,
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _pageController.dispose();
-    super.dispose();
   }
 
   @override
@@ -127,11 +71,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- NAVEGAÇÃO ATUALIZADA ---
   void _navegar(String rota) async {
     if (_dadosUsuario == null) return;
 
-    // Lógica específica para abrir Minhas Agendas diretamente
     if (rota == '/minhas_agendas') {
       Navigator.push(
         context,
@@ -142,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Navegação padrão (Named Routes)
     final result = await Navigator.pushNamed(
       context,
       rota,
@@ -177,171 +118,82 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. HEADER
-            _buildHeader(),
+            // 1. HEADER MINIMALISTA
+            _buildMinimalHeader(),
 
             SizedBox(height: 10),
 
-            // 2. STREAM DE BANNERS
-            StreamBuilder<QuerySnapshot>(
-              stream: _db
-                  .collection('banners')
-                  .where('ativo', isEqualTo: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                List<Map<String, dynamic>> bannersData = [];
+            // 2. STATUS RÁPIDO / CTA
+            _buildStatusSection(),
 
-                if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                  bannersData = snapshot.data!.docs
-                      .map((doc) => doc.data() as Map<String, dynamic>)
-                      .toList();
-                } else {
-                  bannersData = [
-                    {
-                      "titulo": "Bem-vindo!",
-                      "subtitulo": "Cuidamos do seu pet com amor",
-                      "cor_id": "acai",
-                      "icone_id": "heart",
-                    },
-                  ];
-                }
+            SizedBox(height: 20),
 
-                if (_currentBannerIndex >= bannersData.length) {
-                  _currentBannerIndex = 0;
-                }
-
-                return Column(
-                  children: [
-                    Container(
-                      height: 140,
-                      width: double.infinity,
-                      child: PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(
-                            () => _currentBannerIndex =
-                                index % bannersData.length,
-                          );
-                        },
-                        itemBuilder: (context, index) {
-                          final banner =
-                              bannersData[index % bannersData.length];
-
-                          Color corBg =
-                              _mapaCores[banner['cor_id']] ?? _corAcai;
-                          IconData icone =
-                              _mapaIcones[banner['icone_id']] ??
-                              FontAwesomeIcons.star;
-
-                          return _buildBannerItem(
-                            titulo: banner['titulo'] ?? '',
-                            subtitulo: banner['subtitulo'] ?? '',
-                            cor: corBg,
-                            icone: icone,
-                          );
-                        },
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(bannersData.length, (index) {
-                        return Container(
-                          width: 8.0,
-                          height: 8.0,
-                          margin: EdgeInsets.symmetric(
-                            vertical: 10.0,
-                            horizontal: 4.0,
-                          ),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _currentBannerIndex == index
-                                ? _corAcai
-                                : Colors.grey[300],
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            SizedBox(height: 10),
-
-            // 3. MENU GRID (Com o novo botão)
-            Expanded(
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "O que seu pet precisa?",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    SizedBox(height: 15),
-                    Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
-                        childAspectRatio: 0.85,
-                        physics: BouncingScrollPhysics(),
-                        children: [
-                          _buildMenuCard(
-                            "Agendar",
-                            FontAwesomeIcons.calendarPlus,
-                            Colors.blue,
-                            () => _navegar('/agendamento'),
-                          ),
-                          _buildMenuCard(
-                            "Hotel",
-                            FontAwesomeIcons.hotel,
-                            Colors.orange,
-                            () => _navegar('/hotel'),
-                          ),
-                          _buildMenuCard(
-                            "Creche",
-                            FontAwesomeIcons.school,
-                            Colors.teal,
-                            () => _navegar('/creche'),
-                          ),
-                          // --- BOTÃO NOVO: MINHAS AGENDAS ---
-                          _buildMenuCard(
-                            "Minhas Agendas", // Nome atualizado
-                            FontAwesomeIcons
-                                .calendarDays, // Ícone de calendário/acompanhamento
-                            Colors.green, // Verde (para indicar status/ok)
-                            () => _navegar('/minhas_agendas'), // Rota nova
-                          ),
-                          // ----------------------------------
-                          _buildMenuCard(
-                            "Meus Pets",
-                            FontAwesomeIcons.paw,
-                            Colors.purple,
-                            () => _navegar('/meus_pets'),
-                          ),
-                          _buildMenuCard(
-                            "Assinatura",
-                            FontAwesomeIcons.crown,
-                            Colors.amber,
-                            () => _navegar('/assinatura'),
-                          ),
-                          _buildMenuCard(
-                            "Perfil",
-                            FontAwesomeIcons.user,
-                            Colors.grey,
-                            () => _navegar('/perfil'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+            // 3. MENU PRINCIPAL
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                "Menu Principal",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
                 ),
+              ),
+            ),
+            SizedBox(height: 10),
+
+            Expanded(
+              child: GridView.count(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                crossAxisCount: 2,
+                crossAxisSpacing: 15,
+                mainAxisSpacing: 15,
+                childAspectRatio: 1.1,
+                physics: BouncingScrollPhysics(),
+                children: [
+                  _buildMenuCard(
+                    "Agendar Banho/Tosa",
+                    FontAwesomeIcons.shower,
+                    _corAcai,
+                    Colors.white,
+                    () => _navegar('/agendamento'),
+                  ),
+                  _buildMenuCard(
+                    "Hotelzinho",
+                    FontAwesomeIcons.hotel,
+                    Colors.orange,
+                    Colors.white,
+                    () => _navegar('/hotel'),
+                  ),
+                  _buildMenuCard(
+                    "Creche",
+                    FontAwesomeIcons.school,
+                    Colors.teal,
+                    Colors.white,
+                    () => _navegar('/creche'),
+                  ),
+                  _buildMenuCard(
+                    "Meus Agendamentos",
+                    FontAwesomeIcons.calendarCheck,
+                    Colors.blueAccent,
+                    Colors.white,
+                    () => _navegar('/minhas_agendas'),
+                  ),
+                  _buildMenuCard(
+                    "Meus Pets",
+                    FontAwesomeIcons.paw,
+                    Colors.purple,
+                    Colors.white,
+                    () => _navegar('/meus_pets'),
+                  ),
+                  _buildMenuCard(
+                    "Assinatura",
+                    FontAwesomeIcons.crown,
+                    Colors.amber,
+                    Colors.white,
+                    () => _navegar('/assinatura'),
+                  ),
+                ],
               ),
             ),
           ],
@@ -352,148 +204,105 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- WIDGETS ---
 
-  Widget _buildHeader() {
+  Widget _buildMinimalHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _corAcai, width: 2),
-                ),
-                child: CircleAvatar(
-                  radius: 22,
-                  backgroundColor: _corLilas,
-                  child: Icon(Icons.person, color: _corAcai),
+              Text(
+                "Olá, $_primeiroNome 👋",
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
-              SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Olá, $_primeiroNome 👋",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: _db
-                        .collection('users')
-                        .doc(_dadosUsuario!['cpf'])
-                        .collection('pets')
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      int qtd = snapshot.hasData
-                          ? snapshot.data!.docs.length
-                          : 0;
-                      return Text(
-                        qtd == 0 ? "Cadastre seu pet" : "$qtd pets cadastrados",
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      );
-                    },
-                  ),
-                ],
+              Text(
+                "Vamos cuidar do seu pet hoje?",
+                style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
               ),
             ],
           ),
           IconButton(
-            icon: Icon(Icons.logout_rounded, color: Colors.grey[400]),
             onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            icon: Icon(Icons.logout, color: Colors.grey[400]),
+            tooltip: "Sair",
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBannerItem({
-    required String titulo,
-    required String subtitulo,
-    required Color cor,
-    required IconData icone,
-  }) {
+  Widget _buildStatusSection() {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
+      width: double.infinity,
+      height: 100,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [cor, cor.withOpacity(0.7)],
+          colors: [_corAcai, Color(0xFF7B1FA2)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: cor.withOpacity(0.3),
+            color: _corAcai.withOpacity(0.3),
             blurRadius: 10,
             offset: Offset(0, 5),
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -10,
-            bottom: -10,
-            child: Icon(icone, size: 80, color: Colors.white.withOpacity(0.15)),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _navegar('/agendamento'),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.calendar_today, color: Colors.white),
+                ),
+                SizedBox(width: 15),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          "NOVIDADE",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 8),
                       Text(
-                        titulo,
-                        style: TextStyle(
+                        "Novo Agendamento",
+                        style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        subtitulo,
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        "Clique aqui para agendar agora",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
                 ),
+                Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -502,43 +311,50 @@ class _HomeScreenState extends State<HomeScreen> {
     String label,
     IconData icon,
     Color color,
+    Color iconColor,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.05),
-              blurRadius: 10,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: FaIcon(icon, color: color, size: 28),
               ),
-              child: FaIcon(icon, color: color, size: 24),
-            ),
-            SizedBox(height: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+              SizedBox(height: 12),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

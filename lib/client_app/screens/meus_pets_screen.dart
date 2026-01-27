@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:google_fonts/google_fonts.dart'; // Sugestão: Adicione google_fonts ao pubspec.yaml para fontes melhores
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 class MeusPetsScreen extends StatefulWidget {
   @override
@@ -15,10 +16,8 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
     databaseId: 'agenpets',
   );
 
-  // Cores do Tema
+  // Cores do Tema (Mantendo consistência)
   final Color _corAcai = Color(0xFF4A148C);
-  final Color _corLilas = Color(0xFFF3E5F5);
-  final Color _corLilasEscuro = Color(0xFFCE93D8);
   final Color _corFundo = Color(0xFFF5F7FA);
 
   String? _userCpf;
@@ -50,23 +49,28 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
             color: Colors.white,
+            fontSize: 18,
           ),
         ),
         backgroundColor: _corAcai,
-        centerTitle: true,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          icon: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _abrirFormularioPet(context),
         backgroundColor: _corAcai,
-        icon: Icon(Icons.add),
+        elevation: 4,
+        icon: Icon(Icons.add, color: Colors.white),
         label: Text(
           "Novo Pet",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -74,6 +78,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
             .collection('users')
             .doc(_userCpf)
             .collection('pets')
+            .orderBy('created_at', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -85,7 +90,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
           }
 
           return ListView.builder(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 80),
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
               final doc = snapshot.data!.docs[index];
@@ -98,7 +103,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
     );
   }
 
-  // --- Widgets de UI ---
+  // --- WIDGETS DE UI ---
 
   Widget _buildEmptyState() {
     return Center(
@@ -107,27 +112,36 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
         children: [
           Container(
             padding: EdgeInsets.all(30),
-            decoration: BoxDecoration(color: _corLilas, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
             child: FaIcon(
               FontAwesomeIcons.paw,
               size: 60,
-              color: _corAcai.withOpacity(0.6),
+              color: Colors.grey[300],
             ),
           ),
           SizedBox(height: 20),
           Text(
-            "Nenhum pet por aqui ainda.",
+            "Nenhum pet encontrado",
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
+              color: _corAcai,
             ),
           ),
-          SizedBox(height: 10),
+          SizedBox(height: 8),
           Text(
-            "Clique no botão abaixo para adicionar\nseu melhor amigo!",
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(color: Colors.grey[600]),
+            "Adicione seu melhor amigo para começar!",
+            style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 14),
           ),
         ],
       ),
@@ -136,195 +150,138 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
 
   Widget _buildPetCard(String petId, Map<String, dynamic> data) {
     bool isDog = data['tipo'] == 'cao';
+    bool isMale = data['sexo'] == 'Macho'; // Novo campo
+
     IconData icon = isDog ? FontAwesomeIcons.dog : FontAwesomeIcons.cat;
-    Color iconBgColor = isDog ? Colors.blue[50]! : Colors.orange[50]!;
-    Color iconColor = isDog ? Colors.blue[800]! : Colors.orange[800]!;
+    // Cores baseadas no tipo (azul para cão, laranja para gato - ou customizável)
+    Color themeColor = isDog ? Colors.blue : Colors.orange;
 
     String raca = data['raca'] ?? 'SRD';
-    String peso = data['peso'] != null ? "${data['peso']} kg" : "";
-    String obs = data['observacoes'] ?? "";
+    String nome = data['nome'] ?? 'Sem Nome';
 
-    return Card(
-      margin: EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shadowColor: Colors.black12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    // Cálculo de idade
+    String idadeStr = "";
+    if (data['data_nascimento'] != null) {
+      DateTime nasc = (data['data_nascimento'] as Timestamp).toDate();
+      final now = DateTime.now();
+      int anos = now.year - nasc.year;
+      if (now.month < nasc.month ||
+          (now.month == nasc.month && now.day < nasc.day)) {
+        anos--;
+      }
+      idadeStr = anos == 0 ? "Menos de 1 ano" : "$anos anos";
+    }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 15,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () =>
+              _abrirFormularioPet(context, petId: petId, dadosAtuais: data),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
               children: [
-                // Ícone do Pet
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: iconBgColor,
-                    borderRadius: BorderRadius.circular(15),
+                // Avatar do Pet
+                Hero(
+                  tag: petId,
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: themeColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Center(
+                      child: FaIcon(icon, color: themeColor, size: 35),
+                    ),
                   ),
-                  child: FaIcon(icon, color: iconColor, size: 30),
                 ),
-                SizedBox(width: 16),
-                // Informações Principais
+                SizedBox(width: 20),
+
+                // Informações
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        data['nome'] ?? 'Pet sem nome',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: _corAcai,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              nome,
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (data['sexo'] != null)
+                            Icon(
+                              isMale ? Icons.male : Icons.female,
+                              size: 18,
+                              color: isMale ? Colors.blue : Colors.pink,
+                            ),
+                        ],
                       ),
                       SizedBox(height: 4),
                       Text(
-                        "$raca ${peso.isNotEmpty ? '• $peso' : ''}",
+                        raca,
                         style: GoogleFonts.poppins(
-                          color: Colors.grey[700],
+                          fontSize: 14,
+                          color: Colors.grey[600],
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      if (obs.isNotEmpty) ...[
-                        SizedBox(height: 8),
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                size: 16,
-                                color: Colors.grey,
-                              ),
-                              SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  obs,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: Colors.grey[600],
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                      if (idadeStr.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            idadeStr,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: themeColor,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Divider(),
-            // Botões de Ação (Editar / Excluir)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () =>
-                      _confirmarExclusao(context, petId, data['nome']),
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: Colors.red[300],
-                    size: 20,
-                  ),
-                  label: Text(
-                    "Excluir",
-                    style: GoogleFonts.poppins(color: Colors.red[300]),
-                  ),
-                ),
-                SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: () => _abrirFormularioPet(
-                    context,
-                    petId: petId,
-                    dadosAtuais: data,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _corAcai,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                  icon: Icon(Icons.edit, size: 18, color: Colors.white),
-                  label: Text(
-                    "Editar",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+
+                // Ícone de Seta/Editar
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Colors.grey[300],
+                  size: 16,
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // --- Funções Lógicas e Formulários ---
+  // --- FORMULÁRIO MODERNO (BOTTOM SHEET) ---
 
-  Future<void> _confirmarExclusao(
-    BuildContext context,
-    String petId,
-    String? nomePet,
-  ) async {
-    return showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          "Excluir Pet?",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          "Tem certeza que deseja remover ${nomePet ?? 'este pet'}? Essa ação não pode ser desfeita.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              "Cancelar",
-              style: GoogleFonts.poppins(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx); // Fecha o diálogo
-              await _db
-                  .collection('users')
-                  .doc(_userCpf)
-                  .collection('pets')
-                  .doc(petId)
-                  .delete();
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text("$nomePet removido.")));
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(
-              "Sim, Excluir",
-              style: GoogleFonts.poppins(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Formulário Moderno usando ModalBottomSheet
   void _abrirFormularioPet(
     BuildContext rootContext, {
     String? petId,
@@ -343,110 +300,164 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
     final _obsController = TextEditingController(
       text: dadosAtuais?['observacoes'] ?? '',
     );
+    final _nascimentoController = TextEditingController();
+
     String _tipoSelecionado = dadosAtuais?['tipo'] ?? 'cao';
+    String _sexoSelecionado = dadosAtuais?['sexo'] ?? 'Macho';
+    DateTime? _dataNascimento;
+
+    if (dadosAtuais?['data_nascimento'] != null) {
+      _dataNascimento = (dadosAtuais!['data_nascimento'] as Timestamp).toDate();
+      _nascimentoController.text = DateFormat(
+        'dd/MM/yyyy',
+      ).format(_dataNascimento);
+    }
+
     bool isEditing = petId != null;
     bool isLoading = false;
 
     showModalBottomSheet(
       context: rootContext,
-      isScrollControlled: true, // Permite que o sheet suba com o teclado
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateModal) {
           return Container(
-            height:
-                MediaQuery.of(context).size.height * 0.85, // Ocupa 85% da tela
+            height: MediaQuery.of(context).size.height * 0.9,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
             ),
-            padding: EdgeInsets.fromLTRB(
-              24,
-              30,
-              24,
-              MediaQuery.of(context).viewInsets.bottom + 24,
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Cabeçalho do Modal
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              children: [
+                // Header do Modal
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[100]!),
+                    ),
+                  ),
+                  child: Row(
                     children: [
                       Text(
-                        isEditing ? "Editar Pet" : "Adicionar Novo Pet",
+                        isEditing ? "Editar Pet" : "Adicionar Pet",
                         style: GoogleFonts.poppins(
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: _corAcai,
                         ),
                       ),
+                      Spacer(),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: Icon(Icons.close, color: Colors.grey),
+                        icon: Container(
+                          padding: EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[100],
+                          ),
+                          child: Icon(
+                            Icons.close,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  Divider(),
-                  Expanded(
+                ),
+
+                // Conteúdo Scrollável
+                Expanded(
+                  child: Form(
+                    key: _formKey,
                     child: ListView(
+                      padding: EdgeInsets.all(24),
                       physics: BouncingScrollPhysics(),
                       children: [
-                        SizedBox(height: 20),
+                        // Seção Tipo
                         Text(
-                          "Tipo de Pet",
+                          "O que seu pet é?",
                           style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: Colors.grey[700],
                           ),
                         ),
-                        SizedBox(height: 10),
+                        SizedBox(height: 15),
                         Row(
                           children: [
-                            _buildRadioTipo(
-                              'cao',
+                            _buildTypeCard(
                               "Cão",
                               FontAwesomeIcons.dog,
+                              'cao',
                               _tipoSelecionado,
                               setStateModal,
-                              (valor) => _tipoSelecionado = valor,
+                              (v) => _tipoSelecionado = v,
                             ),
                             SizedBox(width: 15),
-                            _buildRadioTipo(
-                              'gato',
+                            _buildTypeCard(
                               "Gato",
                               FontAwesomeIcons.cat,
+                              'gato',
                               _tipoSelecionado,
                               setStateModal,
-                              (valor) => _tipoSelecionado = valor,
+                              (v) => _tipoSelecionado = v,
                             ),
                           ],
                         ),
-                        SizedBox(height: 25),
 
-                        _buildTextFieldLabel("Nome do Pet *"),
+                        SizedBox(height: 30),
+
+                        // Inputs Principais
+                        _buildLabel("Nome do Pet *"),
                         TextFormField(
                           controller: _nomeController,
-                          decoration: _inputDecoration("Ex: Rex, Luna..."),
-                          validator: (value) =>
-                              value!.isEmpty ? 'O nome é obrigatório' : null,
+                          style: GoogleFonts.poppins(),
+                          decoration: _buildInputDecoration(
+                            "Ex: Thor",
+                            Icons.pets,
+                          ),
+                          validator: (v) =>
+                              v!.isEmpty ? 'Nome obrigatório' : null,
+                        ),
+                        SizedBox(height: 20),
+
+                        _buildLabel("Sexo"),
+                        Row(
+                          children: [
+                            _buildGenderOption(
+                              "Macho",
+                              Icons.male,
+                              _sexoSelecionado,
+                              setStateModal,
+                              (v) => _sexoSelecionado = v,
+                            ),
+                            SizedBox(width: 15),
+                            _buildGenderOption(
+                              "Fêmea",
+                              Icons.female,
+                              _sexoSelecionado,
+                              setStateModal,
+                              (v) => _sexoSelecionado = v,
+                            ),
+                          ],
                         ),
                         SizedBox(height: 20),
 
                         Row(
                           children: [
                             Expanded(
-                              flex: 2,
+                              flex: 3,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildTextFieldLabel("Raça (Opcional)"),
+                                  _buildLabel("Raça"),
                                   TextFormField(
                                     controller: _racaController,
-                                    decoration: _inputDecoration(
-                                      "Ex: Poodle, SRD...",
+                                    decoration: _buildInputDecoration(
+                                      "Opcional",
+                                      Icons.category,
                                     ),
                                   ),
                                 ],
@@ -454,18 +465,21 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                             ),
                             SizedBox(width: 15),
                             Expanded(
-                              flex: 1,
+                              flex: 2,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildTextFieldLabel("Peso (kg)"),
+                                  _buildLabel("Peso (kg)"),
                                   TextFormField(
                                     controller: _pesoController,
                                     keyboardType:
                                         TextInputType.numberWithOptions(
                                           decimal: true,
                                         ),
-                                    decoration: _inputDecoration("Ex: 5.2"),
+                                    decoration: _buildInputDecoration(
+                                      "0.0",
+                                      Icons.monitor_weight,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -474,22 +488,96 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                         ),
                         SizedBox(height: 20),
 
-                        _buildTextFieldLabel(
-                          "Observações / Alergias (Opcional)",
+                        _buildLabel("Data de Nascimento"),
+                        TextFormField(
+                          controller: _nascimentoController,
+                          readOnly: true,
+                          onTap: () async {
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: _dataNascimento ?? DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime.now(),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: _corAcai,
+                                      onPrimary: Colors.white,
+                                      onSurface: Colors.black,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null) {
+                              _dataNascimento = picked;
+                              _nascimentoController.text = DateFormat(
+                                'dd/MM/yyyy',
+                              ).format(picked);
+                            }
+                          },
+                          decoration: _buildInputDecoration(
+                            "Selecione a data",
+                            Icons.calendar_today,
+                          ),
                         ),
+
+                        SizedBox(height: 20),
+
+                        _buildLabel("Observações (Alergias, medos...)"),
                         TextFormField(
                           controller: _obsController,
                           maxLines: 3,
-                          decoration: _inputDecoration(
-                            "Ex: Alérgico a frango, tem medo de trovão...",
+                          decoration: _buildInputDecoration(
+                            "Digite aqui...",
+                            Icons.note,
                           ),
                         ),
+
+                        if (isEditing) ...[
+                          SizedBox(height: 20),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () {
+                                _confirmarExclusao(
+                                  rootContext,
+                                  petId!,
+                                  dadosAtuais!['nome'],
+                                );
+                              },
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              label: Text(
+                                "Excluir este pet",
+                                style: GoogleFonts.poppins(color: Colors.red),
+                              ),
+                            ),
+                          ),
+                        ],
+                        SizedBox(height: 40),
                       ],
                     ),
                   ),
-                  SizedBox(height: 20),
-                  // Botão Salvar
-                  SizedBox(
+                ),
+
+                // Botão de Ação
+                Container(
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: Offset(0, -5),
+                      ),
+                    ],
+                  ),
+                  child: SizedBox(
                     width: double.infinity,
                     height: 55,
                     child: ElevatedButton(
@@ -502,6 +590,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                                 Map<String, dynamic> petData = {
                                   'nome': _nomeController.text.trim(),
                                   'tipo': _tipoSelecionado,
+                                  'sexo': _sexoSelecionado,
                                   'raca': _racaController.text.isEmpty
                                       ? 'SRD'
                                       : _racaController.text.trim(),
@@ -509,51 +598,66 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                                     _pesoController.text.replaceAll(',', '.'),
                                   ),
                                   'observacoes': _obsController.text.trim(),
+                                  'data_nascimento': _dataNascimento != null
+                                      ? Timestamp.fromDate(_dataNascimento!)
+                                      : null,
                                   'donoCpf': _userCpf,
                                   'updated_at': FieldValue.serverTimestamp(),
                                 };
 
-                                if (isEditing) {
-                                  await _db
-                                      .collection('users')
-                                      .doc(_userCpf)
-                                      .collection('pets')
-                                      .doc(petId)
-                                      .update(petData);
-                                } else {
-                                  petData['created_at'] =
-                                      FieldValue.serverTimestamp();
-                                  await _db
-                                      .collection('users')
-                                      .doc(_userCpf)
-                                      .collection('pets')
-                                      .add(petData);
-                                }
+                                try {
+                                  if (isEditing) {
+                                    await _db
+                                        .collection('users')
+                                        .doc(_userCpf)
+                                        .collection('pets')
+                                        .doc(petId)
+                                        .update(petData);
+                                  } else {
+                                    petData['created_at'] =
+                                        FieldValue.serverTimestamp();
+                                    await _db
+                                        .collection('users')
+                                        .doc(_userCpf)
+                                        .collection('pets')
+                                        .add(petData);
+                                  }
 
-                                Navigator.pop(context); // Fecha o modal
-                                ScaffoldMessenger.of(rootContext).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isEditing
-                                          ? "Pet atualizado!"
-                                          : "Pet adicionado com sucesso!",
+                                  Navigator.pop(context); // Fecha modal
+                                  ScaffoldMessenger.of(
+                                    rootContext,
+                                  ).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isEditing
+                                            ? "Pet atualizado!"
+                                            : "Pet cadastrado!",
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      behavior: SnackBarBehavior.floating,
                                     ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
+                                  );
+                                } catch (e) {
+                                  setStateModal(() => isLoading = false);
+                                  ScaffoldMessenger.of(
+                                    rootContext,
+                                  ).showSnackBar(
+                                    SnackBar(content: Text("Erro: $e")),
+                                  );
+                                }
                               }
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _corAcai,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        elevation: 5,
+                        elevation: 0,
                       ),
                       child: isLoading
                           ? CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              isEditing ? "SALVAR ALTERAÇÕES" : "CADASTRAR PET",
+                              "SALVAR",
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -562,8 +666,8 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                             ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -571,87 +675,161 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
     );
   }
 
-  // --- Helpers de UI para o Formulário ---
+  // --- WIDGETS AUXILIARES DO FORM ---
 
-  Widget _buildTextFieldLabel(String label) {
+  Widget _buildLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4),
       child: Text(
-        label,
+        text,
         style: GoogleFonts.poppins(
-          fontWeight: FontWeight.w600,
-          color: _corAcai,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey[800],
+          fontSize: 14,
         ),
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String hint) {
+  InputDecoration _buildInputDecoration(String hint, IconData icon) {
     return InputDecoration(
       hintText: hint,
+      prefixIcon: Icon(icon, color: Colors.grey[400], size: 20),
       filled: true,
-      fillColor: _corFundo,
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      fillColor: Colors.grey[50],
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey[200]!),
+      ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: _corAcai, width: 2),
+        borderSide: BorderSide(color: _corAcai),
       ),
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 
-  Widget _buildRadioTipo(
-    String valor,
+  Widget _buildTypeCard(
     String label,
     IconData icon,
-    String selecionado,
-    StateSetter setStateModal,
-    Function(String) onTipoChanged,
+    String value,
+    String groupValue,
+    StateSetter setState,
+    Function(String) onChanged,
   ) {
-    bool isSelected = selecionado == valor;
+    bool isSelected = value == groupValue;
+    Color color = value == 'cao' ? Colors.blue : Colors.orange;
+
     return Expanded(
       child: GestureDetector(
-        onTap: () => setStateModal(() => onTipoChanged(valor)),
+        onTap: () => setState(() => onChanged(value)),
         child: AnimatedContainer(
           duration: Duration(milliseconds: 200),
-          padding: EdgeInsets.symmetric(vertical: 15),
+          padding: EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: isSelected ? _corAcai : _corFundo,
-            borderRadius: BorderRadius.circular(15),
+            color: isSelected ? color.withOpacity(0.1) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected ? _corAcai : Colors.transparent,
+              color: isSelected ? color : Colors.grey[200]!,
+              width: 2,
             ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: _corAcai.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ]
-                : [],
           ),
           child: Column(
             children: [
-              FaIcon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey,
-                size: 24,
-              ),
-              SizedBox(height: 8),
+              FaIcon(icon, size: 30, color: isSelected ? color : Colors.grey),
+              SizedBox(height: 10),
               Text(
                 label,
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.white : Colors.grey,
+                  color: isSelected ? color : Colors.grey,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildGenderOption(
+    String label,
+    IconData icon,
+    String groupValue,
+    StateSetter setState,
+    Function(String) onChanged,
+  ) {
+    bool isSelected = label == groupValue;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => onChanged(label)),
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? _corAcai : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? _corAcai : Colors.grey[300]!,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey[600],
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmarExclusao(
+    BuildContext context,
+    String petId,
+    String nomePet,
+  ) async {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("Excluir $nomePet?"),
+        content: Text("Essa ação é irreversível."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx); // Close dialog
+              Navigator.pop(context); // Close modal
+              await _db
+                  .collection('users')
+                  .doc(_userCpf)
+                  .collection('pets')
+                  .doc(petId)
+                  .delete();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text("Excluir", style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

@@ -4,7 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../services/firebase_service.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   @override
@@ -27,12 +27,15 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
   // --- CONTROLLERS ---
   final _obsController = TextEditingController();
+  final PageController _pageController = PageController();
 
   // --- ESTADO ---
+  int _currentStep = 0;
   String? _userCpf;
   DateTime _dataSelecionada = DateTime.now();
-  String _servicoSelecionado = 'Banho';
+  String? _servicoSelecionado;
   String? _petId;
+  String? _petNome; // Para exibição no resumo
   String? _horarioSelecionado;
 
   bool _isLoading = false;
@@ -73,18 +76,12 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
     if (args != null && _userCpf == null) {
       _userCpf = args['cpf'];
-      _carregarDadosIniciais();
+      _carregarPets();
     }
   }
 
-  Future<void> _carregarDadosIniciais() async {
+  Future<void> _carregarPets() async {
     setState(() => _isLoading = true);
-    await _atualizarListaPets();
-    _buscarHorarios();
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  Future<void> _atualizarListaPets() async {
     final snap = await _db
         .collection('users')
         .doc(_userCpf)
@@ -92,12 +89,12 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         .get();
     setState(() {
       _pets = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-      if (_pets.isNotEmpty && _petId == null) _petId = _pets.first['id'];
+      _isLoading = false;
     });
   }
 
   Future<void> _buscarHorarios() async {
-    if (_servicoSelecionado.isEmpty) return;
+    if (_servicoSelecionado == null) return;
     setState(() {
       _isLoading = true;
       _gradeHorarios = [];
@@ -108,7 +105,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
       final result = await _functions.httpsCallable('buscarHorarios').call({
         'dataConsulta': dataString,
-        'servico': _servicoSelecionado.toLowerCase(),
+        'servico': _servicoSelecionado!.toLowerCase(),
       });
 
       if (mounted) {
@@ -171,25 +168,51 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 50),
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_rounded, color: Colors.green, size: 40),
+            ),
+            SizedBox(height: 20),
+            Text(
+              "Agendado com Sucesso!",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             SizedBox(height: 10),
             Text(
-              "Agendamento Confirmado!",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              "Seu pet vai ficar lindo! O pagamento é realizado na recepção.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13),
             ),
-            SizedBox(height: 5),
-            Text(
-              "Pagamento na recepção.",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            SizedBox(height: 15),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              },
-              child: Text("OK", style: TextStyle(color: Colors.white)),
+            SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  "VOLTAR PARA O MENU",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -197,8 +220,771 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     );
   }
 
-  // --- FUNÇÃO DE ADICIONAR PET (REINCLUÍDA) ---
+  // --- NAVEGAÇÃO ENTRE PASSOS ---
+  void _proximoPasso() {
+    if (_currentStep == 0 && _petId == null) return;
+    if (_currentStep == 1 && _servicoSelecionado == null) return;
+    if (_currentStep == 2 && _horarioSelecionado == null) return;
+
+    if (_currentStep < 3) {
+      setState(() => _currentStep++);
+      _pageController.animateToPage(
+        _currentStep,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      // Se for para o passo de horário (2), buscar horários
+      if (_currentStep == 2) {
+        _buscarHorarios();
+      }
+    }
+  }
+
+  void _passoAnterior() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+      _pageController.animateToPage(
+        _currentStep,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  // --- UI PRINCIPAL ---
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _corFundo,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. Header com Navegação e Progresso
+            _buildHeader(),
+
+            // 2. Conteúdo (Stepper)
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                physics: NeverScrollableScrollPhysics(),
+                children: [
+                  _buildStepPets(),
+                  _buildStepServico(),
+                  _buildStepDataHora(),
+                  _buildStepResumo(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      color: Colors.white,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.arrow_back_ios_new, size: 20),
+                onPressed: _passoAnterior,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+              ),
+              SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getStepTitle(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: _corAcai,
+                      ),
+                    ),
+                    Text(
+                      "Passo ${_currentStep + 1} de 4",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 15),
+          LinearProgressIndicator(
+            value: (_currentStep + 1) / 4,
+            backgroundColor: Colors.grey[100],
+            valueColor: AlwaysStoppedAnimation<Color>(_corAcai),
+            minHeight: 4,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getStepTitle() {
+    switch (_currentStep) {
+      case 0:
+        return "Quem será atendido?";
+      case 1:
+        return "Qual o serviço?";
+      case 2:
+        return "Qual o melhor horário?";
+      case 3:
+        return "Confirme o agendamento";
+      default:
+        return "Agendamento";
+    }
+  }
+
+  // --- PASSOS ---
+
+  // PASSO 1: SELEÇÃO DE PET
+  Widget _buildStepPets() {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator(color: _corAcai));
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: _pets.isEmpty
+              ? _buildEmptyPets()
+              : ListView.builder(
+                  padding: EdgeInsets.all(20),
+                  itemCount: _pets.length + 1, // +1 botão adicionar
+                  itemBuilder: (context, index) {
+                    if (index == _pets.length) {
+                      return _buildAddPetCard();
+                    }
+                    final pet = _pets[index];
+                    return _buildPetSelectionCard(pet);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPets() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(FontAwesomeIcons.paw, size: 50, color: Colors.grey[300]),
+          SizedBox(height: 20),
+          Text(
+            "Você ainda não tem pets.",
+            style: GoogleFonts.poppins(color: Colors.grey),
+          ),
+          TextButton(
+            onPressed: _abrirModalAdicionarPet,
+            child: Text("Cadastrar Pet Agora"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPetSelectionCard(Map<String, dynamic> pet) {
+    bool isSelected = _petId == pet['id'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _petId = pet['id'];
+          _petNome = pet['nome'];
+        });
+        _proximoPasso(); // Auto-avanço
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected ? _corAcai.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? _corAcai : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: [
+            if (!isSelected)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: Offset(0, 5),
+              ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: pet['tipo'] == 'cao'
+                    ? Colors.blue.withOpacity(0.1)
+                    : Colors.orange.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                pet['tipo'] == 'cao'
+                    ? FontAwesomeIcons.dog
+                    : FontAwesomeIcons.cat,
+                color: pet['tipo'] == 'cao' ? Colors.blue : Colors.orange,
+              ),
+            ),
+            SizedBox(width: 15),
+            Expanded(
+              child: Text(
+                pet['nome'],
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[300]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddPetCard() {
+    return GestureDetector(
+      onTap: _abrirModalAdicionarPet,
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey[300]!,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: Colors.grey),
+            SizedBox(width: 10),
+            Text(
+              "Adicionar outro pet",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // PASSO 2: SELEÇÃO DE SERVIÇO
+  Widget _buildStepServico() {
+    return Padding(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildServiceBigCard(
+                    "Banho",
+                    "Higiene e Relaxamento",
+                    FontAwesomeIcons.shower,
+                    Colors.blue,
+                  ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: _buildServiceBigCard(
+                    "Tosa",
+                    "Estilo e Cuidados",
+                    FontAwesomeIcons.scissors,
+                    Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 15),
+          // Botão Voltar (Opcional, pois tem no header)
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceBigCard(
+    String label,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
+    bool isSelected = _servicoSelecionado == label;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _servicoSelecionado = label);
+        _proximoPasso();
+      },
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.15),
+              blurRadius: 15,
+              offset: Offset(0, 8),
+            ),
+          ],
+          border: isSelected ? null : Border.all(color: Colors.grey[100]!),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withOpacity(0.2)
+                    : color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: FaIcon(
+                icon,
+                size: 30,
+                color: isSelected ? Colors.white : color,
+              ),
+            ),
+            SizedBox(height: 15),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : Colors.grey[800],
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: isSelected ? Colors.white70 : Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // PASSO 3: DATA E HORA
+  Widget _buildStepDataHora() {
+    return Column(
+      children: [
+        // Lista de Dias (Horizontal)
+        Container(
+          height: 90,
+          color: Colors.white,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            itemCount: _listaDias.length,
+            itemBuilder: (ctx, index) {
+              final dia = _listaDias[index];
+              final isSelected = DateUtils.isSameDay(dia, _dataSelecionada);
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _dataSelecionada = dia;
+                    _horarioSelecionado = null;
+                  });
+                  _buscarHorarios();
+                },
+                child: AnimatedContainer(
+                  duration: Duration(milliseconds: 200),
+                  width: 60,
+                  margin: EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? _corAcai : Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: isSelected ? _corAcai : Colors.grey[200]!,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: _corAcai.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        DateFormat(
+                          'EEE',
+                          'pt_BR',
+                        ).format(dia).substring(0, 3).toUpperCase(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? Colors.white.withOpacity(0.8)
+                              : Colors.grey,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        DateFormat('dd').format(dia),
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        Expanded(
+          child: _isLoading
+              ? Center(child: CircularProgressIndicator(color: _corAcai))
+              : _gradeHorarios.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.event_busy, size: 50, color: Colors.grey[300]),
+                      SizedBox(height: 10),
+                      Text(
+                        "Sem horários livres nesta data.",
+                        style: GoogleFonts.poppins(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : GridView.builder(
+                  padding: EdgeInsets.all(20),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    childAspectRatio: 1.5,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: _gradeHorarios.length,
+                  itemBuilder: (ctx, idx) {
+                    final item = _gradeHorarios[idx];
+                    final isLivre = item['livre'];
+                    final isSelected = _horarioSelecionado == item['hora'];
+                    return GestureDetector(
+                      onTap: isLivre
+                          ? () {
+                              setState(
+                                () => _horarioSelecionado = item['hora'],
+                              );
+                              _proximoPasso(); // Auto-avanço ao selecionar hora
+                            }
+                          : null,
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? _corAcai
+                              : (isLivre ? Colors.white : Colors.grey[100]),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? _corAcai
+                                : (isLivre
+                                      ? Colors.grey[300]!
+                                      : Colors.transparent),
+                          ),
+                          boxShadow: (isLivre && !isSelected)
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 5,
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: Text(
+                          item['hora'],
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? Colors.white
+                                : (isLivre ? Colors.black87 : Colors.grey[400]),
+                            decoration: !isLivre
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // PASSO 4: RESUMO
+  Widget _buildStepResumo() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // TICKET STYLE CARD
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Top Section (Header)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                  decoration: BoxDecoration(
+                    color: _corAcai,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.confirmation_number_outlined,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                      SizedBox(width: 15),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Revisão do Pedido",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            "Verifique os dados abaixo",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content Section
+                Padding(
+                  padding: EdgeInsets.all(25),
+                  child: Column(
+                    children: [
+                      _buildSummaryRow(Icons.pets, "Pet", _petNome ?? ""),
+                      SizedBox(height: 20),
+                      _buildSummaryRow(
+                        Icons.cut,
+                        "Serviço",
+                        _servicoSelecionado ?? "",
+                      ),
+                      SizedBox(height: 20),
+                      Divider(color: Colors.transparent), // Spacer
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSummaryBox(
+                              Icons.calendar_today,
+                              "Data",
+                              DateFormat('dd/MM').format(_dataSelecionada),
+                            ),
+                          ),
+                          SizedBox(width: 15),
+                          Expanded(
+                            child: _buildSummaryBox(
+                              Icons.access_time,
+                              "Horário",
+                              _horarioSelecionado ?? "",
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: 25),
+          TextField(
+            controller: _obsController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: "Observações (Opcional)",
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!),
+              ),
+            ),
+          ),
+          SizedBox(height: 30),
+          SizedBox(
+            height: 55,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _confirmarAgendamento,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _corAcai,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                elevation: 5,
+              ),
+              child: _isLoading
+                  ? CircularProgressIndicator(color: Colors.white)
+                  : Text(
+                      "CONFIRMAR AGENDAMENTO",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: Colors.grey[700], size: 20),
+        ),
+        SizedBox(width: 15),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Icon(Icons.check_circle, color: Colors.green[400], size: 18),
+      ],
+    );
+  }
+
+  Widget _buildSummaryBox(IconData icon, String label, String value) {
+    return Container(
+      padding: EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: _corAcai),
+              SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: _corAcai,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 5),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FUNÇÕES AUXILIARES ---
   void _abrirModalAdicionarPet() {
+    // Reutilizando lógica simples, ou idealmente chamar o modal da tela de Pets
+    // Por brevidade, implementação simples inline:
     final _nomeController = TextEditingController();
     String _tipoSelecionado = 'cao';
 
@@ -210,14 +996,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: Text(
-              "Novo Pet",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: _corAcai,
-              ),
-            ),
+            title: Text("Novo Pet"),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -225,7 +1004,6 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                   controller: _nomeController,
                   decoration: InputDecoration(
                     labelText: "Nome",
-                    isDense: true,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -233,20 +1011,57 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                 ),
                 SizedBox(height: 15),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildTipoChip(
-                      "Cão",
-                      "cao",
-                      _tipoSelecionado,
-                      (v) => setModalState(() => _tipoSelecionado = v),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            setModalState(() => _tipoSelecionado = 'cao'),
+                        child: Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _tipoSelecionado == 'cao'
+                                ? _corAcai
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Cão",
+                              style: TextStyle(
+                                color: _tipoSelecionado == 'cao'
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                     SizedBox(width: 10),
-                    _buildTipoChip(
-                      "Gato",
-                      "gato",
-                      _tipoSelecionado,
-                      (v) => setModalState(() => _tipoSelecionado = v),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            setModalState(() => _tipoSelecionado = 'gato'),
+                        child: Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: _tipoSelecionado == 'gato'
+                                ? _corAcai
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Gato",
+                              style: TextStyle(
+                                color: _tipoSelecionado == 'gato'
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -255,501 +1070,29 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
+                child: Text("Cancelar"),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
                 onPressed: () async {
                   if (_nomeController.text.isNotEmpty) {
-                    final docRef = await _db
+                    await _db
                         .collection('users')
                         .doc(_userCpf)
                         .collection('pets')
                         .add({
                           'nome': _nomeController.text.trim(),
                           'tipo': _tipoSelecionado,
-                          'raca': 'SRD',
-                          'donoCpf': _userCpf,
                           'created_at': FieldValue.serverTimestamp(),
                         });
                     Navigator.pop(context);
-                    await _atualizarListaPets();
-                    setState(() => _petId = docRef.id);
+                    _carregarPets();
                   }
                 },
-                child: Text("Salvar", style: TextStyle(color: Colors.white)),
+                child: Text("Salvar"),
               ),
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildTipoChip(
-    String label,
-    String valor,
-    String selecionado,
-    Function(String) onTap,
-  ) {
-    bool isSelected = valor == selecionado;
-    return GestureDetector(
-      onTap: () => onTap(valor),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? _corAcai : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? _corAcai : Colors.grey[300]!),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              valor == 'cao' ? FontAwesomeIcons.dog : FontAwesomeIcons.cat,
-              size: 12,
-              color: isSelected ? Colors.white : Colors.grey,
-            ),
-            SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey[800],
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _corFundo,
-      body: Column(
-        children: [
-          // 1. Cabeçalho Compacto
-          Container(
-            padding: EdgeInsets.only(top: 40, left: 20, right: 20, bottom: 15),
-            decoration: BoxDecoration(
-              color: _corAcai,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Agendar Horário",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Icon(Icons.calendar_today, color: Colors.white, size: 18),
-              ],
-            ),
-          ),
-
-          // 2. Conteúdo Flexível
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- SELEÇÃO DE PET (Com botão Adicionar) ---
-                  _sectionTitle("Para quem é?"),
-                  SizedBox(height: 5),
-                  SizedBox(
-                    height: 60,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      // +1 para o botão adicionar
-                      itemCount: _pets.length + 1,
-                      itemBuilder: (ctx, index) {
-                        // Lógica do Botão Adicionar (Fica no final)
-                        if (index == _pets.length) {
-                          return GestureDetector(
-                            onTap: _abrirModalAdicionarPet,
-                            child: Container(
-                              width: 60,
-                              margin: EdgeInsets.only(right: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.grey[300]!),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add, color: _corAcai, size: 20),
-                                  Text(
-                                    "Novo",
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: _corAcai,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        // Lógica dos Pets
-                        final pet = _pets[index];
-                        final isSelected = pet['id'] == _petId;
-                        return GestureDetector(
-                          onTap: () => setState(() => _petId = pet['id']),
-                          child: Container(
-                            margin: EdgeInsets.only(right: 10),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected ? _corAcai : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: isSelected
-                                    ? _corAcai
-                                    : Colors.grey[300]!,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  pet['tipo'] == 'cao'
-                                      ? FontAwesomeIcons.dog
-                                      : FontAwesomeIcons.cat,
-                                  size: 14,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Colors.grey,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  pet['nome'],
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.grey[800],
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  SizedBox(height: 10),
-
-                  // --- SELEÇÃO DE SERVIÇO ---
-                  _sectionTitle("Serviço"),
-                  SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildCompactServiceCard(
-                          "Banho",
-                          FontAwesomeIcons.shower,
-                        ),
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: _buildCompactServiceCard(
-                          "Tosa",
-                          FontAwesomeIcons.scissors,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: 10),
-
-                  // --- DATA ---
-                  _sectionTitle("Quando?"),
-                  SizedBox(height: 5),
-                  SizedBox(
-                    height: 50,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _listaDias.length,
-                      itemBuilder: (ctx, index) {
-                        final dia = _listaDias[index];
-                        final isSelected = DateUtils.isSameDay(
-                          dia,
-                          _dataSelecionada,
-                        );
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _dataSelecionada = dia;
-                              _horarioSelecionado = null;
-                            });
-                            _buscarHorarios();
-                          },
-                          child: Container(
-                            width: 45,
-                            margin: EdgeInsets.only(right: 5),
-                            decoration: BoxDecoration(
-                              color: isSelected ? _corAcai : Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isSelected
-                                    ? _corAcai
-                                    : Colors.grey[300]!,
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  DateFormat('dd').format(dia),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                Text(
-                                  DateFormat(
-                                    'EEE',
-                                    'pt_BR',
-                                  ).format(dia).substring(0, 3).toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: isSelected
-                                        ? Colors.white70
-                                        : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  SizedBox(height: 10),
-
-                  // --- HORÁRIOS ---
-                  _sectionTitle("Horários"),
-                  SizedBox(height: 5),
-                  Expanded(
-                    child: _isLoading
-                        ? Center(
-                            child: CircularProgressIndicator(color: _corAcai),
-                          )
-                        : _gradeHorarios.isEmpty
-                        ? Center(
-                            child: Text(
-                              "Nenhum horário livre.",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          )
-                        : GridView.builder(
-                            padding: EdgeInsets.zero,
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 5,
-                                  childAspectRatio: 1.8,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                ),
-                            itemCount: _gradeHorarios.length,
-                            itemBuilder: (ctx, idx) {
-                              final item = _gradeHorarios[idx];
-                              final isLivre = item['livre'];
-                              final isSelected =
-                                  _horarioSelecionado == item['hora'];
-                              return GestureDetector(
-                                onTap: isLivre
-                                    ? () => setState(
-                                        () =>
-                                            _horarioSelecionado = item['hora'],
-                                      )
-                                    : null,
-                                child: Container(
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? _corAcai
-                                        : (isLivre
-                                              ? Colors.white
-                                              : Colors.grey[100]),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? _corAcai
-                                          : (isLivre
-                                                ? Colors.grey[300]!
-                                                : Colors.transparent),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    item['hora'],
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : (isLivre
-                                                ? Colors.black87
-                                                : Colors.grey[400]),
-                                      decoration: !isLivre
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-
-                  // Campo de Obs e Aviso
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: SizedBox(
-                      height: 40,
-                      child: TextField(
-                        controller: _obsController,
-                        style: TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: "Observações (Opcional)...",
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 0,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: Colors.grey[300]!),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 12, color: Colors.blue),
-                        SizedBox(width: 5),
-                        Text(
-                          "Valor sob avaliação na recepção.",
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blue[800],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 3. Botão Fixo
-          Container(
-            padding: EdgeInsets.all(15),
-            color: Colors.white,
-            child: SizedBox(
-              width: double.infinity,
-              height: 45,
-              child: ElevatedButton(
-                onPressed:
-                    (_petId != null &&
-                        _horarioSelecionado != null &&
-                        !_isLoading)
-                    ? _confirmarAgendamento
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _corAcai,
-                  disabledBackgroundColor: Colors.grey[300],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: _isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : Text(
-                        "CONFIRMAR AGENDAMENTO",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        color: Colors.grey[700],
-      ),
-    );
-  }
-
-  Widget _buildCompactServiceCard(String label, IconData icon) {
-    final isSelected = _servicoSelecionado == label;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _servicoSelecionado = label);
-        _buscarHorarios();
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? _corAcai : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? _corAcai : Colors.grey[300]!),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: isSelected ? Colors.white : _corAcai),
-            SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : Colors.black87,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
