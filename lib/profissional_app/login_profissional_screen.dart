@@ -56,11 +56,7 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
           if (data['ativo'] == true) {
             // Sucesso: Redireciona
             if (mounted) {
-              Navigator.pushReplacementNamed(
-                context,
-                '/profissional',
-                arguments: data,
-              );
+              _rotearProfissional(data);
               return;
             }
           }
@@ -121,11 +117,7 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
 
       // Login Bem Sucedido
       if (mounted) {
-        Navigator.pushReplacementNamed(
-          context,
-          '/profissional',
-          arguments: data,
-        );
+        _rotearProfissional(data);
       }
     } on FirebaseAuthException catch (e) {
       String msg = "Erro no login.";
@@ -138,6 +130,42 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
     } catch (e) {
       _mostrarSnack("Erro: $e", cor: Colors.red);
       setState(() => _isLoading = false);
+    }
+  }
+
+  // --- ROTEAMENTO ---
+  void _rotearProfissional(Map<String, dynamic> proData) {
+    double width = MediaQuery.of(context).size.width;
+    bool isMobile = width < 800;
+
+    // Verifica permissões (Normalizando para minúsculas para evitar erros de case)
+    String perfil = (proData['perfil'] ?? 'padrao').toString().toLowerCase();
+    List<dynamic> skills = proData['habilidades'] ?? [];
+
+    // É Master se tiver perfil 'master' OU habilidade 'master'
+    bool isMaster = perfil == 'master' || skills.contains('master');
+    // Caixa/Vendedor também acessam painel web, mas com restrições (isMaster=false)
+    bool isCaixaOuVendedor = perfil == 'caixa' || perfil == 'vendedor';
+
+    if (isMobile && !isMaster && !isCaixaOuVendedor) {
+      // Mobile workers (Groomers/Bathers) go to checklist/work screen
+      Navigator.pushReplacementNamed(
+        context,
+        '/profissional',
+        arguments: proData,
+      );
+    } else {
+      // Admin/Desktop users go to Admin Panel
+      Navigator.pushReplacementNamed(
+        context,
+        '/admin_web',
+        arguments: {
+          'tipo_acesso': isMaster ? 'master' : perfil,
+          'dados': proData,
+          'isMaster': isMaster,
+          'perfil': perfil,
+        },
+      );
     }
   }
 
