@@ -1,4 +1,4 @@
-import 'package:agenpet/screens/components/checklist_pet_screen.dart';
+import 'package:agenpet/client_app/screens/components/checklist_pet_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
