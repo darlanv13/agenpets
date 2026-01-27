@@ -13,6 +13,7 @@ import 'firebase_options.dart'; // Gerado pelo flutterfire configure
 
 // Import das telas
 import 'screens/login_screen.dart';
+import 'screens/login_profissional_screen.dart'; // Import da nova tela
 import 'screens/home_screen.dart';
 import 'screens/agendamento_screen.dart';
 import 'screens/pagamento_screen.dart';
@@ -69,6 +70,8 @@ class MyApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => LoginScreen(),
+        '/login_profissional': (context) =>
+            LoginProfissionalScreen(), // Rota nova
         '/cadastro': (context) => CadastroScreen(),
         '/home': (context) => HomeScreen(),
         '/agendamento': (context) => AgendamentoScreen(),
