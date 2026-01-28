@@ -13,7 +13,8 @@ const VERSION = "v22.0";
  */
 exports.whatsappConfirmacaoAgendamento = onDocumentCreated({
     document: "agendamentos/{id}",
-    region: "southamerica-east1"
+    region: "southamerica-east1",
+    database: "agenpets"
 }, async (event) => {
     const agendamento = event.data.data();
 
@@ -43,7 +44,8 @@ exports.whatsappConfirmacaoAgendamento = onDocumentCreated({
  */
 exports.whatsappPetPronto = onDocumentUpdated({
     document: "agendamentos/{id}",
-    region: "southamerica-east1"
+    region: "southamerica-east1",
+    database: "agenpets"
 }, async (event) => {
     if (!event.data.after.exists) return null;
 
