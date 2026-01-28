@@ -237,7 +237,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
         child: Column(
           children: [
             _buildSectionCard(
-              title: "Inspeção Inicial",
+              title: "Serviços Adicionais",
               icon: FontAwesomeIcons.magnifyingGlass,
               content: _buildInspecaoContent(),
             ),
