@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Agenpet",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--flavor",
+                "cliente"
+            ]
+        },
+        {
+            "name": "Agenpet Pro",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/profissional_app/main_profissional.dart",
+            "args": [
+                "--flavor",
+                "profissional"
+            ]
+        },
+        {
+            "name": "agenpet (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "program": "lib/main.dart"
+        },
+        {
+            "name": "agenpet (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "program": "lib/main.dart"
+        }
+    ]
+}

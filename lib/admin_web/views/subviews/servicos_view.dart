@@ -256,6 +256,8 @@ class _ServicosViewState extends State<ServicosView> {
   DataRow _buildDataRow(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     String nome = data['nome'] ?? 'Serviço';
+    String? porte = data['porte'];
+    String? pelagem = data['pelagem'];
     double preco = (data['preco'] ?? 0).toDouble();
 
     return DataRow(
@@ -272,9 +274,62 @@ class _ServicosViewState extends State<ServicosView> {
                 child: Icon(Icons.cleaning_services, color: _corAcai, size: 18),
               ),
               SizedBox(width: 15),
-              Text(
-                nome,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    nome,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  if (porte != null || pelagem != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(
+                        children: [
+                          if (porte != null)
+                            Container(
+                              margin: EdgeInsets.only(right: 5),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.blue[100]!),
+                              ),
+                              child: Text(
+                                porte,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.blue[800],
+                                ),
+                              ),
+                            ),
+                          if (pelagem != null)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[50],
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.orange[100]!),
+                              ),
+                              child: Text(
+                                "Pelo $pelagem",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.orange[800],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -322,76 +377,146 @@ class _ServicosViewState extends State<ServicosView> {
     final _nomeCtrl = TextEditingController(text: data?['nome']);
     final _precoCtrl = TextEditingController(text: data?['preco']?.toString());
 
+    // State for Dropdowns
+    String? _porteSelecionado = data?['porte'];
+    String? _pelagemSelecionada = data?['pelagem'];
+
+    final List<String> _opcoesPorte = [
+      'Todos',
+      'Pequeno Porte',
+      'Médio Porte',
+      'Grande Porte',
+    ];
+    final List<String> _opcoesPelagem = ['Todos', 'Curta', 'Média', 'Longa'];
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: Text(docId == null ? "Novo Serviço" : "Editar Serviço"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nomeCtrl,
-              decoration: InputDecoration(
-                labelText: "Nome do Serviço",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            title: Text(docId == null ? "Novo Serviço" : "Editar Serviço"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _nomeCtrl,
+                    decoration: InputDecoration(
+                      labelText: "Nome do Serviço",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 15),
+                  TextField(
+                    controller: _precoCtrl,
+                    keyboardType: TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: "Preço (R\$)",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    value: _porteSelecionado,
+                    decoration: InputDecoration(
+                      labelText: "Porte Atendido",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: _opcoesPorte.map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setStateDialog(() {
+                        _porteSelecionado = newValue;
+                      });
+                    },
+                  ),
+                  SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    value: _pelagemSelecionada,
+                    decoration: InputDecoration(
+                      labelText: "Tipo de Pelagem",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: _opcoesPelagem.map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setStateDialog(() {
+                        _pelagemSelecionada = newValue;
+                      });
+                    },
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: 15),
-            TextField(
-              controller: _precoCtrl,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: "Preço (R\$)",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _corAcai,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () async {
-              if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
-
-              double preco =
-                  double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ?? 0.0;
-              final payload = {'nome': _nomeCtrl.text, 'preco': preco};
-
-              if (docId == null) {
-                await _db.collection('servicos_extras').add(payload);
-              } else {
-                await _db
-                    .collection('servicos_extras')
-                    .doc(docId)
-                    .update(payload);
-              }
-
-              if (!context.mounted) return;
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("Serviço salvo!"),
-                  backgroundColor: Colors.green,
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-              );
-            },
-            child: Text("Salvar", style: TextStyle(color: Colors.white)),
-          ),
-        ],
+                onPressed: () async {
+                  if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
+
+                  double preco =
+                      double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ??
+                      0.0;
+                  final payload = {
+                    'nome': _nomeCtrl.text,
+                    'preco': preco,
+                    'porte': _porteSelecionado,
+                    'pelagem': _pelagemSelecionada,
+                  };
+
+                  if (docId == null) {
+                    await _db.collection('servicos_extras').add(payload);
+                  } else {
+                    await _db
+                        .collection('servicos_extras')
+                        .doc(docId)
+                        .update(payload);
+                  }
+
+                  if (!context.mounted) return;
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Serviço salvo!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                child: Text("Salvar", style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

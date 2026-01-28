@@ -40,6 +40,25 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+
+    // No Kotlin, usamos listagem de strings para dimensões
+    flavorDimensions.add("app")
+
+    productFlavors {
+        create("cliente") {
+            dimension = "app"
+            // resValue no Kotlin usa parênteses e vírgulas
+            resValue("string", "app_name", "Agenpet")
+            applicationId = "com.example.agenpet"
+        }
+
+        create("profissional") {
+            dimension = "app"
+            resValue("string", "app_name", "Agenpet Pro")
+            applicationId = "com.example.agenpet"
+        }
+    }
 }
 
 flutter {
