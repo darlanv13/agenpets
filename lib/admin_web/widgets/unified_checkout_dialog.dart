@@ -905,6 +905,24 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       itemBuilder: (context, index) {
         final item = _searchResults[index];
         final isProduct = item['type'] == 'product';
+        String? subtitle;
+
+        if (isProduct) {
+          subtitle = item['brand'] ?? '';
+        } else {
+          // Service logic
+          List<String> parts = [];
+          if (item['porte'] != null && item['porte'].toString().isNotEmpty) {
+            parts.add("Porte: ${item['porte']}");
+          }
+          if (item['pelagem'] != null &&
+              item['pelagem'].toString().isNotEmpty) {
+            parts.add("Pelagem: ${item['pelagem']}");
+          }
+          if (parts.isNotEmpty) {
+            subtitle = parts.join(" | ");
+          }
+        }
 
         return ListTile(
           dense: true,
@@ -922,8 +940,8 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
             item['nome'],
             style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
           ),
-          subtitle: isProduct
-              ? Text(item['brand'] ?? '', style: TextStyle(fontSize: 10))
+          subtitle: subtitle != null && subtitle.isNotEmpty
+              ? Text(subtitle, style: TextStyle(fontSize: 10))
               : null,
           trailing: Text(
             "+ R\$ ${(item['preco'] as double).toStringAsFixed(2)}",
