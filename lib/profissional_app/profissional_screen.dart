@@ -1,4 +1,5 @@
 import 'package:agenpet/profissional_app/components/checklist_pet_screen.dart';
+import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -49,7 +50,47 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     String statusAtual = data['status'] ?? 'agendado';
     bool checklistFeito = data['checklist_feito'] ?? false;
 
-    // 1. INÍCIO DO PROCESSO (Checklist -> Banho)
+    // --- NOVO FLUXO: RECEPÇÃO -> VALIDAÇÃO -> CHECKLIST ---
+
+    // 1. RECEBER PET (Validação do Profissional)
+    if (statusAtual == 'aguardando_execucao') {
+      await _confirmarRecebimentoPet(doc);
+      return;
+    }
+
+    // 2. CHECKLIST PENDENTE (Após validação)
+    if (statusAtual == 'checklist_pendente') {
+      if (data['profissional_id'] == null) {
+        // Se ainda não tem pro, seleciona e abre checklist
+        await _selecionarProfissional(doc);
+      } else {
+        // Se já tem, abre direto
+        final bool? result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChecklistPetScreen(
+              agendamentoId: doc.id,
+              nomePet: data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
+            ),
+          ),
+        );
+
+        if (result == true) {
+          // Atualiza para 'banhando' automaticamente após sucesso
+          await doc.reference.update({
+            'status': 'banhando',
+            'checklist_feito': true,
+            'inicio_servico': FieldValue.serverTimestamp(),
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Checklist salvo! Banho iniciado. 🚿")),
+          );
+        }
+      }
+      return;
+    }
+
+    // --- FLUXO ANTIGO / FALLBACK ---
     if (statusAtual == 'agendado' || statusAtual == 'aguardando_pagamento') {
       if (!checklistFeito) {
         // FLUXO A: Selecionar Profissional -> Fazer Checklist
@@ -67,7 +108,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       return;
     }
 
-    // 2. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
+    // 3. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
     String servicoNorm = (data['servicoNorm'] ?? data['servico'] ?? '')
         .toString()
         .toLowerCase();
@@ -95,6 +136,32 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
           content: Text(mensagem),
           backgroundColor: _corAcai,
           duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmarRecebimentoPet(DocumentSnapshot doc) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final existingExtras = data['servicos_extras'] != null
+        ? List<Map<String, dynamic>>.from(data['servicos_extras'])
+        : <Map<String, dynamic>>[];
+
+    // Reutiliza o diálogo, permitindo ao Pro ver/editar serviços
+    final List<Map<String, dynamic>>? result = await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ServicosSelectDialog(initialSelected: existingExtras),
+    );
+
+    if (result != null) {
+      await doc.reference.update({
+        'status': 'checklist_pendente',
+        'servicos_extras': result, // Salva serviços confirmados
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Recebimento confirmado! Iniciando Checklist..."),
         ),
       );
     }
@@ -156,7 +223,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
                     // Navega para o checklist
                     final data = doc.data() as Map<String, dynamic>;
-                    await Navigator.push(
+                    final bool? result = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => ChecklistPetScreen(
@@ -166,6 +233,18 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                         ),
                       ),
                     );
+
+                    if (result == true) {
+                      // Se veio do fluxo antigo e completou, avança status
+                      if (data['status'] == 'agendado' ||
+                          data['status'] == 'checklist_pendente') {
+                        await doc.reference.update({
+                          'status': 'banhando',
+                          'checklist_feito': true,
+                          'inicio_servico': FieldValue.serverTimestamp(),
+                        });
+                      }
+                    }
                   },
                 );
               },
@@ -639,7 +718,19 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     bool podeAvancar = true;
     Color corBotao = _corAcai; // Cor padrão do botão
 
-    if (status == 'agendado' || status == 'aguardando_pagamento') {
+    if (status == 'aguardando_execucao') {
+      corStatus = Colors.blue;
+      textoStatus = "Aguardando Profissional";
+      iconeAcao = Icons.thumb_up;
+      textoAcao = "Receber Pet";
+      corBotao = _corAcai;
+    } else if (status == 'checklist_pendente') {
+      corStatus = Colors.orange;
+      textoStatus = "Aguardando Checklist";
+      iconeAcao = Icons.playlist_add_check;
+      textoAcao = "Fazer Checklist";
+      corBotao = Colors.orange;
+    } else if (status == 'agendado' || status == 'aguardando_pagamento') {
       corStatus = Colors.blue;
       textoStatus = "Na Fila";
 
