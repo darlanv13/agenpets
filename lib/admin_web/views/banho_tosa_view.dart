@@ -139,7 +139,11 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
         contextType: CheckoutContext.agenda,
         referenceId: agendamentoDoc.id,
         clientData: userData,
-        baseItem: {'nome': servicoNome, 'preco': valorBase},
+        baseItem: {
+          'nome': servicoNome,
+          'preco': valorBase,
+          'servicos_extras': dataAgendamento['servicos_extras'],
+        },
         availableServices: listaExtras,
         totalAlreadyPaid: 0, // Agenda typically pays at checkout
         vouchersConsumedHistory: dataAgendamento['vouchers_consumidos'],
@@ -745,8 +749,22 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                                         ),
                                       )
                                       .toList(),
-                                if (data['extras'] == null ||
-                                    (data['extras'] as List).isEmpty)
+                                if (data['servicos_extras'] != null)
+                                  ...(data['servicos_extras'] as List)
+                                      .map(
+                                        (e) => _row(
+                                          "+ ${e['nome']}",
+                                          "R\$ ${e['preco']}",
+                                          color: _corAtencao,
+                                          fontSize: 12,
+                                        ),
+                                      )
+                                      .toList(),
+                                if ((data['extras'] == null ||
+                                        (data['extras'] as List).isEmpty) &&
+                                    (data['servicos_extras'] == null ||
+                                        (data['servicos_extras'] as List)
+                                            .isEmpty))
                                   Padding(
                                     padding: EdgeInsets.only(top: 10),
                                     child: Text(
