@@ -234,6 +234,17 @@ class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
                                           Divider(height: 1),
                                       itemBuilder: (ctx, idx) {
                                         final opt = options.elementAt(idx);
+
+                                        // Subtitle Construction for Autocomplete
+                                        List<String> details = [];
+                                        details.add("R\$ ${opt['preco'].toStringAsFixed(2)}");
+                                        if (opt['porte'] != null && opt['porte'].toString().isNotEmpty) {
+                                          details.add("Porte: ${opt['porte']}");
+                                        }
+                                        if (opt['pelagem'] != null && opt['pelagem'].toString().isNotEmpty) {
+                                          details.add("Pelagem: ${opt['pelagem']}");
+                                        }
+
                                         return ListTile(
                                           title: Text(
                                             opt['nome'],
@@ -241,7 +252,7 @@ class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
                                                 fontWeight: FontWeight.bold),
                                           ),
                                           subtitle: Text(
-                                            "R\$ ${opt['preco'].toStringAsFixed(2)}",
+                                            details.join(' | '),
                                             style: TextStyle(
                                                 color: Colors.green[700]),
                                           ),
