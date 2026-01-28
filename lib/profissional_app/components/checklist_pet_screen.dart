@@ -6,10 +6,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-// IMPORTANTE: Importar o compactador
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:path_provider/path_provider.dart'
-    as path_provider; // Para diretórios temporários
+import 'package:path_provider/path_provider.dart' as path_provider;
 
 enum NivelSeveridade { nenhum, leve, medio, critico }
 
@@ -41,49 +39,77 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
   bool _temPulgas = false;
 
   bool _temLesoes = false;
-  // MUDANÇA: Lista de fotos em vez de uma só
   List<XFile> _fotosLesoes = [];
 
   bool _temOtite = false;
   bool _agressivo = false;
   final _obsController = TextEditingController();
 
-  // --- NOVA FUNÇÃO: COMPACTADOR DE IMAGEM ---
+  // --- SERVIÇOS EXTRAS ---
+  List<Map<String, dynamic>> _availableServices = [];
+  List<Map<String, dynamic>> _selectedServices = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadServices();
+  }
+
+  Future<void> _loadServices() async {
+    try {
+      final snapshot =
+          await _db.collection('servicos_extras').orderBy('nome').get();
+      setState(() {
+        _availableServices =
+            snapshot.docs.map((doc) {
+              final data = doc.data();
+              return {
+                'id': doc.id,
+                'nome': data['nome'],
+                'preco': (data['preco'] ?? 0).toDouble(),
+                'porte': data['porte'],
+                'pelagem': data['pelagem'],
+              };
+            }).toList();
+      });
+    } catch (e) {
+      print("Erro ao carregar serviços: $e");
+    }
+  }
+
+  // --- COMPRESSÃO ---
   Future<XFile?> _comprimirImagem(XFile file) async {
     final dir = await path_provider.getTemporaryDirectory();
     final targetPath =
         '${dir.absolute.path}/temp_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-    // Configuração de compressão agressiva para economizar espaço
     final result = await FlutterImageCompress.compressAndGetFile(
       file.path,
       targetPath,
-      quality: 60, // Qualidade 60% (bom equilíbrio entre tamanho e visual)
-      minWidth: 800, // Redimensiona se for muito grande
+      quality: 60,
+      minWidth: 800,
       minHeight: 800,
     );
 
     return result;
   }
 
-  // --- AÇÃO: TIRAR FOTO E COMPACTAR ---
+  // --- FOTOS ---
   Future<void> _tirarFoto() async {
     try {
-      // 1. Tira a foto (aqui já usamos parâmetros do picker para ajudar)
       final XFile? photoBruta = await _picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
       );
 
       if (photoBruta != null) {
-        setState(() => _isLoading = true); // Mostra loading enquanto comprime
+        setState(() => _isLoading = true);
 
-        // 2. Passa pelo compactador
         final XFile? photoCompactada = await _comprimirImagem(photoBruta);
 
         if (photoCompactada != null) {
           setState(() {
-            _fotosLesoes.add(photoCompactada); // Adiciona à lista
+            _fotosLesoes.add(photoCompactada);
             _temLesoes = true;
           });
         }
@@ -100,47 +126,38 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
   void _removerFoto(int index) {
     setState(() {
       _fotosLesoes.removeAt(index);
-      if (_fotosLesoes.isEmpty) {
-        // Opcional: se quiser desmarcar lesões quando ficar sem fotos
-        // _temLesoes = false;
-      }
     });
   }
 
-  // --- AÇÃO: SALVAR ---
+  // --- SALVAR ---
   Future<void> _salvarEConfirmar() async {
     setState(() => _isLoading = true);
 
     try {
       List<String> urlsFotos = [];
 
-      // 1. UPLOAD PARA A PASTA 'agenpetsChecklist'
+      // 1. Upload Fotos
       if (_fotosLesoes.isNotEmpty) {
-        // Aponta para a pasta que você pediu
-        final storageRef = FirebaseStorage.instance.ref().child(
-          'agenpetsChecklist',
-        );
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('agenpetsChecklist');
 
         for (var xfile in _fotosLesoes) {
-          // Cria nome único: IDdoAgendamento_Timestamp.jpg
           final String nomeArquivo =
               '${widget.agendamentoId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
           final Reference refFoto = storageRef.child(nomeArquivo);
 
-          // Faz o upload
           try {
             await refFoto.putFile(File(xfile.path));
-            // Pega o link para salvar no banco
             String url = await refFoto.getDownloadURL();
             urlsFotos.add(url);
           } catch (e) {
             print("Erro no upload da foto: $e");
-            // Continua o loop para tentar salvar as outras, se houver
           }
         }
       }
 
-      // 2. PREPARAÇÃO DOS DADOS
+      // 2. Checklist Payload
       bool temNosSimples = _nivelNos != NivelSeveridade.nenhum;
 
       final Map<String, dynamic> dadosChecklist = {
@@ -148,16 +165,22 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
         'tem_nos': temNosSimples,
         'tem_pulgas': _temPulgas,
         'tem_lesoes': _temLesoes,
-        'fotos_lesoes_paths': urlsFotos, // Lista de links REAIS do Storage
+        'fotos_lesoes_paths': urlsFotos,
         'tem_otite': _temOtite,
         'agressivo': _agressivo,
         'observacoes': _obsController.text,
         'feito_por_profissional': true,
-        // 'data_registro': Removido pois o backend já gera
-        'versao_checklist': '2.3 (Storage: agenpetsChecklist)',
+        'versao_checklist': '3.0 (UX Refactor + Extras)',
       };
 
-      // 3. CHAMADA DA CLOUD FUNCTION
+      // 3. Atualizar Agendamento com Extras (Direct Write)
+      if (_selectedServices.isNotEmpty) {
+        await _db.collection('agendamentos').doc(widget.agendamentoId).update({
+          'servicos_extras': _selectedServices,
+        });
+      }
+
+      // 4. Call Cloud Function
       final functions = FirebaseFunctions.instanceFor(
         region: 'southamerica-east1',
       );
@@ -172,7 +195,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Salvo com sucesso na pasta agenpetsChecklist! ☁️"),
+          content: Text("Checklist salvo com sucesso! ☁️"),
           backgroundColor: Colors.green,
         ),
       );
@@ -180,17 +203,16 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      // Tratamento de erro específico para Storage vs Function
       String msgErro = "Erro desconhecido: $e";
       if (e.toString().contains("permission-denied")) {
-        msgErro = "Erro de Permissão: Verifique as Regras do Storage.";
+        msgErro = "Erro de Permissão: Verifique as Regras.";
       } else if (e is FirebaseFunctionsException) {
         msgErro = "Erro na Função: ${e.message}";
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msgErro), backgroundColor: Colors.red),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(msgErro), backgroundColor: Colors.red));
     }
   }
 
@@ -199,246 +221,87 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Checklist: ${widget.nomePet}"),
+        title: Text(
+          "Checklist: ${widget.nomePet}",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
         backgroundColor: Color(0xFF4A148C),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       backgroundColor: Color(0xFFF5F7FA),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _headerText("Inspeção Inicial", "Registre o estado físico do pet."),
-            SizedBox(height: 20),
-
-            // 1. PELAGEM (Código mantido igual)
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(FontAwesomeIcons.scissors, color: Color(0xFF4A148C)),
-                      SizedBox(width: 12),
-                      Text(
-                        "Condição de Nós/Embolo",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 15),
-                  SegmentedButton<NivelSeveridade>(
-                    segments: const [
-                      ButtonSegment(
-                        value: NivelSeveridade.nenhum,
-                        label: Text('Liso'),
-                      ),
-                      ButtonSegment(
-                        value: NivelSeveridade.leve,
-                        label: Text('Leve'),
-                      ),
-                      ButtonSegment(
-                        value: NivelSeveridade.medio,
-                        label: Text('Médio'),
-                      ),
-                      ButtonSegment(
-                        value: NivelSeveridade.critico,
-                        label: Text('Crítico'),
-                      ),
-                    ],
-                    selected: {_nivelNos},
-                    onSelectionChanged: (Set<NivelSeveridade> newSelection) {
-                      setState(() => _nivelNos = newSelection.first);
-                    },
-                    style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      backgroundColor: MaterialStateProperty.resolveWith((
-                        states,
-                      ) {
-                        if (states.contains(MaterialState.selected)) {
-                          return _nivelNos == NivelSeveridade.critico
-                              ? Colors.red[100]
-                              : Color(0xFFE1BEE7);
-                        }
-                        return Colors.grey[50];
-                      }),
-                    ),
-                  ),
-                  if (_nivelNos == NivelSeveridade.critico)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        "⚠️ Crítico: Pode exigir taxa extra.",
-                        style: TextStyle(
-                          color: Colors.red[800],
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            _buildSectionCard(
+              title: "Inspeção Inicial",
+              icon: FontAwesomeIcons.magnifyingGlass,
+              content: _buildInspecaoContent(),
             ),
-
             SizedBox(height: 20),
-
-            // 2. SAÚDE (Com Galeria de Miniaturas)
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  _checkItem(
-                    "Pulgas ou Carrapatos",
-                    FontAwesomeIcons.bug,
-                    _temPulgas,
-                    (v) => setState(() => _temPulgas = v),
-                    isAlert: true,
-                  ),
-                  Divider(height: 1),
-
-                  // --- ÁREA DAS LESÕES ---
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _checkItem(
-                        "Lesões ou Feridas",
-                        FontAwesomeIcons.bandAid,
-                        _temLesoes,
-                        (v) {
-                          setState(() {
-                            _temLesoes = v;
-                            if (!v)
-                              _fotosLesoes.clear(); // Limpa fotos se desmarcar
-                          });
-                        },
-                        isAlert: true,
-                      ),
-
-                      if (_temLesoes)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 15),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // NOVA WIDGET DE GALERIA
-                              _buildGaleriaFotos(),
-
-                              if (_fotosLesoes.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    "⚠️ Adicione pelo menos uma foto da lesão.",
-                                    style: TextStyle(
-                                      color: Colors.red[700],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-
-                  Divider(height: 1),
-                  _checkItem(
-                    "Otite / Ouvido Sujo",
-                    FontAwesomeIcons.earListen,
-                    _temOtite,
-                    (v) => setState(() => _temOtite = v),
-                  ),
-                  Divider(height: 1),
-                  _checkItem(
-                    "Agressivo / Medroso",
-                    FontAwesomeIcons.triangleExclamation,
-                    _agressivo,
-                    (v) => setState(() => _agressivo = v),
-                    isAlert: true,
-                  ),
-                ],
-              ),
+            _buildSectionCard(
+              title: "Saúde & Comportamento",
+              icon: FontAwesomeIcons.heartPulse,
+              content: _buildSaudeContent(),
             ),
-
-            SizedBox(height: 25),
-            _headerText("Observações", "Detalhes adicionais."),
-            SizedBox(height: 10),
-
-            TextField(
-              controller: _obsController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: "Ex: Verruga na pata esquerda...",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
+            SizedBox(height: 20),
+            _buildSectionCard(
+              title: "Serviços Adicionais",
+              icon: FontAwesomeIcons.plusCircle,
+              content: _buildExtrasContent(),
+            ),
+            SizedBox(height: 20),
+            _buildSectionCard(
+              title: "Observações",
+              icon: FontAwesomeIcons.clipboard,
+              content: TextField(
+                controller: _obsController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Alguma observação importante?",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
                 ),
               ),
             ),
-
             SizedBox(height: 30),
-
-            // BOTÃO
             SizedBox(
               width: double.infinity,
-              height: 60,
+              height: 55,
               child: ElevatedButton.icon(
                 icon: _isLoading
                     ? SizedBox(
-                        width: 25,
-                        height: 25,
-                        child: CircularProgressIndicator(color: Colors.white),
-                      )
-                    : Icon(
-                        Icons.check_circle_outline,
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
                         color: Colors.white,
-                        size: 28,
+                        strokeWidth: 2,
                       ),
+                    )
+                    : Icon(Icons.check_circle, size: 24),
                 label: Text(
-                  _isLoading ? "PROCESSANDO..." : "CONFIRMAR",
+                  _isLoading ? "SALVANDO..." : "FINALIZAR CHECKLIST",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFF00C853),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 2,
                 ),
-                // Validação: Bloqueia se marcou lesão mas não tem fotos
-                onPressed: _isLoading || (_temLesoes && _fotosLesoes.isEmpty)
-                    ? null
-                    : _salvarEConfirmar,
+                onPressed:
+                    _isLoading || (_temLesoes && _fotosLesoes.isEmpty)
+                        ? null
+                        : _salvarEConfirmar,
               ),
             ),
-
             SizedBox(height: 30),
           ],
         ),
@@ -446,13 +309,265 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
     );
   }
 
-  // --- NOVO WIDGET: GALERIA DE MINIATURAS ---
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required Widget content,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: Color(0xFF4A148C), size: 18),
+                SizedBox(width: 10),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(padding: EdgeInsets.all(16), child: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInspecaoContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Condição de Nós/Embolo",
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        SizedBox(height: 10),
+        SegmentedButton<NivelSeveridade>(
+          segments: const [
+            ButtonSegment(value: NivelSeveridade.nenhum, label: Text('Liso')),
+            ButtonSegment(value: NivelSeveridade.leve, label: Text('Leve')),
+            ButtonSegment(value: NivelSeveridade.medio, label: Text('Médio')),
+            ButtonSegment(value: NivelSeveridade.critico, label: Text('Crítico')),
+          ],
+          selected: {_nivelNos},
+          onSelectionChanged: (Set<NivelSeveridade> newSelection) {
+            setState(() => _nivelNos = newSelection.first);
+          },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            backgroundColor: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.selected)) {
+                return _nivelNos == NivelSeveridade.critico
+                    ? Colors.red[100]
+                    : Color(0xFFE1BEE7);
+              }
+              return Colors.white;
+            }),
+          ),
+        ),
+        if (_nivelNos == NivelSeveridade.critico)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange[800], size: 16),
+                SizedBox(width: 5),
+                Text(
+                  "Atenção: Pode exigir taxa de desembolo.",
+                  style: TextStyle(
+                    color: Colors.orange[800],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSaudeContent() {
+    return Column(
+      children: [
+        _buildSwitchItem(
+          "Pulgas ou Carrapatos",
+          _temPulgas,
+          (v) => setState(() => _temPulgas = v),
+          isAlert: true,
+        ),
+        Divider(),
+        _buildSwitchItem("Lesões ou Feridas", _temLesoes, (v) {
+          setState(() {
+            _temLesoes = v;
+            if (!v) _fotosLesoes.clear();
+          });
+        }, isAlert: true),
+        if (_temLesoes) ...[
+          SizedBox(height: 10),
+          _buildGaleriaFotos(),
+          if (_fotosLesoes.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                "⚠️ Obrigatório: Adicione fotos da lesão.",
+                style: TextStyle(
+                  color: Colors.red[700],
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          SizedBox(height: 10),
+        ],
+        Divider(),
+        _buildSwitchItem(
+          "Otite / Ouvido Sujo",
+          _temOtite,
+          (v) => setState(() => _temOtite = v),
+        ),
+        Divider(),
+        _buildSwitchItem(
+          "Agressivo / Medroso",
+          _agressivo,
+          (v) => setState(() => _agressivo = v),
+          isAlert: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExtrasContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Adicionar Serviços ao Agendamento:",
+          style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+        ),
+        SizedBox(height: 10),
+        Autocomplete<Map<String, dynamic>>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return const Iterable<Map<String, dynamic>>.empty();
+            }
+            return _availableServices.where((option) {
+              return option['nome'].toString().toLowerCase().contains(
+                textEditingValue.text.toLowerCase(),
+              );
+            });
+          },
+          displayStringForOption:
+              (option) =>
+                  "${option['nome']} (R\$ ${option['preco'].toStringAsFixed(2)})",
+          onSelected: (Map<String, dynamic> selection) {
+            setState(() {
+              // Evitar duplicatas
+              if (!_selectedServices.any((s) => s['id'] == selection['id'])) {
+                _selectedServices.add(selection);
+              }
+            });
+          },
+          fieldViewBuilder: (
+            context,
+            textEditingController,
+            focusNode,
+            onFieldSubmitted,
+          ) {
+            return TextField(
+              controller: textEditingController,
+              focusNode: focusNode,
+              decoration: InputDecoration(
+                hintText: "Buscar serviço (ex: Hidratação)",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 15),
+              ),
+            );
+          },
+        ),
+        SizedBox(height: 15),
+        if (_selectedServices.isNotEmpty)
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey[200]!),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _selectedServices.length,
+              separatorBuilder: (context, index) => Divider(height: 1),
+              itemBuilder: (context, index) {
+                final item = _selectedServices[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    item['nome'],
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    "R\$ ${(item['preco'] as double).toStringAsFixed(2)}",
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete, color: Colors.red[300]),
+                    onPressed: () {
+                      setState(() {
+                        _selectedServices.removeAt(index);
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSwitchItem(
+    String label,
+    bool value,
+    Function(bool) onChanged, {
+    bool isAlert = false,
+  }) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: isAlert ? (value ? Colors.red : Colors.black87) : Colors.black87,
+        ),
+      ),
+      activeColor: isAlert ? Colors.red : Color(0xFF4A148C),
+    );
+  }
+
   Widget _buildGaleriaFotos() {
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
-        // 1. Lista as miniaturas existentes
         ..._fotosLesoes.asMap().entries.map((entry) {
           int idx = entry.key;
           XFile file = entry.value;
@@ -460,8 +575,8 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 70,
-                height: 70,
+                width: 80,
+                height: 80,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.grey[300]!),
@@ -471,17 +586,17 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
                   ),
                 ),
               ),
-              // Botão X para remover
               Positioned(
-                top: -5,
-                right: -5,
+                top: -8,
+                right: -8,
                 child: InkWell(
                   onTap: () => _removerFoto(idx),
                   child: Container(
-                    padding: EdgeInsets.all(2),
+                    padding: EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: Colors.red,
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: Icon(Icons.close, size: 14, color: Colors.white),
                   ),
@@ -490,86 +605,32 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
             ],
           );
         }).toList(),
-
-        // 2. Botão de Adicionar (+ Câmera)
         InkWell(
           onTap: _tirarFoto,
           child: Container(
-            width: 70,
-            height: 70,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: Colors.grey[50],
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.red[200]!,
-                style: BorderStyle.solid,
-                width: 1.5,
+                color: Colors.grey[400]!,
+                style: BorderStyle.dashed,
               ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.camera_alt, color: Colors.red[300]),
+                Icon(Icons.camera_alt, color: Colors.grey[600]),
+                SizedBox(height: 4),
                 Text(
-                  "Adicionar",
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Colors.red[300],
-                    fontWeight: FontWeight.bold,
-                  ),
+                  "Foto",
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
               ],
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _checkItem(
-    String label,
-    IconData icon,
-    bool valor,
-    Function(bool) onChanged, {
-    bool isAlert = false,
-  }) {
-    Color iconColor = isAlert ? Colors.red[700]! : Color(0xFF4A148C);
-    return SwitchListTile(
-      value: valor,
-      onChanged: onChanged,
-      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-      title: Row(
-        children: [
-          Icon(icon, color: iconColor, size: 22),
-          SizedBox(width: 15),
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-      activeColor: iconColor,
-    );
-  }
-
-  Widget _headerText(String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF4A148C),
-          ),
-        ),
-        SizedBox(height: 4),
-        Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
       ],
     );
   }
