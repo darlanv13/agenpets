@@ -128,6 +128,8 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
             'id': e.id,
             'nome': e['nome'],
             'preco': (e['preco'] ?? 0).toDouble(),
+            'porte': e['porte'],
+            'pelagem': e['pelagem'],
           },
         )
         .toList();

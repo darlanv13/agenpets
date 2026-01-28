@@ -485,6 +485,59 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
               }
             });
           },
+          optionsViewBuilder: (
+            BuildContext context,
+            AutocompleteOnSelected<Map<String, dynamic>> onSelected,
+            Iterable<Map<String, dynamic>> options,
+          ) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                child: Container(
+                  width: MediaQuery.of(context).size.width - 40,
+                  height: 200,
+                  color: Colors.white,
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: options.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final option = options.elementAt(index);
+                      // Subtitle Logic
+                      List<String> parts = [];
+                      if (option['porte'] != null &&
+                          option['porte'].toString().isNotEmpty) {
+                        parts.add("Porte: ${option['porte']}");
+                      }
+                      if (option['pelagem'] != null &&
+                          option['pelagem'].toString().isNotEmpty) {
+                        parts.add("Pelagem: ${option['pelagem']}");
+                      }
+                      final subtitle =
+                          parts.isNotEmpty ? parts.join(" | ") : null;
+
+                      return ListTile(
+                        title: Text(
+                          "${option['nome']} (R\$ ${(option['preco'] as double).toStringAsFixed(2)})",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: subtitle != null
+                            ? Text(
+                                subtitle,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              )
+                            : null,
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
           fieldViewBuilder:
               (context, textEditingController, focusNode, onFieldSubmitted) {
                 return TextField(
