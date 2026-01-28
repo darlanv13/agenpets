@@ -122,46 +122,55 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
         .where('ativo', isEqualTo: true)
         .get();
 
-    final List<Map<String, dynamic>> listaExtras = extrasSnap.docs
-        .map(
-          (e) => {
-            'id': e.id,
-            'nome': e['nome'],
-            'preco': (e['preco'] ?? 0).toDouble(),
-            'porte': e['porte'],
-            'pelagem': e['pelagem'],
-          },
-        )
-        .toList();
+    try {
+      final List<Map<String, dynamic>> listaExtras = extrasSnap.docs.map((e) {
+        final data = e.data() as Map<String, dynamic>;
+        return {
+          'id': e.id,
+          'nome': data['nome'],
+          'preco': (data['preco'] ?? 0).toDouble(),
+          'porte': data['porte'],
+          'pelagem': data['pelagem'],
+        };
+      }).toList();
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => UnifiedCheckoutDialog(
-        contextType: CheckoutContext.agenda,
-        referenceId: agendamentoDoc.id,
-        clientData: userData,
-        baseItem: {
-          'nome': servicoNome,
-          'preco': valorBase,
-          'servicos_extras': dataAgendamento['servicos_extras'],
-        },
-        availableServices: listaExtras,
-        totalAlreadyPaid: 0, // Agenda typically pays at checkout
-        vouchersConsumedHistory: dataAgendamento['vouchers_consumidos'],
-        themeColor: _corAcai,
-        onSuccess: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Caixa Atualizado com Sucesso! 💰"),
-              backgroundColor: _corSucesso,
-              behavior: SnackBarBehavior.floating,
-              width: 300,
-            ),
-          );
-        },
-      ),
-    );
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => UnifiedCheckoutDialog(
+          contextType: CheckoutContext.agenda,
+          referenceId: agendamentoDoc.id,
+          clientData: userData,
+          baseItem: {
+            'nome': servicoNome,
+            'preco': valorBase,
+            'servicos_extras': dataAgendamento['servicos_extras'],
+          },
+          availableServices: listaExtras,
+          totalAlreadyPaid: 0, // Agenda typically pays at checkout
+          vouchersConsumedHistory: dataAgendamento['vouchers_consumidos'],
+          themeColor: _corAcai,
+          onSuccess: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Caixa Atualizado com Sucesso! 💰"),
+                backgroundColor: _corSucesso,
+                behavior: SnackBarBehavior.floating,
+                width: 300,
+              ),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      print("Erro ao abrir checkout: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro ao carregar dados do checkout: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
