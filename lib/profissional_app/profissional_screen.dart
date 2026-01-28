@@ -247,6 +247,15 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
             .toLowerCase();
     double valorOriginal = (dataAgendamento['valor'] ?? 0).toDouble();
 
+    // --- CÁLCULO DE EXTRAS ---
+    List<dynamic> extrasList = dataAgendamento['servicos_extras'] ?? [];
+    double valorExtras = 0;
+    for (var item in extrasList) {
+      if (item is Map) {
+        valorExtras += (item['preco'] ?? 0).toDouble();
+      }
+    }
+
     // Auto-seleção inteligente
     saldos.forEach((key, val) {
       if (servicoNorm.contains(key) ||
@@ -276,7 +285,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
           });
 
           if (usouPrincipal) desconto = valorOriginal;
-          double valorFinal = valorOriginal - desconto;
+          double valorFinal = (valorOriginal + valorExtras) - desconto;
           if (valorFinal < 0) valorFinal = 0;
 
           return AlertDialog(
@@ -441,6 +450,32 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                           "Valor Serviço",
                           "R\$ ${valorOriginal.toStringAsFixed(2)}",
                         ),
+                        // Lista de Extras
+                        if (extrasList.isNotEmpty) ...[
+                          Divider(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              "Extras Adicionados:",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                          ...extrasList.map((item) {
+                            final nome = item['nome'] ?? 'Extra';
+                            final preco = (item['preco'] ?? 0).toDouble();
+                            return _buildResumoRow(
+                              "+ $nome",
+                              "R\$ ${preco.toStringAsFixed(2)}",
+                              color: Colors.blue[800]!,
+                            );
+                          }).toList(),
+                          Divider(height: 10),
+                        ],
+
                         if (desconto > 0)
                           _buildResumoRow(
                             "Voucher",

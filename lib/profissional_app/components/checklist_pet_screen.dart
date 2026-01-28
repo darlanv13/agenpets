@@ -472,9 +472,16 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
               );
             });
           },
-          displayStringForOption:
-              (option) =>
-                  "${option['nome']} (R\$ ${option['preco'].toStringAsFixed(2)})",
+          displayStringForOption: (option) {
+            String label = option['nome'];
+            if (option['porte'] != null && option['porte'] != 'Todos') {
+              label += " (${option['porte']})";
+            }
+            if (option['pelagem'] != null && option['pelagem'] != 'Todos') {
+              label += " - ${option['pelagem']}";
+            }
+            return "$label (R\$ ${option['preco'].toStringAsFixed(2)})";
+          },
           onSelected: (Map<String, dynamic> selection) {
             setState(() {
               // Evitar duplicatas
