@@ -558,6 +558,11 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
       textoStatus = "Aguardando Execução";
       iconeStatus = Icons.hourglass_top;
     }
+    if (status == 'checklist_pendente') {
+      corStatus = Colors.orange;
+      textoStatus = "Em Checklist";
+      iconeStatus = Icons.playlist_add_check;
+    }
     if (status == 'banhando') {
       corStatus = _corProcesso;
       textoStatus = "Em Banho";

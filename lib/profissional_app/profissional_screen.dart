@@ -52,8 +52,12 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
     // --- NOVO FLUXO: RECEPÇÃO -> VALIDAÇÃO -> CHECKLIST ---
 
-    // 1. RECEBER PET (Validação do Profissional)
-    if (statusAtual == 'aguardando_execucao') {
+    // 1. RECEBER PET (Validação do Profissional ou Início pelo Pro)
+    // Permite que o Pro receba o pet mesmo que a Recepção não tenha feito (agendado)
+    // ou se a Recepção já fez (aguardando_execucao)
+    if (statusAtual == 'aguardando_execucao' ||
+        statusAtual == 'agendado' ||
+        statusAtual == 'aguardando_pagamento') {
       await _confirmarRecebimentoPet(doc);
       return;
     }
@@ -86,24 +90,6 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
             SnackBar(content: Text("Checklist salvo! Banho iniciado. 🚿")),
           );
         }
-      }
-      return;
-    }
-
-    // --- FLUXO ANTIGO / FALLBACK ---
-    if (statusAtual == 'agendado' || statusAtual == 'aguardando_pagamento') {
-      if (!checklistFeito) {
-        // FLUXO A: Selecionar Profissional -> Fazer Checklist
-        await _selecionarProfissional(doc);
-      } else {
-        // FLUXO B: Já fez checklist -> Iniciar Banho
-        await doc.reference.update({
-          'status': 'banhando',
-          'inicio_servico': FieldValue.serverTimestamp(),
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Banho iniciado! 🚿")));
       }
       return;
     }
@@ -718,9 +704,14 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     bool podeAvancar = true;
     Color corBotao = _corAcai; // Cor padrão do botão
 
-    if (status == 'aguardando_execucao') {
+    if (status == 'aguardando_execucao' ||
+        status == 'agendado' ||
+        status == 'aguardando_pagamento') {
       corStatus = Colors.blue;
-      textoStatus = "Aguardando Profissional";
+      // Texto dinâmico dependendo de quem iniciou
+      textoStatus = status == 'aguardando_execucao'
+          ? "Aguardando Profissional"
+          : "Na Fila / Aguardando";
       iconeAcao = Icons.thumb_up;
       textoAcao = "Receber Pet";
       corBotao = _corAcai;
@@ -730,20 +721,6 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       iconeAcao = Icons.playlist_add_check;
       textoAcao = "Fazer Checklist";
       corBotao = Colors.orange;
-    } else if (status == 'agendado' || status == 'aguardando_pagamento') {
-      corStatus = Colors.blue;
-      textoStatus = "Na Fila";
-
-      // Lógica Visual do Botão: Checklist ou Banho
-      if (!checklistFeito) {
-        iconeAcao = Icons.playlist_add_check;
-        textoAcao = "Checklist";
-        corBotao = Colors.orange; // Laranja para chamar atenção
-      } else {
-        iconeAcao = FontAwesomeIcons.shower;
-        textoAcao = "Iniciar Banho";
-        corBotao = Colors.blue;
-      }
     } else if (status == 'banhando') {
       corStatus = Colors.cyan;
       textoStatus = "No Banho 🛁";
