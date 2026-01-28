@@ -12,6 +12,7 @@ const hotelController = require('./controllers/hotelController');
 const crecheController = require('./controllers/crecheController');
 const checkoutsAgenpets = require('./controllers/checkouts_agenpets');
 const notificationsApp = require('./controllers/notifications_app');
+const notificationsWhatsapp = require('./controllers/notifications_whatsapp');
 const adminController = require('./controllers/adminController');
 
 // 4. EXPORTAÇÕES (O que o Firebase vai enxergar)
@@ -39,6 +40,10 @@ exports.registrarPagamentoCreche = crecheController.registrarPagamentoCreche;
 
 // --- Módulo de Notificações ---
 exports.notificarPetPronto = notificationsApp.notificarPetPronto;
+
+// --- Módulo de Notificações (WhatsApp) ---
+exports.whatsappConfirmacaoAgendamento = notificationsWhatsapp.whatsappConfirmacaoAgendamento;
+exports.whatsappPetPronto = notificationsWhatsapp.whatsappPetPronto;
 
 // --- Salvar CheckList ---
 exports.salvarChecklistPet = agendamentoController.salvarChecklistPet;
