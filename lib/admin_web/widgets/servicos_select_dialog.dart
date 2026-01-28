@@ -326,6 +326,18 @@ class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
                                           Divider(height: 1),
                                       itemBuilder: (ctx, index) {
                                         final item = _selectedServices[index];
+
+                                        // Subtitle Construction
+                                        List<String> details = [];
+                                        details.add("R\$ ${item['preco'].toStringAsFixed(2)}");
+
+                                        if (item['porte'] != null && item['porte'].toString().isNotEmpty) {
+                                          details.add("Porte: ${item['porte']}");
+                                        }
+                                        if (item['pelagem'] != null && item['pelagem'].toString().isNotEmpty) {
+                                          details.add("Pelagem: ${item['pelagem']}");
+                                        }
+
                                         return ListTile(
                                           dense: true,
                                           leading: CircleAvatar(
@@ -340,9 +352,9 @@ class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
                                                 fontWeight: FontWeight.w600),
                                           ),
                                           subtitle: Text(
-                                            "R\$ ${item['preco'].toStringAsFixed(2)}",
+                                            details.join(' | '),
                                             style: TextStyle(
-                                                color: Colors.green[700]),
+                                                color: Colors.green[700], fontSize: 12),
                                           ),
                                           trailing: IconButton(
                                             icon: Icon(Icons.delete_outline,
