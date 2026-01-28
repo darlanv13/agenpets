@@ -67,8 +67,27 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   @override
   void initState() {
     super.initState();
+    _initExtrasFromBaseItem();
     _initVouchers();
     _performSearch(''); // Init with available services
+  }
+
+  void _initExtrasFromBaseItem() {
+    // Load Extras from Agendamento (if CheckList added them)
+    if (widget.baseItem.containsKey('servicos_extras')) {
+      final extras = widget.baseItem['servicos_extras'];
+      if (extras is List) {
+        for (var item in extras) {
+          if (item is Map) {
+            try {
+              _addedExtras.add(Map<String, dynamic>.from(item));
+            } catch (e) {
+              print("Erro ao carregar extra inicial: $e");
+            }
+          }
+        }
+      }
+    }
   }
 
   void _initVouchers() {
