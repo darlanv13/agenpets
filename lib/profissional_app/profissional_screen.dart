@@ -984,7 +984,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   @override
