@@ -142,6 +142,9 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
           final data = snapshot.data!.data() as Map<String, dynamic>;
           final String userId = data['userId'];
           final String petId = data['pet_id'];
+          final String status = data['status'] ?? 'agendado';
+
+          final bool isEditable = status != 'pronto' && status != 'concluido' && status != 'cancelado';
 
           return Column(
             children: [
@@ -286,14 +289,15 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                             letterSpacing: 1,
                           ),
                         ),
-                        TextButton.icon(
-                          onPressed: () => _adicionarServicos(context, data),
-                          icon: Icon(Icons.add_circle_outline, size: 16),
-                          label: Text("Adicionar"),
-                          style: TextButton.styleFrom(
-                            foregroundColor: _corAcai,
+                        if (isEditable)
+                          TextButton.icon(
+                            onPressed: () => _adicionarServicos(context, data),
+                            icon: Icon(Icons.add_circle_outline, size: 16),
+                            label: Text("Adicionar"),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _corAcai,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     if (data['servicos_extras'] != null &&
@@ -365,7 +369,34 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                 ),
                 child: Builder(
                   builder: (context) {
-                    final status = data['status'];
+                    // SE NÃO EDITÁVEL (PRONTO/CONCLUÍDO)
+                    if (!isEditable) {
+                      return Container(
+                        height: 55,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.lock, color: Colors.grey),
+                            SizedBox(width: 8),
+                            Text(
+                              status == 'cancelado'
+                                  ? "AGENDAMENTO CANCELADO"
+                                  : "SERVIÇO FINALIZADO",
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
                     if (status == 'agendado' ||
                         status == 'aguardando_execucao' ||
                         status == 'aguardando_pagamento') {
