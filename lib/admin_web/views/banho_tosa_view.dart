@@ -1,4 +1,5 @@
 import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
+import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
 import 'package:agenpet/admin_web/views/components/novo_agendamento_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -84,6 +85,32 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Não foi possível abrir o WhatsApp.")),
+      );
+    }
+  }
+
+  void _receberPet(DocumentSnapshot agendamentoDoc) async {
+    final data = agendamentoDoc.data() as Map<String, dynamic>;
+    final existingExtras = data['servicos_extras'] != null
+        ? List<Map<String, dynamic>>.from(data['servicos_extras'])
+        : <Map<String, dynamic>>[];
+
+    final List<Map<String, dynamic>>? result = await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ServicosSelectDialog(initialSelected: existingExtras),
+    );
+
+    if (result != null) {
+      await agendamentoDoc.reference.update({
+        'status': 'aguardando_execucao',
+        'servicos_extras': result,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Pet recebido! Enviado para execução. 🚀"),
+          backgroundColor: _corSucesso,
+        ),
       );
     }
   }
@@ -526,6 +553,16 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
     String textoStatus = "Aguardando";
     IconData iconeStatus = Icons.schedule;
 
+    if (status == 'aguardando_execucao') {
+      corStatus = Colors.blue;
+      textoStatus = "Aguardando Execução";
+      iconeStatus = Icons.hourglass_top;
+    }
+    if (status == 'checklist_pendente') {
+      corStatus = Colors.orange;
+      textoStatus = "Em Checklist";
+      iconeStatus = Icons.playlist_add_check;
+    }
     if (status == 'banhando') {
       corStatus = _corProcesso;
       textoStatus = "Em Banho";
@@ -874,6 +911,24 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                       ),
                     ),
                     onPressed: () => _abrirCheckout(agendamentoDoc),
+                  )
+                else if (status == 'agendado' ||
+                    status == 'aguardando_pagamento')
+                  ElevatedButton.icon(
+                    icon: Icon(FontAwesomeIcons.dog, size: 18),
+                    label: Text(
+                      "RECEBER PET",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[700],
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
+                    onPressed: () => _receberPet(agendamentoDoc),
                   )
                 else if (isConcluido)
                   Container(

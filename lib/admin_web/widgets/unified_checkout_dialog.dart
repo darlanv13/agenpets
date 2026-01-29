@@ -940,7 +940,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
             item['nome'],
             style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
           ),
-          subtitle: subtitle != null && subtitle.isNotEmpty
+          subtitle: subtitle != null
               ? Text(subtitle, style: TextStyle(fontSize: 10))
               : null,
           trailing: Text(

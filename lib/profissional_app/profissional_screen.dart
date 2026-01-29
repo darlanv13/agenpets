@@ -1,4 +1,6 @@
 import 'package:agenpet/profissional_app/components/checklist_pet_screen.dart';
+import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
+import 'package:agenpet/profissional_app/views/detalhes_agendamento_view.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -49,54 +51,66 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     String statusAtual = data['status'] ?? 'agendado';
     bool checklistFeito = data['checklist_feito'] ?? false;
 
-    // 1. INÍCIO DO PROCESSO (Checklist -> Banho)
-    if (statusAtual == 'agendado' || statusAtual == 'aguardando_pagamento') {
-      if (!checklistFeito) {
-        // FLUXO A: Selecionar Profissional -> Fazer Checklist
+    // --- NOVO FLUXO: RECEPÇÃO -> VALIDAÇÃO -> CHECKLIST ---
+
+    // 1. RECEBER PET (Validação do Profissional ou Início pelo Pro)
+    // Permite que o Pro receba o pet mesmo que a Recepção não tenha feito (agendado)
+    // ou se a Recepção já fez (aguardando_execucao)
+    if (statusAtual == 'aguardando_execucao' ||
+        statusAtual == 'agendado' ||
+        statusAtual == 'aguardando_pagamento') {
+      // Agora abre o detalhe para adicionar serviços e confirmar
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DetalhesAgendamentoView(agendamentoId: doc.id),
+        ),
+      );
+      return;
+    }
+
+    // 2. CHECKLIST PENDENTE (Após validação)
+    if (statusAtual == 'checklist_pendente') {
+      if (data['profissional_id'] == null) {
+        // Se ainda não tem pro, seleciona e abre checklist
         await _selecionarProfissional(doc);
       } else {
-        // FLUXO B: Já fez checklist -> Iniciar Banho
-        await doc.reference.update({
-          'status': 'banhando',
-          'inicio_servico': FieldValue.serverTimestamp(),
-        });
-        ScaffoldMessenger.of(
+        // Se já tem, abre direto
+        final bool? result = await Navigator.push(
           context,
-        ).showSnackBar(SnackBar(content: Text("Banho iniciado! 🚿")));
+          MaterialPageRoute(
+            builder: (context) => ChecklistPetScreen(
+              agendamentoId: doc.id,
+              nomePet: data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
+            ),
+          ),
+        );
+
+        if (result == true) {
+          // Atualiza para 'banhando' automaticamente após sucesso
+          await doc.reference.update({
+            'status': 'banhando',
+            'checklist_feito': true,
+            'inicio_servico': FieldValue.serverTimestamp(),
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Checklist salvo! Banho iniciado. 🚿")),
+          );
+        }
       }
       return;
     }
 
-    // 2. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
-    String servicoNorm = (data['servicoNorm'] ?? data['servico'] ?? '')
-        .toString()
-        .toLowerCase();
-    bool temTosa = servicoNorm.contains('tosa');
-    String novoStatus = 'pronto';
-    String mensagem = "Pet pronto! 🐶";
-
-    if (statusAtual == 'banhando') {
-      if (temTosa) {
-        novoStatus = 'tosando';
-        mensagem = "Indo para tosa! ✂️";
-      } else {
-        novoStatus = 'pronto';
-      }
-    } else if (statusAtual == 'tosando') {
-      novoStatus = 'pronto';
-    }
-
-    if (novoStatus == 'pronto') {
-      await _verificarEBaixarVouchers(doc); // Lógica de voucher existente
-    } else {
-      await doc.reference.update({'status': novoStatus});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mensagem),
-          backgroundColor: _corAcai,
-          duration: Duration(seconds: 1),
+    // 3. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
+    // Se já passou do checklist (banhando/tosando), abre Detalhes
+    if (statusAtual == 'banhando' || statusAtual == 'tosando') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DetalhesAgendamentoView(agendamentoId: doc.id),
         ),
       );
+      return;
     }
   }
 
@@ -156,7 +170,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
                     // Navega para o checklist
                     final data = doc.data() as Map<String, dynamic>;
-                    await Navigator.push(
+                    final bool? result = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => ChecklistPetScreen(
@@ -166,6 +180,18 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                         ),
                       ),
                     );
+
+                    if (result == true) {
+                      // Se veio do fluxo antigo e completou, avança status
+                      if (data['status'] == 'agendado' ||
+                          data['status'] == 'checklist_pendente') {
+                        await doc.reference.update({
+                          'status': 'banhando',
+                          'checklist_feito': true,
+                          'inicio_servico': FieldValue.serverTimestamp(),
+                        });
+                      }
+                    }
                   },
                 );
               },
@@ -639,20 +665,23 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     bool podeAvancar = true;
     Color corBotao = _corAcai; // Cor padrão do botão
 
-    if (status == 'agendado' || status == 'aguardando_pagamento') {
+    if (status == 'aguardando_execucao' ||
+        status == 'agendado' ||
+        status == 'aguardando_pagamento') {
       corStatus = Colors.blue;
-      textoStatus = "Na Fila";
-
-      // Lógica Visual do Botão: Checklist ou Banho
-      if (!checklistFeito) {
-        iconeAcao = Icons.playlist_add_check;
-        textoAcao = "Checklist";
-        corBotao = Colors.orange; // Laranja para chamar atenção
-      } else {
-        iconeAcao = FontAwesomeIcons.shower;
-        textoAcao = "Iniciar Banho";
-        corBotao = Colors.blue;
-      }
+      // Texto dinâmico dependendo de quem iniciou
+      textoStatus = status == 'aguardando_execucao'
+          ? "Aguardando Profissional"
+          : "Na Fila / Aguardando";
+      iconeAcao = Icons.thumb_up;
+      textoAcao = "Receber Pet";
+      corBotao = _corAcai;
+    } else if (status == 'checklist_pendente') {
+      corStatus = Colors.orange;
+      textoStatus = "Aguardando Checklist";
+      iconeAcao = Icons.playlist_add_check;
+      textoAcao = "Fazer Checklist";
+      corBotao = Colors.orange;
     } else if (status == 'banhando') {
       corStatus = Colors.cyan;
       textoStatus = "No Banho 🛁";
@@ -676,271 +705,291 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       podeAvancar = false;
     }
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+    return GestureDetector(
+      onTap: () {
+        // Tocar no card sempre leva para detalhes
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                DetalhesAgendamentoView(agendamentoId: doc.id),
           ),
-        ],
-        border: Border(left: BorderSide(color: corStatus, width: 5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(15.0),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  children: [
-                    Text(
-                      DateFormat('HH:mm').format(hora),
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    Text(
-                      "Hora",
-                      style: TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                SizedBox(width: 15),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        );
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+          border: Border(left: BorderSide(color: corStatus, width: 5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(15.0),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            servicoDisplay,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                      Text(
+                        DateFormat('HH:mm').format(hora),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      Text(
+                        "Hora",
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              servicoDisplay,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
-                          ),
-                          if (status != 'concluido' && status != 'pronto')
-                            PopupMenuButton<String>(
-                              onSelected: (v) {
-                                if (v == 'cancelar')
-                                  _cancelarAgendamento(doc.id);
-                              },
-                              itemBuilder: (ctx) => [
-                                PopupMenuItem(
-                                  value: 'cancelar',
-                                  child: Text(
-                                    "Cancelar",
-                                    style: TextStyle(color: Colors.red),
+                            if (status != 'concluido' && status != 'pronto')
+                              PopupMenuButton<String>(
+                                onSelected: (v) {
+                                  if (v == 'cancelar')
+                                    _cancelarAgendamento(doc.id);
+                                },
+                                itemBuilder: (ctx) => [
+                                  PopupMenuItem(
+                                    value: 'cancelar',
+                                    child: Text(
+                                      "Cancelar",
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ),
+                                ],
+                                child: Icon(
+                                  Icons.more_vert,
+                                  size: 20,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        ),
+                        SizedBox(height: 5),
+                        if (data['checklist_feito'] == true)
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green[100],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize
+                                  .min, // Para não ocupar a largura toda
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 12,
+                                  color: Colors.green[800],
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  "Checklist OK",
+                                  style: TextStyle(
+                                    color: Colors.green[800],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
-                              child: Icon(
-                                Icons.more_vert,
-                                size: 20,
-                                color: Colors.grey,
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "Aguardando Inspeção",
+                              style: TextStyle(
+                                color: Colors.orange[800],
+                                fontSize: 10,
+                                fontWeight: FontWeight
+                                    .bold, // Deixei negrito para destacar
                               ),
                             ),
-                        ],
-                      ),
-                      SizedBox(height: 5),
-                      if (data['checklist_feito'] == true)
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.green[100],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize
-                                .min, // Para não ocupar a largura toda
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                size: 12,
-                                color: Colors.green[800],
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                "Checklist OK",
-                                style: TextStyle(
-                                  color: Colors.green[800],
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[50],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            "Aguardando Inspeção",
-                            style: TextStyle(
-                              color: Colors.orange[800],
-                              fontSize: 10,
-                              fontWeight: FontWeight
-                                  .bold, // Deixei negrito para destacar
-                            ),
-                          ),
-                        ),
-                      SizedBox(height: 10),
+                        SizedBox(height: 10),
 
-                      // Info do Pet e Profissional
-                      if (data['userId'] != null && data['pet_id'] != null)
-                        FutureBuilder<List<DocumentSnapshot>>(
-                          // Busca Tutor e Pet simultaneamente
-                          future: Future.wait([
-                            _db.collection('users').doc(data['userId']).get(),
-                            _db
-                                .collection('users')
-                                .doc(data['userId'])
-                                .collection('pets')
-                                .doc(data['pet_id'])
-                                .get(),
-                          ]),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return Text("Carregando...");
+                        // Info do Pet e Profissional
+                        if (data['userId'] != null && data['pet_id'] != null)
+                          FutureBuilder<List<DocumentSnapshot>>(
+                            // Busca Tutor e Pet simultaneamente
+                            future: Future.wait([
+                              _db.collection('users').doc(data['userId']).get(),
+                              _db
+                                  .collection('users')
+                                  .doc(data['userId'])
+                                  .collection('pets')
+                                  .doc(data['pet_id'])
+                                  .get(),
+                            ]),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData)
+                                return Text("Carregando...");
 
-                            final userDoc = snapshot.data![0]; // Doc do Tutor
-                            final petDoc = snapshot.data![1]; // Doc do Pet
+                              final userDoc = snapshot.data![0]; // Doc do Tutor
+                              final petDoc = snapshot.data![1]; // Doc do Pet
 
-                            // Pega nome do Tutor
-                            String nomeTutor = "Cliente";
-                            if (userDoc.exists) {
-                              final u = userDoc.data() as Map<String, dynamic>?;
-                              if (u != null && u['nome'] != null) {
-                                // Pega só o primeiro nome
-                                nomeTutor = u['nome'].toString().split('  ')[0];
+                              // Pega nome do Tutor
+                              String nomeTutor = "Cliente";
+                              if (userDoc.exists) {
+                                final u =
+                                    userDoc.data() as Map<String, dynamic>?;
+                                if (u != null && u['nome'] != null) {
+                                  // Pega só o primeiro nome
+                                  nomeTutor = u['nome'].toString().split(
+                                    '  ',
+                                  )[0];
+                                }
                               }
-                            }
 
-                            if (petDoc.exists) {
-                              final p = petDoc.data() as Map<String, dynamic>?;
-                              final nomePet = p?['nome'] ?? 'Pet';
-                              final racaPet = p?['raca'] ?? 'SRD';
+                              if (petDoc.exists) {
+                                final p =
+                                    petDoc.data() as Map<String, dynamic>?;
+                                final nomePet = p?['nome'] ?? 'Pet';
+                                final racaPet = p?['raca'] ?? 'SRD';
 
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // --- LINHA DO TUTOR ---
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.person,
-                                        size: 12,
-                                        color: _corAcai,
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // --- LINHA DO TUTOR ---
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.person,
+                                          size: 12,
+                                          color: _corAcai,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          nomeTutor,
+                                          style: TextStyle(
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 2),
+
+                                    // ----------------------
+                                    Text(
+                                      "$nomePet ($racaPet)",
+                                      style: TextStyle(
+                                        color: Colors.grey[700],
+                                        fontSize: 14,
                                       ),
-                                      SizedBox(width: 4),
+                                    ),
+                                    if (data['profissional_nome'] != null)
                                       Text(
-                                        nomeTutor,
+                                        "Resp: ${data['profissional_nome']}",
                                         style: TextStyle(
-                                          color: Colors.black87,
+                                          color: _corAcai,
+                                          fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          fontSize: 13,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                  SizedBox(height: 2),
-
-                                  // ----------------------
-                                  Text(
-                                    "$nomePet ($racaPet)",
-                                    style: TextStyle(
-                                      color: Colors.grey[700],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  if (data['profissional_nome'] != null)
-                                    Text(
-                                      "Resp: ${data['profissional_nome']}",
-                                      style: TextStyle(
-                                        color: _corAcai,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                ],
+                                  ],
+                                );
+                              }
+                              return Text(
+                                "Pet removido",
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 11,
+                                ),
                               );
-                            }
-                            return Text(
-                              "Pet removido",
-                              style: TextStyle(color: Colors.red, fontSize: 11),
-                            );
-                          },
-                        )
-                      else
-                        Text(
-                          "Dados incompletos",
-                          style: TextStyle(color: Colors.red, fontSize: 11),
+                            },
+                          )
+                        else
+                          Text(
+                            "Dados incompletos",
+                            style: TextStyle(color: Colors.red, fontSize: 11),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 15),
+              Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: corStatus.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      textoStatus,
+                      style: TextStyle(
+                        color: corStatus,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  if (podeAvancar)
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            corBotao, // Usa a cor dinâmica definida acima
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 15),
-            Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: corStatus.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    textoStatus,
-                    style: TextStyle(
-                      color: corStatus,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                if (podeAvancar)
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          corBotao, // Usa a cor dinâmica definida acima
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 8,
+                        ),
+                        elevation: 0,
                       ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 8,
-                      ),
-                      elevation: 0,
+                      onPressed: () => _avancarStatus(doc),
+                      icon: Icon(iconeAcao, size: 16),
+                      label: Text(textoAcao),
                     ),
-                    onPressed: () => _avancarStatus(doc),
-                    icon: Icon(iconeAcao, size: 16),
-                    label: Text(textoAcao),
-                  ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
