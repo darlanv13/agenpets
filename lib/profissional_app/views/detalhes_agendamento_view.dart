@@ -87,6 +87,34 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
     }
   }
 
+  Future<void> _confirmarRecebimento(BuildContext context) async {
+    try {
+      await _db.collection('agendamentos').doc(widget.agendamentoId).update({
+        'status': 'checklist_pendente',
+      });
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Recebimento confirmado! Iniciando Checklist..."),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao confirmar: $e")),
+      );
+    }
+  }
+
+  Future<void> _irParaChecklist(BuildContext context, Map<String, dynamic> data) async {
+    // Implementar navegação ou lógica se necessário,
+    // mas o usuário pode voltar para a lista e clicar em "Fazer Checklist"
+    // ou podemos navegar direto se tivermos a rota/widget.
+    // Como o user disse "volta para a lista e o botão de checklist fica disponível",
+    // apenas voltamos.
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -335,29 +363,89 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                     )
                   ],
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 5,
-                    ),
-                    onPressed: () => _marcarComoPronto(context),
-                    icon: Icon(Icons.check_circle_outline, size: 28),
-                    label: Text(
-                      "PET PRONTO",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
+                child: Builder(
+                  builder: (context) {
+                    final status = data['status'];
+                    if (status == 'agendado' ||
+                        status == 'aguardando_execucao' ||
+                        status == 'aguardando_pagamento') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[700],
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _confirmarRecebimento(context),
+                          icon: Icon(Icons.thumb_up, size: 28),
+                          label: Text(
+                            "CONFIRMAR RECEBIMENTO",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else if (status == 'checklist_pendente') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          icon: Icon(Icons.playlist_add_check, size: 28),
+                          label: Text(
+                            "IR PARA CHECKLIST",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else if (status == 'banhando' || status == 'tosando') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _marcarComoPronto(context),
+                          icon: Icon(Icons.check_circle_outline, size: 28),
+                          label: Text(
+                            "PET PRONTO",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    return SizedBox();
+                  },
                 ),
               ),
             ],

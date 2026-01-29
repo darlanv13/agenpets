@@ -59,7 +59,13 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     if (statusAtual == 'aguardando_execucao' ||
         statusAtual == 'agendado' ||
         statusAtual == 'aguardando_pagamento') {
-      await _confirmarRecebimentoPet(doc);
+      // Agora abre o detalhe para adicionar serviços e confirmar
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DetalhesAgendamentoView(agendamentoId: doc.id),
+        ),
+      );
       return;
     }
 
@@ -108,31 +114,6 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     }
   }
 
-  Future<void> _confirmarRecebimentoPet(DocumentSnapshot doc) async {
-    final data = doc.data() as Map<String, dynamic>;
-    final existingExtras = data['servicos_extras'] != null
-        ? List<Map<String, dynamic>>.from(data['servicos_extras'])
-        : <Map<String, dynamic>>[];
-
-    // Reutiliza o diálogo, permitindo ao Pro ver/editar serviços
-    final List<Map<String, dynamic>>? result = await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => ServicosSelectDialog(initialSelected: existingExtras),
-    );
-
-    if (result != null) {
-      await doc.reference.update({
-        'status': 'checklist_pendente',
-        'servicos_extras': result, // Salva serviços confirmados
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Recebimento confirmado! Iniciando Checklist..."),
-        ),
-      );
-    }
-  }
 
   Future<void> _selecionarProfissional(DocumentSnapshot doc) async {
     try {
@@ -725,24 +706,35 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       podeAvancar = false;
     }
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+    return GestureDetector(
+      onTap: () {
+        // Tocar no card sempre leva para detalhes
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                DetalhesAgendamentoView(agendamentoId: doc.id),
           ),
-        ],
-        border: Border(left: BorderSide(color: corStatus, width: 5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(15.0),
-        child: Column(
-          children: [
+        );
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+          border: Border(left: BorderSide(color: corStatus, width: 5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(15.0),
+          child: Column(
+            children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
