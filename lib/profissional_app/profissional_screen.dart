@@ -1,5 +1,6 @@
 import 'package:agenpet/profissional_app/components/checklist_pet_screen.dart';
 import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
+import 'package:agenpet/profissional_app/views/detalhes_agendamento_view.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -95,35 +96,15 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     }
 
     // 3. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
-    String servicoNorm = (data['servicoNorm'] ?? data['servico'] ?? '')
-        .toString()
-        .toLowerCase();
-    bool temTosa = servicoNorm.contains('tosa');
-    String novoStatus = 'pronto';
-    String mensagem = "Pet pronto! 🐶";
-
-    if (statusAtual == 'banhando') {
-      if (temTosa) {
-        novoStatus = 'tosando';
-        mensagem = "Indo para tosa! ✂️";
-      } else {
-        novoStatus = 'pronto';
-      }
-    } else if (statusAtual == 'tosando') {
-      novoStatus = 'pronto';
-    }
-
-    if (novoStatus == 'pronto') {
-      await _verificarEBaixarVouchers(doc); // Lógica de voucher existente
-    } else {
-      await doc.reference.update({'status': novoStatus});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mensagem),
-          backgroundColor: _corAcai,
-          duration: Duration(seconds: 1),
+    // Se já passou do checklist (banhando/tosando), abre Detalhes
+    if (statusAtual == 'banhando' || statusAtual == 'tosando') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DetalhesAgendamentoView(agendamentoId: doc.id),
         ),
       );
+      return;
     }
   }
 
