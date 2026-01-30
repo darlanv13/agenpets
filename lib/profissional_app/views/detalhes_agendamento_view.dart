@@ -119,6 +119,108 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
     Navigator.pop(context);
   }
 
+  Future<void> _confirmarAcao(
+    BuildContext context,
+    String titulo,
+    Function onConfirm,
+  ) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titulo),
+        content: Text("Deseja realmente continuar?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancelar"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onConfirm();
+            },
+            child: Text("Confirmar"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _selecionarBanhista(BuildContext context) async {
+    try {
+      QuerySnapshot prosSnapshot = await _db
+          .collection('profissionais')
+          .where('ativo', isEqualTo: true)
+          .get();
+
+      List<DocumentSnapshot> pros = prosSnapshot.docs;
+
+      if (pros.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Nenhum profissional ativo encontrado.")),
+        );
+        return;
+      }
+
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Quem fará o Banho?", style: TextStyle(fontSize: 18)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: pros.length,
+              itemBuilder: (ctx, index) {
+                final proData = pros[index].data() as Map<String, dynamic>;
+                final String nome = proData['nome'] ?? 'Profissional';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _corAcai,
+                    child: Text(
+                      nome.isNotEmpty ? nome[0].toUpperCase() : '?',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  title: Text(nome),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _db
+                        .collection('agendamentos')
+                        .doc(widget.agendamentoId)
+                        .update({
+                      'profissional_banho_id': pros[index].id,
+                      'profissional_banho_nome': nome,
+                      'profissional_id': pros[index].id, // Atualiza resp geral
+                      'profissional_nome': nome,
+                      'status': 'banhando',
+                      'inicio_servico': FieldValue.serverTimestamp(),
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Banho Iniciado! 🚿")),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text("Cancelar"),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao selecionar banhista: $e")),
+      );
+    }
+  }
+
   Future<void> _selecionarTosador(BuildContext context) async {
     try {
       QuerySnapshot prosSnapshot = await _db
@@ -552,42 +654,134 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                           ),
                         ),
                       );
-                    } else if (status == 'banhando' || status == 'tosando') {
-                      final String servicoNorm =
-                          (data['servicoNorm'] ?? data['servico'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                      final bool temTosa = servicoNorm.contains('tosa');
-
-                      // SE ESTÁ NO BANHO E TEM TOSA -> BOTÃO DE IR PARA TOSA
-                      if (status == 'banhando' && temTosa) {
-                        return SizedBox(
-                          width: double.infinity,
-                          height: 55,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue[800],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              elevation: 5,
+                    } else if (status == 'aguardando_banho') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
                             ),
-                            onPressed: () => _selecionarTosador(context),
-                            icon: Icon(FontAwesomeIcons.scissors, size: 24),
-                            label: Text(
-                              "INICIAR TOSA",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _selecionarBanhista(context),
+                          icon: Icon(FontAwesomeIcons.shower, size: 24),
+                          label: Text(
+                            "INICIAR BANHO",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
                             ),
                           ),
-                        );
-                      }
+                        ),
+                      );
+                    } else if (status == 'banhando') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _confirmarAcao(
+                            context,
+                            "Finalizar Banho?",
+                            () async {
+                              final String servicoNorm =
+                                  (data['servicoNorm'] ?? data['servico'] ?? '')
+                                      .toString()
+                                      .toLowerCase();
+                              final bool temTosa = servicoNorm.contains('tosa');
+                              final novoStatus = temTosa
+                                  ? 'aguardando_tosa'
+                                  : 'aguardando_finalizacao';
 
-                      // CASO CONTRÁRIO (BANHO SÓ, OU JÁ NA TOSA) -> FINALIZAR
+                              await _db
+                                  .collection('agendamentos')
+                                  .doc(widget.agendamentoId)
+                                  .update({'status': novoStatus});
+                            },
+                          ),
+                          icon: Icon(Icons.stop_circle_outlined, size: 28),
+                          label: Text(
+                            "FINALIZAR BANHO",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else if (status == 'aguardando_tosa') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepOrange,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _selecionarTosador(context),
+                          icon: Icon(FontAwesomeIcons.scissors, size: 24),
+                          label: Text(
+                            "INICIAR TOSA",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else if (status == 'tosando') {
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          onPressed: () => _confirmarAcao(
+                            context,
+                            "Finalizar Tosa?",
+                            () async {
+                              await _db
+                                  .collection('agendamentos')
+                                  .doc(widget.agendamentoId)
+                                  .update({'status': 'aguardando_finalizacao'});
+                            },
+                          ),
+                          icon: Icon(Icons.stop_circle_outlined, size: 28),
+                          label: Text(
+                            "FINALIZAR TOSA",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      );
+                    } else if (status == 'aguardando_finalizacao') {
                       return SizedBox(
                         width: double.infinity,
                         height: 55,
