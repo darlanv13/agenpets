@@ -128,61 +128,6 @@ exports.buscarHorarios = onCall(async (request) => {
     }
 });
 
-/* --- NOVA FUNÇÃO: Comprar Assinatura ---
-exports.comprarAssinatura = onCall(async (request) => {
-    const { cpf_user, tipo_plano } = request.data; // 'pct_banho' ou 'pct_completo'
-
-    // Configuração dos Planos
-    const planos = {
-        'pct_banho': { nome: "Pacote Banho (4x)", valor: 180.00, qtd: 4, tipo_voucher: 'banho' },
-        'pct_completo': { nome: "Pacote Banho & Tosa (4x)", valor: 250.00, qtd: 4, tipo_voucher: 'tosa' }
-    };
-
-    const planoSelecionado = planos[tipo_plano];
-    if (!planoSelecionado) throw new HttpsError('invalid-argument', 'Plano inválido');
-
-    // Cria intenção de compra
-    const compra = {
-        cpf_user,
-        plano: tipo_plano,
-        valor: planoSelecionado.valor,
-        status: 'aguardando_pagamento',
-        created_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    // Gera PIX
-    let resposta = {};
-    try {
-        const efipay = new EfiPay(optionsEfi);
-        const bodyPix = {
-            calendario: { expiracao: 3600 },
-            devedor: { cpf: cpf_user.replace(/\D/g, ''), nome: "Cliente Assinante" },
-            valor: { original: planoSelecionado.valor.toFixed(2) },
-            chave: "SUA_CHAVE_PIX_AQUI"
-        };
-        const cobranca = await efipay.pixCreateImmediateCharge([], bodyPix);
-        const qrCode = await efipay.pixGenerateQRCode({ id: cobranca.loc.id });
-
-        compra.txid = cobranca.txid;
-        resposta = {
-            success: true,
-            pix_copia_cola: qrCode.qrcode,
-            imagem_qrcode: qrCode.imagemQrcode,
-            valor: planoSelecionado.valor
-        };
-    } catch (e) {
-        console.error("Erro PIX:", e);
-        // Em DEV, simulamos sucesso para testar voucher sem pagar
-        // throw new HttpsError('internal', 'Erro ao gerar PIX');
-    }
-
-    // Salva no banco de 'vendas_assinaturas'
-    await db.collection("vendas_assinaturas").add(compra);
-
-    return resposta;
-});*/
-
-
 // --- ATUALIZADO: Criar Agendamento (Aceita Voucher) ---
 exports.criarAgendamento = onCall(async (request) => {
     const { servico, data_hora, cpf_user, pet_id, metodo_pagamento, valor } = request.data;
