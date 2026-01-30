@@ -122,7 +122,7 @@ class FirebaseService {
     try {
       final result = await _functions.httpsCallable('comprarAssinatura').call({
         'cpf_user': cpf,
-        'tipo_plano': tipoPlano,
+        'pacoteId': tipoPlano,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {

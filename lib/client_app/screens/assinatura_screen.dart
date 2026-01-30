@@ -61,6 +61,7 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
         arguments: {
           'pix_copia_cola': result['pix_copia_cola'],
           'imagem_qrcode': result['imagem_qrcode'],
+          'vendaId': result['vendaId'],
           'valor': valor,
           'descricao': "Assinatura $nomePacote",
         },

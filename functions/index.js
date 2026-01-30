@@ -14,14 +14,17 @@ const checkoutsAgenpets = require('./controllers/checkouts_agenpets');
 const notificationsApp = require('./controllers/notifications_app');
 const notificationsWhatsapp = require('./controllers/notifications_whatsapp');
 const adminController = require('./controllers/adminController');
+const paymentController = require('./controllers/paymentController');
 
 // 4. EXPORTAÇÕES (O que o Firebase vai enxergar)
 
 // --- Módulo de Agendamento ---
 exports.buscarHorarios = agendamentoController.buscarHorarios;
 exports.criarAgendamento = agendamentoController.criarAgendamento;
-exports.comprarAssinatura = agendamentoController.comprarAssinatura;
-exports.webhookPix = agendamentoController.webhookPix;
+// Atualizado para usar o novo controller de pagamentos
+exports.comprarAssinatura = paymentController.gerarPixAssinatura;
+exports.webhookPix = paymentController.webhookPix;
+
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;
 

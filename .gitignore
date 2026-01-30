@@ -45,6 +45,8 @@ app.*.map.json
 /android/app/release
 # Ignorar a pasta node_modules em qualquer lugar do projeto
 node_modules/
+*.local
+.env
 
 # Ignorar logs e arquivos temporários (opcional, mas recomendado)
 npm-debug.log
@@ -58,3 +60,4 @@ functions/serviceAccountKey.json
 setup_banco/serviceAccountKey.json
 setup_banco/chave-firebase.json
 lib/firebase_options.dart
+functions/certs/
