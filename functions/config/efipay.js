@@ -1,8 +1,9 @@
-// Coloque suas credenciais reais aqui ou use variaveis de ambiente
+const path = require('path');
+
 module.exports = {
-    sandbox: false, // Mude para true se for teste
-    client_id: "SEU_CLIENT_ID",
-    client_secret: "SEU_CLIENT_SECRET",
-    certificate: "caminho/do/certificado.p12",
+    sandbox: true,
+    client_id: process.env.EFI_CLIENT_ID_HOMOLOG,
+    client_secret: process.env.EFI_CLIENT_SECRET_HOMOLOG,
+    certificate: path.resolve(__dirname, '../certs/cert.p12'),
     pem: false,
 };
