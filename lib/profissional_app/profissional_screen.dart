@@ -138,7 +138,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
             borderRadius: BorderRadius.circular(20),
           ),
           title: Text(
-            "Quem executará o serviço?",
+            "Quem fará o Banho?",
             style: TextStyle(fontSize: 18),
           ),
           content: SizedBox(
@@ -166,6 +166,8 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                     await doc.reference.update({
                       'profissional_id': pros[index].id,
                       'profissional_nome': nome,
+                      'profissional_banho_id': pros[index].id,
+                      'profissional_banho_nome': nome,
                     });
 
                     // Navega para o checklist
