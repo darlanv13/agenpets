@@ -27,6 +27,8 @@ class ReciboScreen extends StatelessWidget {
         .toDouble();
 
     final String profissional = data['profissional_nome'] ?? 'Não informado';
+    final String? profissionalBanho = data['profissional_banho_nome'];
+    final String? profissionalTosa = data['profissional_tosa_nome'];
     final String servico = _capitalize(data['servico'] ?? 'Serviço');
     final String status = data['status'] ?? 'agendado';
     final String metodoPagamento = _formatarMetodoPagamento(
@@ -259,6 +261,22 @@ class ReciboScreen extends StatelessWidget {
               "Profissional Responsável",
               profissional,
             ),
+            if (profissionalBanho != null) ...[
+              SizedBox(height: 10),
+              _buildInfoCard(
+                FontAwesomeIcons.shower,
+                "Banhista",
+                profissionalBanho,
+              ),
+            ],
+            if (profissionalTosa != null) ...[
+              SizedBox(height: 10),
+              _buildInfoCard(
+                FontAwesomeIcons.scissors,
+                "Tosador(a)",
+                profissionalTosa,
+              ),
+            ],
             SizedBox(height: 10),
             _buildInfoCard(
               FontAwesomeIcons.locationDot,
@@ -433,6 +451,8 @@ class ReciboScreen extends StatelessWidget {
         (data['valor_final_cobrado'] ?? (data['valor'] ?? 0)).toDouble();
     final String servico = _capitalize(data['servico'] ?? 'Serviço');
     final String profissional = data['profissional_nome'] ?? 'Não informado';
+    final String? profissionalBanho = data['profissional_banho_nome'];
+    final String? profissionalTosa = data['profissional_tosa_nome'];
     final Map checklist = data['checklist'] ?? {};
 
     // Preparar imagens do checklist
@@ -500,6 +520,10 @@ class ReciboScreen extends StatelessWidget {
                   children: [
                     _buildPdfRow("Serviço", servico),
                     _buildPdfRow("Profissional", profissional),
+                    if (profissionalBanho != null)
+                      _buildPdfRow("Banhista", profissionalBanho),
+                    if (profissionalTosa != null)
+                      _buildPdfRow("Tosador(a)", profissionalTosa),
                     _buildPdfRow(
                       "ID Agendamento",
                       "#${docId.substring(0, 8).toUpperCase()}",

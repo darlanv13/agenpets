@@ -119,6 +119,87 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
     Navigator.pop(context);
   }
 
+  Future<void> _selecionarTosador(BuildContext context) async {
+    try {
+      QuerySnapshot prosSnapshot = await _db
+          .collection('profissionais')
+          .where('ativo', isEqualTo: true)
+          .get();
+
+      List<DocumentSnapshot> pros = prosSnapshot.docs;
+
+      if (pros.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Nenhum profissional ativo encontrado.")),
+        );
+        return;
+      }
+
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            "Quem fará a Tosa?",
+            style: TextStyle(fontSize: 18),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: pros.length,
+              itemBuilder: (ctx, index) {
+                final proData = pros[index].data() as Map<String, dynamic>;
+                final String nome = proData['nome'] ?? 'Profissional';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _corAcai,
+                    child: Text(
+                      nome.isNotEmpty ? nome[0].toUpperCase() : '?',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  title: Text(nome),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+
+                    // Atualiza com Tosador e muda status
+                    await _db
+                        .collection('agendamentos')
+                        .doc(widget.agendamentoId)
+                        .update({
+                      'profissional_tosa_id': pros[index].id,
+                      'profissional_tosa_nome': nome,
+                      'status': 'tosando',
+                      'inicio_tosa': FieldValue.serverTimestamp(),
+                    });
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Tosa Iniciada! ✂️")),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text("Cancelar"),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao selecionar tosador: $e")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -472,6 +553,41 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                         ),
                       );
                     } else if (status == 'banhando' || status == 'tosando') {
+                      final String servicoNorm =
+                          (data['servicoNorm'] ?? data['servico'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                      final bool temTosa = servicoNorm.contains('tosa');
+
+                      // SE ESTÁ NO BANHO E TEM TOSA -> BOTÃO DE IR PARA TOSA
+                      if (status == 'banhando' && temTosa) {
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[800],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              elevation: 5,
+                            ),
+                            onPressed: () => _selecionarTosador(context),
+                            icon: Icon(FontAwesomeIcons.scissors, size: 24),
+                            label: Text(
+                              "INICIAR TOSA",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      // CASO CONTRÁRIO (BANHO SÓ, OU JÁ NA TOSA) -> FINALIZAR
                       return SizedBox(
                         width: double.infinity,
                         height: 55,
