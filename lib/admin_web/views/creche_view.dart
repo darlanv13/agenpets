@@ -104,15 +104,17 @@ class _CrecheViewState extends State<CrecheView> {
         .collection('servicos_extras')
         .where('ativo', isEqualTo: true)
         .get();
-    final List<Map<String, dynamic>> extrasDisponiveis = extrasSnap.docs
-        .map(
-          (e) => {
-            'id': e.id,
-            'nome': e['nome'],
-            'preco': (e['preco'] ?? 0).toDouble(),
-          },
-        )
-        .toList();
+
+    final List<Map<String, dynamic>> listaExtras = extrasSnap.docs.map((e) {
+      final data = e.data() as Map<String, dynamic>;
+      return {
+        'id': e.id,
+        'nome': data['nome'],
+        'preco': (data['preco'] ?? 0).toDouble(),
+        'porte': data['porte'],
+        'pelagem': data['pelagem'],
+      };
+    }).toList();
 
     showDialog(
       context: context,
@@ -122,7 +124,7 @@ class _CrecheViewState extends State<CrecheView> {
         referenceId: docId,
         clientData: clientData,
         baseItem: {'nome': "Creche ($dias dias)", 'preco': totalEstadia},
-        availableServices: extrasDisponiveis,
+        availableServices: listaExtras,
         totalAlreadyPaid: (data['valor_pago'] ?? 0).toDouble(),
         themeColor: _corAcai,
         onSuccess: () => ScaffoldMessenger.of(context).showSnackBar(
