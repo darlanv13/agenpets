@@ -14,7 +14,7 @@ import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
 import 'views/loja_view.dart';
-import 'views/gestao_tenants_view.dart';
+import 'package:agenpet/admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override

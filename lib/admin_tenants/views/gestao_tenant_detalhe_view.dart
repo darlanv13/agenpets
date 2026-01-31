@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:agenpet/admin_web/widgets/tenant_team_manager.dart';
+import 'package:agenpet/admin_tenants/widgets/tenant_team_manager.dart';
 
 class GestaoTenantDetalheView extends StatefulWidget {
   final String tenantId;

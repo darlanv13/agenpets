@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'gestao_tenant_detalhe_view.dart';
+import 'package:agenpet/admin_tenants/views/gestao_tenant_detalhe_view.dart';
 
 class GestaoTenantsView extends StatefulWidget {
   @override
