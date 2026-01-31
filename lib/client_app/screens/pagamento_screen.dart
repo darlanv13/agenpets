@@ -40,6 +40,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     final double valor = (args!['valor'] ?? 0).toDouble();
     final String vendaId = args!['vendaId'] ?? '';
     final String descricao = args!['descricao'] ?? 'Pagamento AgenPet';
+    final String tenantId = args!['tenantId'] ?? '';
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -51,7 +52,12 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: _db.collection('vendas_assinaturas').doc(vendaId).snapshots(),
+        stream: _db
+            .collection('tenants')
+            .doc(tenantId)
+            .collection('vendas_assinaturas')
+            .doc(vendaId)
+            .snapshots(),
         builder: (context, snapshot) {
           // Verifica se pagou
           if (snapshot.hasData && snapshot.data!.exists) {

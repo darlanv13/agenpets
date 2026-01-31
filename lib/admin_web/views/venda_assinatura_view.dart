@@ -116,7 +116,11 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
 
     try {
       // 1. Histórico
-      await _db.collection('vendas_assinaturas').add({
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('vendas_assinaturas')
+          .add({
         'userId': _clienteId,
         'tenantId': AppConfig.tenantId,
         'user_nome': _clienteSelecionado!['nome'],

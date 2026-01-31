@@ -2,6 +2,7 @@ import 'package:agenpet/client_app/screens/tabs/meus_vouchers_tab.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/firebase_service.dart';
 
@@ -64,6 +65,7 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
           'vendaId': result['vendaId'],
           'valor': valor,
           'descricao': "Assinatura $nomePacote",
+          'tenantId': AppConfig.tenantId,
         },
       );
     } catch (e) {

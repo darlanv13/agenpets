@@ -385,7 +385,7 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
     const validadeDate = addDays(new Date(), 30);
 
     // A. Registra o Histórico da Venda (Mantém igual para relatórios)
-    const vendaRef = db.collection('vendas_assinaturas').doc();
+    const vendaRef = db.collection('tenants').doc(tenantId).collection('vendas_assinaturas').doc();
     batch.set(vendaRef, {
         userId: userId,
         tenantId: tenantId, // <--- Importante para filtro

@@ -63,7 +63,7 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
-    const vendaRef = db.collection('vendas_assinaturas').doc();
+    const vendaRef = db.collection('tenants').doc(tenantId).collection('vendas_assinaturas').doc();
 
     await vendaRef.set({
         userId: cpf_user,
@@ -111,7 +111,7 @@ exports.webhookPix = onRequest(async (req, res) => {
             }
 
             // B. Tenta atualizar VENDA DE ASSINATURA/PACOTE
-            const vendaSnap = await db.collection('vendas_assinaturas').where('txid', '==', txid).get();
+            const vendaSnap = await db.collectionGroup('vendas_assinaturas').where('txid', '==', txid).get();
             if (!vendaSnap.empty) {
                 const vendaDoc = vendaSnap.docs[0];
                 const vendaData = vendaDoc.data();
