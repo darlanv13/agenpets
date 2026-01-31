@@ -1,20 +1,21 @@
 // 1. IMPORTAÇÕES
-const { setGlobalOptions } = require("firebase-functions/v2");
-const { onRequest } = require("firebase-functions/v2/https");
+const {setGlobalOptions} = require("firebase-functions/v2");
+const {onRequest} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 
 // 2. CONFIGURAÇÃO GLOBAL (Sul do Brasil)
-setGlobalOptions({ region: "southamerica-east1" });
+setGlobalOptions({region: "southamerica-east1"});
 
 // 3. IMPORTAÇÕES DOS CONTROLLERS
-const agendamentoController = require('./controllers/agendamentoController');
-const hotelController = require('./controllers/hotelController');
-const crecheController = require('./controllers/crecheController');
-const checkoutsAgenpets = require('./controllers/checkouts_agenpets');
-const notificationsApp = require('./controllers/notifications_app');
-const notificationsWhatsapp = require('./controllers/notifications_whatsapp');
-const adminController = require('./controllers/adminController');
-const paymentController = require('./controllers/paymentController');
+const agendamentoController = require("./controllers/agendamentoController");
+const hotelController = require("./controllers/hotelController");
+const crecheController = require("./controllers/crecheController");
+const checkoutsAgenpets = require("./controllers/checkouts_agenpets");
+const notificationsApp = require("./controllers/notifications_app");
+const notificationsWhatsapp = require("./controllers/notifications_whatsapp");
+const adminController = require("./controllers/adminController");
+const paymentController = require("./controllers/paymentController");
+const adminTenantsController = require("./controllers/adminTenantsController");
 
 // 4. EXPORTAÇÕES (O que o Firebase vai enxergar)
 
@@ -24,7 +25,9 @@ exports.criarAgendamento = agendamentoController.criarAgendamento;
 // Atualizado para usar o novo controller de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
 exports.webhookPix = paymentController.webhookPix;
-exports.testarCredenciaisGateway = paymentController.testarCredenciaisGateway;
+
+// --- Módulo Admin Tenants ---
+exports.testarCredenciaisGateway = adminTenantsController.testarCredenciaisGateway;
 
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;

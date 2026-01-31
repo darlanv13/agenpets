@@ -1,0 +1,28 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/firebase_options.dart';
+import 'package:agenpet/admin_tenants/views/gestao_tenants_view.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(AdminTenantsApp());
+}
+
+class AdminTenantsApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Gestão de Tenants - AgenPets',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Color(0xFFF5F7FA),
+        useMaterial3: true,
+      ),
+      home: GestaoTenantsView(),
+    );
+  }
+}
