@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // Para calendário em PT-BR
 import 'firebase_options.dart'; // Gerado pelo flutterfire configure
+import 'config/app_config.dart';
 
 // Import das telas
 import 'login_screen.dart';
@@ -33,7 +34,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AgenPet',
+      title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
 
       // Configuração de Tema (Cores do App)

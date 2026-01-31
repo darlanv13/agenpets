@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "agenpets"
-  }
+  },
+  "targets": {
+    "agenpets": {
+      "hosting": {
+        "fazendinha": [
+          "afazendinha"
+        ],
+        "agenpets": [
+          "agenpets"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

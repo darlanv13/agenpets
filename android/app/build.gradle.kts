@@ -1,12 +1,15 @@
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// --- AUTOMAÇÃO SAAS ---
+// Tenta ler do comando de build. Se não vier nada, usa o padrão "Agen Pets"
+val customAppId = project.findProperty("targetAppId") as String? ?: "com.agenpets.padrao"
+val customAppName = project.findProperty("targetAppName") as String? ?: "Agen Pets"
+// ----------------------
 
 android {
     namespace = "com.example.agenpet"
@@ -23,10 +26,12 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.agenpet"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // AQUI ESTÁ A MÁGICA: O ID vem da variável
+        applicationId = customAppId
+        
+        // Define o nome base do app (pode ser sobrescrito nos flavors abaixo)
+        resValue("string", "app_name", customAppName)
+
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -35,28 +40,28 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
 
-
-    // No Kotlin, usamos listagem de strings para dimensões
     flavorDimensions.add("app")
 
     productFlavors {
         create("cliente") {
             dimension = "app"
-            // resValue no Kotlin usa parênteses e vírgulas
-            resValue("string", "app_name", "Agenpet")
-            applicationId = "com.example.agenpet"
+            // Mantém o ID original passado no comando (ex: com.agenpets.afazendinha)
+            applicationId = customAppId 
+            // Mantém o nome original (ex: A Fazendinha)
+            resValue("string", "app_name", customAppName) 
         }
 
         create("profissional") {
             dimension = "app"
-            resValue("string", "app_name", "Agenpet Pro")
-            applicationId = "com.example.agenpet"
+            // Adiciona um sufixo para o app Pro não substituir o app Cliente
+            // Ex: com.agenpets.afazendinha.pro
+            applicationIdSuffix = ".pro" 
+            // Adiciona "Pro" ao nome. Ex: A Fazendinha Pro
+            resValue("string", "app_name", "$customAppName Pro") 
         }
     }
 }

@@ -130,55 +130,86 @@ exports.buscarHorarios = onCall(async (request) => {
 
 // --- ATUALIZADO: Criar Agendamento (Aceita Voucher) ---
 exports.criarAgendamento = onCall(async (request) => {
-    const { servico, data_hora, cpf_user, pet_id, metodo_pagamento, valor } = request.data;
-    const servicoNorm = servico.toLowerCase();
-    // --- LÓGICA DE VOUCHER ---
+    // 1. Recebe os dados incluindo o tenantId
+    const { tenantId, cpf_user, metodo_pagamento, servico, data_hora, pet_id, valor } = request.data;
+
+    // Validações Iniciais
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+    if (!data_hora) throw new HttpsError('invalid-argument', 'Data e hora são obrigatórios.');
+
+    // Normaliza o nome do serviço para evitar erros (Ex: "Banho" vira "banho")
+    const servicoNorm = servico ? servico.toLowerCase() : '';
+
+    // --- LÓGICA DE VOUCHER (ISOLADA POR LOJA) ---
     if (metodo_pagamento === 'voucher') {
-        const userRef = db.collection('users').doc(cpf_user);
-        const userDoc = await userRef.get();
-        const userData = userDoc.data();
+        const voucherRef = db.collection('users')
+            .doc(cpf_user)
+            .collection('vouchers')
+            .doc(tenantId); // <--- Verifica saldo NA LOJA ATUAL
 
-        // Verifica saldo
-        const campoVoucher = servico === 'Banho' ? 'vouchers_banho' : 'vouchers_tosa';
-        const saldo = userData[campoVoucher] || 0;
+        const voucherDoc = await voucherRef.get();
+        const saldoData = voucherDoc.data();
 
-        if (saldo <= 0) {
-            throw new HttpsError('failed-precondition', 'Você não possui vouchers disponíveis para este serviço.');
+        // Verifica se tem saldo do serviço específico
+        if (!saldoData || !saldoData[servicoNorm] || saldoData[servicoNorm] <= 0) {
+            throw new HttpsError('failed-precondition', `Saldo de voucher insuficiente para ${servico} nesta loja.`);
         }
 
-        // Desconta 1 voucher
-        await userRef.update({
-            [campoVoucher]: admin.firestore.FieldValue.increment(-1)
+        // Se tiver saldo, desconta DESTA LOJA
+        await voucherRef.update({
+            [servicoNorm]: admin.firestore.FieldValue.increment(-1)
         });
     }
-    // -------------------------
 
-    const configDoc = await db.collection("config").doc("parametros").get();
-    const config = configDoc.data();
+    // --- BUSCA CONFIGURAÇÃO DA LOJA ---
+    // Agora busca em: tenants/{tenantId}/config/parametros
+    const configDoc = await db.collection('tenants')
+        .doc(tenantId)
+        .collection('config')
+        .doc('parametros')
+        .get();
+
+    // Se a loja não tiver config, usa um fallback (opcional) ou erro
+    const config = configDoc.exists ? configDoc.data() : { tempo_tosa_min: 60, tempo_banho_min: 40 };
     const duracao = servicoNorm === 'tosa' ? config.tempo_tosa_min : config.tempo_banho_min;
 
     const inicio = new Date(data_hora);
     const fim = addMinutes(inicio, duracao);
 
-    // 1. Busca Profissionais
-    const prosSnapshot = await db.collection("profissionais").where("ativo", "==", true).get();
+    // --- 1. BUSCA PROFISSIONAIS DA LOJA ---
+    const prosSnapshot = await db.collection('tenants')
+        .doc(tenantId)
+        .collection('profissionais')
+        .where("ativo", "==", true)
+        .get();
+
     const banhistas = [];
     const tosadores = [];
+
     prosSnapshot.forEach(doc => {
         const p = { id: doc.id, ...doc.data() };
-        if (p.habilidades.includes('tosa')) tosadores.push(p);
+        // Garante que a verificação de array seja segura
+        const habilidades = p.habilidades || [];
+        if (habilidades.includes('tosa')) tosadores.push(p);
         else banhistas.push(p);
     });
 
-    // 2. Busca Agendamentos Conflitantes no Horário
-    const conflitosSnapshot = await db.collection("agendamentos")
+    // --- 2. BUSCA AGENDAMENTOS DA LOJA PARA CONFLITO ---
+    const conflitosSnapshot = await db.collection('tenants')
+        .doc(tenantId)
+        .collection('agendamentos')
         .where("data_inicio", "<", fim)
         .where("data_fim", ">", inicio)
         .where("status", "!=", "cancelado")
         .get();
 
-    const agendamentosNoHorario = conflitosSnapshot.docs.map(d => ({ id: d.id, ...d.data(), ref: d.ref }));
+    const agendamentosNoHorario = conflitosSnapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        ref: d.ref // Mantemos a referência para poder atualizar se precisar mover (reallocação)
+    }));
 
+    // --- ALGORITMO DE ALOCAÇÃO INTELIGENTE (Mantido e Adaptado) ---
     let profissionalEscolhido = null;
 
     if (servicoNorm === 'banho') {
@@ -207,9 +238,10 @@ exports.criarAgendamento = onCall(async (request) => {
                 const banhistaSalvador = banhistas.find(b => !agendamentosNoHorario.find(ag => ag.profissional_id === b.id));
 
                 if (banhistaSalvador) {
-                    console.log(`♻️ REALOCANDO: Movendo banho do Tosador ${agendamentoParaMover.profissional_nome} para Banhista ${banhistaSalvador.nome}`);
+                    console.log(`♻️ REALOCANDO (Loja ${tenantId}): Movendo banho do Tosador ${agendamentoParaMover.profissional_nome} para Banhista ${banhistaSalvador.nome}`);
 
                     // 1. Atualiza o agendamento antigo (Move pro banhista)
+                    // Como pegamos a referência lá em cima (.ref), podemos dar update direto
                     await agendamentoParaMover.ref.update({
                         profissional_id: banhistaSalvador.id,
                         profissional_nome: banhistaSalvador.nome
@@ -227,22 +259,25 @@ exports.criarAgendamento = onCall(async (request) => {
         throw new HttpsError('aborted', 'Infelizmente o horário acabou de ser preenchido.');
     }
 
+    // --- PREPARA O NOVO AGENDAMENTO ---
     const novoAgendamento = {
+        tenantId, // Importante salvar o ID da loja no documento
         userId: cpf_user,
         pet_id,
-        profissional_id: profissionalEscolhido.id, // Aqui já vai o Tosador (que pode ter sido liberado agora)
+        profissional_id: profissionalEscolhido.id,
         profissional_nome: profissionalEscolhido.nome,
         servicoNorm,
         data_inicio: admin.firestore.Timestamp.fromDate(inicio),
         data_fim: admin.firestore.Timestamp.fromDate(fim),
         created_at: admin.firestore.FieldValue.serverTimestamp(),
         metodo_pagamento,
-        valor: metodo_pagamento === 'voucher' ? 0 : valor, // Se voucher, valor é 0 no agendamento
+        valor: metodo_pagamento === 'voucher' ? 0 : valor,
         status: metodo_pagamento === 'pix' ? 'aguardando_pagamento' : 'agendado'
     };
 
     let resposta = { success: true, mensagem: "Agendado com sucesso!" };
 
+    // --- GERAÇÃO DE PIX (EfiPay) ---
     if (metodo_pagamento === 'pix') {
         try {
             const efipay = new EfiPay(optionsEfi);
@@ -250,7 +285,7 @@ exports.criarAgendamento = onCall(async (request) => {
                 calendario: { expiracao: 3600 },
                 devedor: { cpf: cpf_user.replace(/\D/g, ''), nome: "Cliente AgenPet" },
                 valor: { original: valor.toFixed(2) },
-                chave: "SUA_CHAVE_PIX_AQUI"
+                chave: process.env.EFI_CLIENT_ID_HOMOLOG// <--- ATENÇÃO: Use a chave da configuração ou fixa
             };
             const cobranca = await efipay.pixCreateImmediateCharge([], bodyPix);
             const qrCode = await efipay.pixGenerateQRCode({ id: cobranca.loc.id });
@@ -260,7 +295,12 @@ exports.criarAgendamento = onCall(async (request) => {
         } catch (e) { console.error("Erro PIX:", e); }
     }
 
-    await db.collection("agendamentos").add(novoAgendamento);
+    // --- SALVA O AGENDAMENTO NA LOJA ---
+    await db.collection('tenants')
+        .doc(tenantId)
+        .collection('agendamentos')
+        .add(novoAgendamento);
+
     return resposta;
 });
 

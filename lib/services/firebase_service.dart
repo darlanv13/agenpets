@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -17,7 +18,14 @@ class FirebaseService {
     app: Firebase.app(),
     region: 'southamerica-east1',
   );
+
+  String get _tenantId => AppConfig.tenantId;
   // --- USUÁRIOS ---
+
+  // ===========================================================================
+  // PARTE 1: DADOS UNIVERSAIS (Global para todos os Apps)
+  // O usuário e o pet são os mesmos, não importa qual loja ele frequente.
+  // ===========================================================================
 
   Future<UserModel?> getUser(String cpf) async {
     try {
@@ -33,13 +41,12 @@ class FirebaseService {
   }
 
   Future<void> createUser(UserModel user) async {
-    // Usamos set() para garantir que o ID do documento seja o CPF
+    // Adicionamos o usuário na coleção GLOBAL 'users'
     await _db.collection('users').doc(user.cpf).set(user.toMap());
   }
 
-  // --- PETS ---
-
   Stream<List<PetModel>> getPetsStream(String cpf) {
+    // Pets também são globais (pertencem ao dono)
     return _db.collection('users').doc(cpf).collection('pets').snapshots().map((
       snapshot,
     ) {
@@ -57,9 +64,67 @@ class FirebaseService {
         .add(pet.toMap());
   }
 
+  // ===========================================================================
+  // PARTE 2: DADOS DO TENANT (Específicos da Loja Atual)
+  // Aqui usamos o _tenantId para isolar os dados.
+  // ===========================================================================
+
+  // --- ÁREA ADMINISTRATIVA (Configurações da Loja) ---
+
+  Future<void> updateConfiguracoes(Map<String, dynamic> novosDados) async {
+    // Antes: _db.collection('config')...
+    // Agora: tenants/{loja}/config/parametros
+    await _db
+        .collection('tenants')
+        .doc(_tenantId)
+        .collection('config')
+        .doc('parametros')
+        .set(
+          novosDados,
+          SetOptions(merge: true),
+        ); // Usei set com merge para garantir que crie se não existir
+  }
+
+  Future<Map<String, dynamic>> getConfiguracoes() async {
+    final doc = await _db
+        .collection('tenants')
+        .doc(_tenantId)
+        .collection('config')
+        .doc('parametros')
+        .get();
+    return doc.data() ?? {};
+  }
+
+  // --- PROFISSIONAIS (Funcionários da Loja) ---
+
+  Future<void> addProfissional(
+    String nome,
+    String cpf,
+    List<String> habilidades,
+  ) async {
+    // Antes: _db.collection('profissionais')...
+    // Agora: tenants/{loja}/profissionais/...
+    await _db
+        .collection('tenants')
+        .doc(_tenantId)
+        .collection('profissionais')
+        .add({
+          'nome': nome,
+          'cpf': cpf,
+          'habilidades': habilidades,
+          'ativo': true,
+          'peso_prioridade': 5,
+        });
+  }
+
+  // Atualizar Dados do Cliente (CRM)
+  Future<void> updateDadosCliente(
+    String cpf,
+    Map<String, dynamic> dados,
+  ) async {
+    await _db.collection('users').doc(cpf).update(dados);
+  }
   // --- AGENDAMENTOS (Via Cloud Functions) ---
-  // Nota: As funções geralmente rodam no servidor e têm acesso admin,
-  // mas a chamada client-side aqui está correta.
 
   Future<List<String>> buscarHorariosDisponiveis(
     String data,
@@ -67,6 +132,7 @@ class FirebaseService {
   ) async {
     try {
       final result = await _functions.httpsCallable('buscarHorarios').call({
+        'tenantId': _tenantId,
         'dataConsulta': data,
         'servico': servico,
       });
@@ -86,6 +152,7 @@ class FirebaseService {
   }) async {
     try {
       final result = await _functions.httpsCallable('criarAgendamento').call({
+        'tenantId': _tenantId,
         'servico': servico,
         'data_hora': dataHora.toIso8601String(),
         'cpf_user': cpfUser,
@@ -102,16 +169,25 @@ class FirebaseService {
 
   // Busca saldo de vouchers em tempo real
   Stream<Map<String, int>> getSaldoVouchers(String cpf) {
-    return _db.collection('users').doc(cpf).snapshots().map((doc) {
-      final data = doc.data();
-      if (data == null) return {'banho': 0, 'tosa': 0, 'creche': 0};
+    return _db
+        .collection('users')
+        .doc(cpf)
+        .collection('vouchers') // Nova subcoleção
+        .doc(_tenantId) // <--- O ID da loja atual (ex: pet_shop_bairro)
+        .snapshots()
+        .map((doc) {
+          final data = doc.data();
+          // Se não tiver documento para esta loja, o saldo é zero
+          if (data == null) return {'banho': 0, 'tosa': 0, 'creche': 0};
 
-      return {
-        'banho': (data['vouchers_banho'] as num?)?.toInt() ?? 0,
-        'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? 0,
-        'creche': (data['vouchers_creche'] as num?)?.toInt() ?? 0,
-      };
-    });
+          return {
+            // Note que removi o prefixo "vouchers_" dos nomes dos campos para ficar mais limpo
+            // mas você pode manter se preferir, desde que alinhe com o servidor.
+            'banho': (data['vouchers_banho'] as num?)?.toInt() ?? 0,
+            'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? 0,
+            'creche': (data['vouchers_creche'] as num?)?.toInt() ?? 0,
+          };
+        });
   }
 
   // Comprar Assinatura
@@ -121,6 +197,7 @@ class FirebaseService {
   ) async {
     try {
       final result = await _functions.httpsCallable('comprarAssinatura').call({
+        'tenantId': _tenantId,
         'cpf_user': cpf,
         'pacoteId': tipoPlano,
       });
@@ -139,6 +216,7 @@ class FirebaseService {
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarHotel').call({
+        'tenantId': _tenantId,
         'pet_id': petId,
         'cpf_user': cpfUser,
         'check_in': checkIn.toIso8601String(),
@@ -158,46 +236,12 @@ class FirebaseService {
 
   // --- ÁREA ADMINISTRATIVA ---
 
-  // 1. Atualizar Preços e Configurações
-  Future<void> updateConfiguracoes(Map<String, dynamic> novosDados) async {
-    await _db.collection('config').doc('parametros').update(novosDados);
-  }
-
-  // 2. Cadastrar Novo Profissional
-  Future<void> addProfissional(
-    String nome,
-    String cpf,
-    List<String> habilidades,
-  ) async {
-    await _db.collection('profissionais').add({
-      'nome': nome,
-      'cpf': cpf, // Importante salvar formatado: 000.000.000-00
-      'habilidades': habilidades,
-      'ativo': true,
-      'peso_prioridade': 5, // Valor padrão
-    });
-  }
-
-  // 3. Atualizar Dados do Cliente (CRM)
-  Future<void> updateDadosCliente(
-    String cpf,
-    Map<String, dynamic> dados,
-  ) async {
-    await _db.collection('users').doc(cpf).update(dados);
-  }
-
-  // 4. Buscar Configurações Atuais
-  Future<Map<String, dynamic>> getConfiguracoes() async {
-    final doc = await _db.collection('config').doc('parametros').get();
-    return doc.data() ?? {};
-  }
-
-  // ... dentro da classe FirebaseService ...
-
   // Buscar dias sem vaga no hotel
   Future<List<DateTime>> buscarDiasLotadosHotel() async {
     try {
-      final result = await _functions.httpsCallable('obterDiasLotados').call();
+      final result = await _functions.httpsCallable('obterDiasLotados').call({
+        'tenantId': _tenantId,
+      });
       final List<dynamic> datasStrings = result.data['dias_lotados'] ?? [];
 
       // Converte strings '2023-10-25' para DateTime
@@ -216,6 +260,7 @@ class FirebaseService {
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarCreche').call({
+        'tenantId': _tenantId,
         'pet_id': petId,
         'cpf_user': cpfUser,
         'dates': dates.map((d) => d.toIso8601String()).toList(),
@@ -234,7 +279,7 @@ class FirebaseService {
     try {
       final result = await _functions
           .httpsCallable('obterDiasLotadosCreche')
-          .call();
+          .call({'tenantId': _tenantId});
       final List<dynamic> datasStrings = result.data['dias_lotados'] ?? [];
       return datasStrings.map((s) => DateTime.parse(s)).toList();
     } catch (e) {
@@ -245,7 +290,9 @@ class FirebaseService {
 
   Future<double> getPrecoCreche() async {
     try {
-      final result = await _functions.httpsCallable('obterPrecoCreche').call();
+      final result = await _functions.httpsCallable('obterPrecoCreche').call({
+        'tenantId': _tenantId,
+      });
       return (result.data['preco'] ?? 0).toDouble();
     } catch (e) {
       print("Erro ao buscar preço creche: $e");
