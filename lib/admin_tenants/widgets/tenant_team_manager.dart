@@ -47,6 +47,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   bool _isCnpj = false;
   bool _isLoading = false;
 
+  String _filtroEquipe = "";
+
   // --- FUNÇÕES (CHECKBOXES) ---
   bool fazBanho = true;
   bool fazTosa = false;
@@ -415,13 +417,38 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Equipe Ativa",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Equipe Ativa",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                              SizedBox(
+                                width: 200,
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    hintText: "Buscar nome...",
+                                    prefixIcon: Icon(Icons.search, size: 20),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 0,
+                                      horizontal: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  onChanged:
+                                      (v) => setState(
+                                        () => _filtroEquipe = v.toLowerCase(),
+                                      ),
+                                ),
+                              ),
+                            ],
                         ),
                         SizedBox(height: 20),
                         Expanded(
@@ -436,7 +463,23 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                                 return Center(
                                   child: CircularProgressIndicator(),
                                 );
-                              final docs = snapshot.data!.docs;
+
+                                final docs =
+                                    snapshot.data!.docs.where((doc) {
+                                      final data =
+                                          doc.data() as Map<String, dynamic>;
+                                      final nome =
+                                          (data['nome'] ?? '')
+                                              .toString()
+                                              .toLowerCase();
+                                      final docNum =
+                                          (data['documento'] ?? '')
+                                              .toString()
+                                              .toLowerCase();
+                                      return nome.contains(_filtroEquipe) ||
+                                          docNum.contains(_filtroEquipe);
+                                    }).toList();
+
                               if (docs.isEmpty)
                                 return Center(
                                   child: Text("Nenhum profissional ativo."),

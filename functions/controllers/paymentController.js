@@ -189,3 +189,13 @@ exports.webhookPix = onRequest(async (req, res) => {
     res.status(500).send("Erro interno");
   }
 });
+
+// --- 3. Testar Credenciais do Gateway (Mock/Placeholder) ---
+exports.testarCredenciaisGateway = onCall(async (request) => {
+  // Esta função é um placeholder para futura implementação real
+  // Ela simula uma verificação bem-sucedida para UX do Admin
+  return {
+    success: true,
+    message: "Conexão com Gateway verificada com sucesso (Simulação).",
+  };
+});

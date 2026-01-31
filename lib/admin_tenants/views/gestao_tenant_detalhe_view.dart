@@ -193,16 +193,50 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                     decoration: InputDecoration(
                       labelText: "URL Logo App Cliente",
                       border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.image),
                     ),
+                    onChanged: (v) => setState(() {}),
                   ),
+                  if (_logoAppCtrl.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10, bottom: 20),
+                      child: Container(
+                        height: 60,
+                        alignment: Alignment.centerLeft,
+                        child: Image.network(
+                          _logoAppCtrl.text,
+                          errorBuilder: (_, __, ___) => Text(
+                            "URL inválida ou imagem não encontrada",
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ),
                   SizedBox(height: 15),
                   TextField(
                     controller: _logoAdminCtrl,
                     decoration: InputDecoration(
                       labelText: "URL Logo Painel Admin",
                       border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.image),
                     ),
+                    onChanged: (v) => setState(() {}),
                   ),
+                  if (_logoAdminCtrl.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Container(
+                        height: 60,
+                        alignment: Alignment.centerLeft,
+                        child: Image.network(
+                          _logoAdminCtrl.text,
+                          errorBuilder: (_, __, ___) => Text(
+                            "URL inválida ou imagem não encontrada",
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -281,13 +315,22 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
-              icon: Icon(Icons.save),
-              label: Text("SALVAR CONFIGURAÇÕES"),
+              icon: _isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Icon(Icons.save),
+              label: Text(_isLoading ? "SALVANDO..." : "SALVAR CONFIGURAÇÕES"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue[900],
                 foregroundColor: Colors.white,
               ),
-              onPressed: _salvarConfiguracoes,
+              onPressed: _isLoading ? null : _salvarConfiguracoes,
             ),
           ),
         ],

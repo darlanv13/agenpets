@@ -24,6 +24,7 @@ exports.criarAgendamento = agendamentoController.criarAgendamento;
 // Atualizado para usar o novo controller de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
 exports.webhookPix = paymentController.webhookPix;
+exports.testarCredenciaisGateway = paymentController.testarCredenciaisGateway;
 
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;

@@ -15,6 +15,8 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
     databaseId: 'agenpets',
   );
 
+  String _filtro = "";
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,24 +51,44 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                   ),
                 ),
                 SizedBox(width: 15),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Gestão de Tenants",
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[900],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Gestão de Tenants",
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[900],
+                        ),
                       ),
-                    ),
-                    Text(
-                      "Gerencie as lojas, configurações e acessos",
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                  ],
+                      Text(
+                        "Gerencie as lojas, configurações e acessos",
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
               ],
+            ),
+          ),
+
+          // Search & Metrics
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: "Buscar por nome ou cidade...",
+                prefixIcon: Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (v) => setState(() => _filtro = v.toLowerCase()),
             ),
           ),
 
@@ -83,65 +105,95 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                   return Center(child: Text("Nenhuma loja encontrada."));
                 }
 
-                return ListView.builder(
-                  padding: EdgeInsets.all(30),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    final doc = snapshot.data!.docs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    final tenantId = doc.id;
-                    final nome = data['nome'] ?? 'Loja sem nome';
-                    final cidade = data['cidade'] ?? 'Não informada';
+                final docs = snapshot.data!.docs.where((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final nome = (data['nome'] ?? '').toString().toLowerCase();
+                  final cidade = (data['cidade'] ?? '').toString().toLowerCase();
+                  return nome.contains(_filtro) || cidade.contains(_filtro);
+                }).toList();
 
-                    return Card(
-                      margin: EdgeInsets.only(bottom: 15),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.all(20),
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue[100],
-                          child: Text(
-                            nome.isNotEmpty ? nome[0].toUpperCase() : '?',
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.store, color: Colors.blue[900], size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            "${docs.length} Loja(s) Encontrada(s)",
                             style: TextStyle(
-                              color: Colors.blue[900],
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: Colors.blue[900],
                             ),
                           ),
-                        ),
-                        title: Text(
-                          nome,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(height: 5),
-                            Text("ID: $tenantId"),
-                            Text("Cidade: $cidade"),
-                          ],
-                        ),
-                        trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => GestaoTenantDetalheView(
-                                    tenantId: tenantId,
-                                    nomeLoja: nome,
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: EdgeInsets.symmetric(horizontal: 30),
+                        itemCount: docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = docs[index];
+                          final data = doc.data() as Map<String, dynamic>;
+                          final tenantId = doc.id;
+                          final nome = data['nome'] ?? 'Loja sem nome';
+                          final cidade = data['cidade'] ?? 'Não informada';
+
+                          return Card(
+                            margin: EdgeInsets.only(bottom: 15),
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: ListTile(
+                              contentPadding: EdgeInsets.all(20),
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue[100],
+                                child: Text(
+                                  nome.isNotEmpty ? nome[0].toUpperCase() : '?',
+                                  style: TextStyle(
+                                    color: Colors.blue[900],
+                                    fontWeight: FontWeight.bold,
                                   ),
+                                ),
+                              ),
+                              title: Text(
+                                nome,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(height: 5),
+                                  Text("ID: $tenantId"),
+                                  Text("Cidade: $cidade"),
+                                ],
+                              ),
+                              trailing: Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) => GestaoTenantDetalheView(
+                                          tenantId: tenantId,
+                                          nomeLoja: nome,
+                                        ),
+                                  ),
+                                );
+                              },
                             ),
                           );
                         },
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 );
               },
             ),
