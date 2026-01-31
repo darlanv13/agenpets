@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'recibo_screen.dart'; // Certifique-se de que este arquivo existe
@@ -94,6 +95,8 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
       backgroundColor: _corFundo,
       body: StreamBuilder<QuerySnapshot>(
         stream: _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
             .collection('agendamentos')
             .where('userId', isEqualTo: widget.userCpf)
             .orderBy('data_inicio', descending: true)
