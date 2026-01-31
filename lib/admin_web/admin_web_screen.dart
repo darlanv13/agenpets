@@ -14,6 +14,7 @@ import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
 import 'views/loja_view.dart';
+import 'views/gestao_tenants_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -86,6 +87,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         GestaoEquipeView(), // 8
         ConfiguracaoAgendaView(), // 9
         GestaoEstoqueView(), // 10
+        GestaoTenantsView(), // 11
       ];
 
       _menuItems = [
@@ -108,6 +110,11 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
         _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
+        _MenuItem(
+          "Gestão Multi-Tenants",
+          FontAwesomeIcons.building,
+          section: "SUPER ADMIN",
+        ),
       ];
     }
   }
