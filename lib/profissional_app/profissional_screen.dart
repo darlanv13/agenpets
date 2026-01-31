@@ -71,39 +71,38 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
     // 2. CHECKLIST PENDENTE (Após validação)
     if (statusAtual == 'checklist_pendente') {
-      if (data['profissional_id'] == null) {
-        // Se ainda não tem pro, seleciona e abre checklist
-        await _selecionarProfissional(doc);
-      } else {
-        // Se já tem, abre direto
-        final bool? result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChecklistPetScreen(
-              agendamentoId: doc.id,
-              nomePet: data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
-            ),
+      final bool? result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChecklistPetScreen(
+            agendamentoId: doc.id,
+            nomePet: data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
+          ),
+        ),
+      );
+
+      if (result == true) {
+        // Atualiza para 'aguardando_banho' automaticamente após sucesso
+        await doc.reference.update({
+          'status': 'aguardando_banho',
+          'checklist_feito': true,
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Checklist salvo! Pronto para iniciar o banho. 🚿"),
           ),
         );
-
-        if (result == true) {
-          // Atualiza para 'banhando' automaticamente após sucesso
-          await doc.reference.update({
-            'status': 'banhando',
-            'checklist_feito': true,
-            'inicio_servico': FieldValue.serverTimestamp(),
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Checklist salvo! Banho iniciado. 🚿")),
-          );
-        }
       }
       return;
     }
 
     // 3. DEMAIS ETAPAS (Banho -> Tosa -> Pronto)
-    // Se já passou do checklist (banhando/tosando), abre Detalhes
-    if (statusAtual == 'banhando' || statusAtual == 'tosando') {
+    // Redireciona para Detalhes para controle fino de fluxo
+    if (statusAtual == 'banhando' ||
+        statusAtual == 'tosando' ||
+        statusAtual == 'aguardando_banho' ||
+        statusAtual == 'aguardando_tosa' ||
+        statusAtual == 'aguardando_finalizacao') {
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -111,104 +110,6 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
         ),
       );
       return;
-    }
-  }
-
-  Future<void> _selecionarProfissional(DocumentSnapshot doc) async {
-    try {
-      // Busca profissionais ativos
-      QuerySnapshot prosSnapshot = await _db
-          .collection('profissionais')
-          .where('ativo', isEqualTo: true)
-          .get();
-
-      List<DocumentSnapshot> pros = prosSnapshot.docs;
-
-      if (pros.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Nenhum profissional ativo encontrado.")),
-        );
-        return;
-      }
-
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            "Quem executará o serviço?",
-            style: TextStyle(fontSize: 18),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: pros.length,
-              itemBuilder: (ctx, index) {
-                final proData = pros[index].data() as Map<String, dynamic>;
-                final String nome = proData['nome'] ?? 'Profissional';
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: _corAcai,
-                    child: Text(
-                      nome.isNotEmpty ? nome[0].toUpperCase() : '?',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  title: Text(nome),
-                  onTap: () async {
-                    Navigator.pop(ctx); // Fecha o dialog
-
-                    // Atualiza o agendamento com o profissional selecionado
-                    await doc.reference.update({
-                      'profissional_id': pros[index].id,
-                      'profissional_nome': nome,
-                    });
-
-                    // Navega para o checklist
-                    final data = doc.data() as Map<String, dynamic>;
-                    final bool? result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChecklistPetScreen(
-                          agendamentoId: doc.id,
-                          nomePet:
-                              data['pet_nome'] ?? data['nome_pet'] ?? 'Pet',
-                        ),
-                      ),
-                    );
-
-                    if (result == true) {
-                      // Se veio do fluxo antigo e completou, avança status
-                      if (data['status'] == 'agendado' ||
-                          data['status'] == 'checklist_pendente') {
-                        await doc.reference.update({
-                          'status': 'banhando',
-                          'checklist_feito': true,
-                          'inicio_servico': FieldValue.serverTimestamp(),
-                        });
-                      }
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text("Cancelar"),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erro ao buscar profissionais: $e")),
-      );
     }
   }
 
@@ -678,22 +579,39 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       corBotao = _corAcai;
     } else if (status == 'checklist_pendente') {
       corStatus = Colors.orange;
-      textoStatus = "Aguardando Checklist";
+      textoStatus = "Checklist Pendente";
       iconeAcao = Icons.playlist_add_check;
       textoAcao = "Fazer Checklist";
       corBotao = Colors.orange;
+    } else if (status == 'aguardando_banho') {
+      corStatus = Colors.blueAccent;
+      textoStatus = "Aguardando Início Banho";
+      iconeAcao = FontAwesomeIcons.shower;
+      textoAcao = "Iniciar Banho";
+      corBotao = Colors.blue;
     } else if (status == 'banhando') {
       corStatus = Colors.cyan;
-      textoStatus = "No Banho 🛁";
-      bool temTosa = servicoDisplay.toLowerCase().contains('tosa');
-      iconeAcao = temTosa ? FontAwesomeIcons.scissors : Icons.check;
-      textoAcao = temTosa ? "Ir p/ Tosa" : "Finalizar";
-      corBotao = _corAcai;
+      textoStatus = "Em Banho 🛁";
+      iconeAcao = Icons.stop_circle_outlined;
+      textoAcao = "Finalizar Banho";
+      corBotao = Colors.redAccent;
+    } else if (status == 'aguardando_tosa') {
+      corStatus = Colors.deepOrange;
+      textoStatus = "Aguardando Tosa";
+      iconeAcao = FontAwesomeIcons.scissors;
+      textoAcao = "Iniciar Tosa";
+      corBotao = Colors.deepOrange;
     } else if (status == 'tosando') {
       corStatus = Colors.orange;
-      textoStatus = "Na Tosa ✂️";
+      textoStatus = "Em Tosa ✂️";
+      iconeAcao = Icons.stop_circle_outlined;
+      textoAcao = "Finalizar Tosa";
+      corBotao = Colors.redAccent;
+    } else if (status == 'aguardando_finalizacao') {
+      corStatus = Colors.green;
+      textoStatus = "Serviço Concluído";
       iconeAcao = Icons.check_circle;
-      textoAcao = "Pronto";
+      textoAcao = "Pet Pronto";
       corBotao = Colors.green;
     } else if (status == 'pronto') {
       corStatus = Colors.purple;
