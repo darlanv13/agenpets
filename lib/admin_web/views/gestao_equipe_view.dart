@@ -36,6 +36,12 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
     filter: {"#": RegExp(r'[0-9]')},
   );
 
+  var maskCnpj = MaskTextInputFormatter(
+    mask: '##.###.###/####-##',
+    filter: {"#": RegExp(r'[0-9]')},
+  );
+
+  bool _isCnpj = false;
   bool _isLoading = false;
 
   // --- FUNÇÕES (CHECKBOXES) ---
@@ -84,7 +90,8 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
     try {
       await _functions.httpsCallable('criarContaProfissional').call({
         'nome': _nomeController.text.trim(),
-        'cpf': _cpfController.text,
+        'documento': _cpfController.text,
+        'cpf': _cpfController.text, // Manda também para garantir
         'senha': _senhaController.text.trim(),
         'habilidades': habs,
         'perfil': perfilEnvio,
@@ -219,11 +226,47 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
                               Icons.person,
                             ),
                             SizedBox(height: 15),
+                            // Toggle CPF/CNPJ
+                            Row(
+                              children: [
+                                Text("Tipo de Documento: ",
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                                SizedBox(width: 10),
+                                ChoiceChip(
+                                  label: Text("CPF"),
+                                  selected: !_isCnpj,
+                                  onSelected: (v) {
+                                    if (v) {
+                                      setState(() {
+                                        _isCnpj = false;
+                                        _cpfController.clear();
+                                      });
+                                    }
+                                  },
+                                ),
+                                SizedBox(width: 10),
+                                ChoiceChip(
+                                  label: Text("CNPJ"),
+                                  selected: _isCnpj,
+                                  onSelected: (v) {
+                                    if (v) {
+                                      setState(() {
+                                        _isCnpj = true;
+                                        _cpfController.clear();
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 10),
+
                             _buildTextField(
                               _cpfController,
-                              "CPF (Login)",
+                              _isCnpj ? "CNPJ (Login)" : "CPF (Login)",
                               Icons.badge,
-                              formatter: maskCpf,
+                              formatter: _isCnpj ? maskCnpj : maskCpf,
                             ),
                             SizedBox(height: 15),
 
@@ -512,7 +555,7 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
                                                 ),
                                                 SizedBox(height: 5),
                                                 Text(
-                                                  "CPF: ${data['cpf']}",
+                                                  "Doc: ${data['documento'] ?? data['cpf']}",
                                                   style: TextStyle(
                                                     color: Colors.grey[500],
                                                     fontSize: 12,

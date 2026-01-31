@@ -319,36 +319,6 @@ exports.criarAgendamento = onCall(async (request) => {
     return resposta;
 });
 
-// --- Webhook PIX (Atualizado para liberar Vouchers) ---
-exports.webhookPix = onRequest(async (req, res) => {
-    const { pix } = req.body;
-    if (pix) {
-        for (const p of pix) {
-            // 1. Verifica se é pagamento de Agendamento
-            const agendamentoSnap = await db.collection('agendamentos').where('txid', '==', p.txid).get();
-            agendamentoSnap.forEach(async doc => await doc.ref.update({ status: 'agendado' }));
-
-            // 2. Verifica se é pagamento de Assinatura
-            const assinaturaSnap = await db.collection('vendas_assinaturas').where('txid', '==', p.txid).get();
-            assinaturaSnap.forEach(async doc => {
-                const venda = doc.data();
-                if (venda.status !== 'pago') {
-                    await doc.ref.update({ status: 'pago' });
-
-                    // Adiciona Vouchers ao Usuário
-                    const qtdVoucher = 4;
-                    const campo = venda.plano === 'pct_banho' ? 'vouchers_banho' : 'vouchers_tosa';
-
-                    await db.collection('users').doc(venda.cpf_user).update({
-                        [campo]: admin.firestore.FieldValue.increment(qtdVoucher),
-                        validade_assinatura: admin.firestore.Timestamp.fromDate(addMinutes(new Date(), 30 * 24 * 60)) // +30 dias
-                    });
-                }
-            });
-        }
-    }
-    res.status(200).send();
-});
 
 
 

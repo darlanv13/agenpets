@@ -14,11 +14,15 @@ exports.criarContaProfissional = onCall({
     }
     */
 
-    const { nome, cpf, senha, habilidades, perfil, tenantId } = request.data;
+    // Agora aceita 'documento' que pode ser CPF ou CNPJ.
+    // Mantemos 'cpf' para compatibilidade se vier, mas preferimos 'documento'.
+    const { nome, cpf, documento, senha, habilidades, perfil, tenantId } = request.data;
+
+    const docFinal = documento || cpf;
 
     // 2. Validações
-    if (!cpf || !senha || !nome) {
-        throw new HttpsError('invalid-argument', 'Nome, CPF e Senha são obrigatórios.');
+    if (!docFinal || !senha || !nome) {
+        throw new HttpsError('invalid-argument', 'Nome, Documento (CPF/CNPJ) e Senha são obrigatórios.');
     }
     if (!tenantId) {
         throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
@@ -28,8 +32,8 @@ exports.criarContaProfissional = onCall({
     }
 
     // 3. E-mail Fantasma (Shadow Email)
-    const cpfLimpo = cpf.replace(/\D/g, '');
-    const emailFantasma = `${cpfLimpo}@agenpets.pro`;
+    const docLimpo = docFinal.replace(/\D/g, '');
+    const emailFantasma = `${docLimpo}@agenpets.pro`;
 
     try {
         // 4. Cria Login no Firebase Auth
@@ -57,8 +61,11 @@ exports.criarContaProfissional = onCall({
             .doc(userRecord.uid)
             .set({
                 nome: nome,
-                cpf: cpf,         // Visual (com pontos)
-                cpf_busca: cpfLimpo,
+                documento: docFinal, // Pode ser CPF ou CNPJ formatado
+                cpf: docFinal,       // Mantém campo legado para compatibilidade
+                doc_busca: docLimpo, // Números puros
+                cpf_busca: docLimpo, // Legado
+                tipo_documento: docLimpo.length > 11 ? 'cnpj' : 'cpf',
                 habilidades: habilidades || [],
                 perfil: perfil || 'padrao', // 'master' ou 'padrao'
                 ativo: true,
