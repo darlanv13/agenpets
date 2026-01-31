@@ -34,6 +34,19 @@ exports.criarContaProfissional = onCall({
     // 3. E-mail Fantasma (Shadow Email)
     const docLimpo = docFinal.replace(/\D/g, '');
     const emailFantasma = `${docLimpo}@agenpets.pro`;
+    const tipoDocumento = docLimpo.length > 11 ? 'cnpj' : 'cpf';
+
+    // Lógica do Código de Vendedor (Apenas CPF)
+    let codigoVendedor = null;
+    const skills = habilidades || [];
+    const funcoesElegiveis = ['vendedor', 'tosa', 'banho'];
+
+    // Verifica se tem alguma das funções elegíveis
+    const temFuncaoElegivel = skills.some(s => funcoesElegiveis.includes(s.toLowerCase()));
+
+    if (tipoDocumento === 'cpf' && temFuncaoElegivel) {
+        codigoVendedor = docLimpo.substring(0, 4);
+    }
 
     try {
         // 4. Cria Login no Firebase Auth
@@ -55,24 +68,30 @@ exports.criarContaProfissional = onCall({
         await getAuth().setCustomUserClaims(userRecord.uid, claims);
 
         // 6. Salva Perfil no Firestore (SEM A SENHA) na coleção do Tenant
+        const dadosProfissional = {
+            nome: nome,
+            documento: docFinal, // Pode ser CPF ou CNPJ formatado
+            cpf: docFinal,       // Mantém campo legado para compatibilidade
+            doc_busca: docLimpo, // Números puros
+            cpf_busca: docLimpo, // Legado
+            tipo_documento: tipoDocumento,
+            habilidades: habilidades || [],
+            perfil: perfil || 'padrao', // 'master' ou 'padrao'
+            ativo: true,
+            criado_em: admin.firestore.FieldValue.serverTimestamp(),
+            uid_auth: userRecord.uid,
+            tenantId: tenantId
+        };
+
+        if (codigoVendedor) {
+            dadosProfissional.codigo_vendedor = codigoVendedor;
+        }
+
         await db.collection('tenants')
             .doc(tenantId)
             .collection('profissionais')
             .doc(userRecord.uid)
-            .set({
-                nome: nome,
-                documento: docFinal, // Pode ser CPF ou CNPJ formatado
-                cpf: docFinal,       // Mantém campo legado para compatibilidade
-                doc_busca: docLimpo, // Números puros
-                cpf_busca: docLimpo, // Legado
-                tipo_documento: docLimpo.length > 11 ? 'cnpj' : 'cpf',
-                habilidades: habilidades || [],
-                perfil: perfil || 'padrao', // 'master' ou 'padrao'
-                ativo: true,
-                criado_em: admin.firestore.FieldValue.serverTimestamp(),
-                uid_auth: userRecord.uid,
-                tenantId: tenantId
-            });
+            .set(dadosProfissional);
 
         return { success: true, message: `Profissional ${nome} criado!` };
 
