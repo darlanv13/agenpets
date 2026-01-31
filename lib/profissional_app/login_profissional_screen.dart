@@ -4,6 +4,7 @@ import 'package:cpf_cnpj_validator/cpf_validator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LoginProfissionalScreen extends StatefulWidget {
@@ -49,7 +50,12 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
     if (user != null) {
       // Já existe um usuário logado. Verifica se é válido no banco.
       try {
-        final doc = await _db.collection('profissionais').doc(user.uid).get();
+        final doc = await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('profissionais')
+            .doc(user.uid)
+            .get();
 
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>;
@@ -95,12 +101,15 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
       );
 
       DocumentSnapshot doc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('profissionais')
           .doc(userCred.user!.uid)
           .get();
 
       if (!doc.exists) {
-        _mostrarSnack("Perfil profissional não encontrado.", cor: Colors.red);
+        _mostrarSnack("Perfil profissional não encontrado nesta loja.",
+            cor: Colors.red);
         await _auth.signOut();
         setState(() => _isLoading = false);
         return;

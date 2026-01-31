@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/admin_web/widgets/professional_editor_dialog.dart';
@@ -87,6 +88,7 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
         'senha': _senhaController.text.trim(),
         'habilidades': habs,
         'perfil': perfilEnvio,
+        'tenantId': AppConfig.tenantId,
       });
 
       // Sucesso
@@ -380,6 +382,8 @@ class _GestaoEquipeViewState extends State<GestaoEquipeView> {
                           Expanded(
                             child: StreamBuilder<QuerySnapshot>(
                               stream: _db
+                                  .collection('tenants')
+                                  .doc(AppConfig.tenantId)
                                   .collection('profissionais')
                                   .snapshots(),
                               builder: (context, snapshot) {

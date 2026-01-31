@@ -14,11 +14,14 @@ exports.criarContaProfissional = onCall({
     }
     */
 
-    const { nome, cpf, senha, habilidades, perfil } = request.data;
+    const { nome, cpf, senha, habilidades, perfil, tenantId } = request.data;
 
     // 2. Validações
     if (!cpf || !senha || !nome) {
         throw new HttpsError('invalid-argument', 'Nome, CPF e Senha são obrigatórios.');
+    }
+    if (!tenantId) {
+        throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
     }
     if (senha.length < 6) {
         throw new HttpsError('invalid-argument', 'A senha deve ter no mínimo 6 dígitos.');
@@ -37,24 +40,32 @@ exports.criarContaProfissional = onCall({
         });
 
         // 5. Define Permissões (Claims)
-        const claims = { profissional: true };
+        const claims = {
+            profissional: true,
+            tenantId: tenantId // <--- Vincula ao Tenant
+        };
         if (perfil === 'master') {
             claims.admin = true;
             claims.master = true;
         }
         await getAuth().setCustomUserClaims(userRecord.uid, claims);
 
-        // 6. Salva Perfil no Firestore (SEM A SENHA)
-        await db.collection('profissionais').doc(userRecord.uid).set({
-            nome: nome,
-            cpf: cpf,         // Visual (com pontos)
-            cpf_busca: cpfLimpo,
-            habilidades: habilidades || [],
-            perfil: perfil || 'padrao', // 'master' ou 'padrao'
-            ativo: true,
-            criado_em: admin.firestore.FieldValue.serverTimestamp(),
-            uid_auth: userRecord.uid
-        });
+        // 6. Salva Perfil no Firestore (SEM A SENHA) na coleção do Tenant
+        await db.collection('tenants')
+            .doc(tenantId)
+            .collection('profissionais')
+            .doc(userRecord.uid)
+            .set({
+                nome: nome,
+                cpf: cpf,         // Visual (com pontos)
+                cpf_busca: cpfLimpo,
+                habilidades: habilidades || [],
+                perfil: perfil || 'padrao', // 'master' ou 'padrao'
+                ativo: true,
+                criado_em: admin.firestore.FieldValue.serverTimestamp(),
+                uid_auth: userRecord.uid,
+                tenantId: tenantId
+            });
 
         return { success: true, message: `Profissional ${nome} criado!` };
 
