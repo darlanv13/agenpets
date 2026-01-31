@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -106,6 +107,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       final result = await _functions.httpsCallable('buscarHorarios').call({
         'dataConsulta': dataString,
         'servico': _servicoSelecionado!.toLowerCase(),
+        'tenantId': AppConfig.tenantId,
       });
 
       if (mounted) {
@@ -144,6 +146,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         'metodo_pagamento': 'na_loja',
         'valor': 0,
         'observacoes': _obsController.text.trim(),
+        'tenantId': AppConfig.tenantId,
       });
 
       _mostrarSucessoDialog();

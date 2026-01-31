@@ -18,12 +18,14 @@ exports.realizarCheckout = onCall(async (request) => {
             metodoPagamento,
             vouchersParaUsar,
             responsavel,
-            apenasMarcarComoPronto // <--- NOVO PARÂMETRO
+            apenasMarcarComoPronto, // <--- NOVO PARÂMETRO
+            tenantId
         } = request.data;
 
         if (!agendamentoId) throw new HttpsError('invalid-argument', 'ID obrigatório');
+        if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
-        const agendamentoRef = db.collection('agendamentos').doc(agendamentoId);
+        const agendamentoRef = db.collection("tenants").doc(tenantId).collection('agendamentos').doc(agendamentoId);
         const agendamentoSnap = await agendamentoRef.get();
 
         if (!agendamentoSnap.exists) throw new HttpsError('not-found', 'Agendamento não encontrado');
@@ -31,12 +33,14 @@ exports.realizarCheckout = onCall(async (request) => {
         const dadosAgendamento = agendamentoSnap.data();
         const userId = dadosAgendamento.userId;
         const userRef = db.collection('users').doc(userId);
-        const userSnap = await userRef.get();
-        const userData = userSnap.data() || {};
+        // Não precisamos do userSnap global para vouchers, apenas para logs se quiser
+
+        // Referência dos Vouchers da Loja
+        const voucherRef = userRef.collection('vouchers').doc(tenantId);
+        const voucherSnap = await voucherRef.get();
+        const voucherData = voucherSnap.exists ? voucherSnap.data() : {};
 
         // --- CÁLCULO DE VALORES ---
-        // Se estiver vindo do status 'pronto', pegamos o valor acumulado até agora.
-        // Se não, pegamos o original.
         let valorFinal = (dadosAgendamento.status === 'pronto' || dadosAgendamento.status === 'concluido')
             ? Number(dadosAgendamento.valor_final_cobrado || 0)
             : Number(dadosAgendamento.valor || 0);
@@ -45,40 +49,44 @@ exports.realizarCheckout = onCall(async (request) => {
 
         let vouchersConsumidosLog = dadosAgendamento.vouchers_consumidos || {};
         let usouVoucherBase = dadosAgendamento.usou_voucher || false;
-        let houveAlteracaoNoArray = false;
-        let listaAssinaturas = userData.voucher_assinatura || [];
 
-        // 1. Processa Vouchers (Geralmente feito pelo Profissional)
+        // Batch para atualização de vouchers (separado do update do agendamento se quiser, mas aqui usamos o mesmo batch no final?
+        // O código original usava 'batch' lá embaixo. Vamos usar um novo batch ou passar update para o batch final.
+        // O código original criava 'batch' APÓS o loop. Vamos acumular os updates.
+
+        const updatesVoucher = {};
+
+        // 1. Processa Vouchers
         if (vouchersParaUsar && Object.keys(vouchersParaUsar).length > 0) {
             const agora = admin.firestore.Timestamp.now();
-            for (const [chaveServico, usar] of Object.entries(vouchersParaUsar)) {
-                if (usar === true) {
-                    if (vouchersConsumidosLog[chaveServico]) continue;
 
-                    let pacoteIndex = -1;
-                    // Busca pacote válido
-                    for (let i = 0; i < listaAssinaturas.length; i++) {
-                        const pct = listaAssinaturas[i];
-                        if (pct.validade_pacote && pct.validade_pacote.seconds > agora.seconds) {
-                            if (pct[chaveServico] && pct[chaveServico] > 0) {
-                                pacoteIndex = i;
-                                break;
+            // Verifica Validade Geral da Loja
+            const validade = voucherData.validade; // Timestamp
+            const isValido = validade && validade.seconds > agora.seconds;
+
+            if (isValido) {
+                for (const [chaveServico, usar] of Object.entries(vouchersParaUsar)) {
+                    if (usar === true) {
+                        if (vouchersConsumidosLog[chaveServico]) continue;
+
+                        // Verifica saldo específico (ex: 'banho', 'tosa')
+                        const saldo = voucherData[chaveServico] || 0;
+
+                        if (saldo > 0) {
+                            // Decrementa
+                            updatesVoucher[chaveServico] = admin.firestore.FieldValue.increment(-1);
+
+                            vouchersConsumidosLog[chaveServico] = {
+                                usado: true,
+                                responsavel: responsavel || 'Sistema',
+                                data: agora
+                            };
+
+                            // Zera valor se for serviço base
+                            if ((chaveServico === 'banho' || chaveServico === 'tosa' || chaveServico === 'banhos' || chaveServico === 'tosas')) {
+                                valorFinal = 0;
+                                usouVoucherBase = true;
                             }
-                        }
-                    }
-
-                    if (pacoteIndex !== -1) {
-                        listaAssinaturas[pacoteIndex][chaveServico] -= 1;
-                        houveAlteracaoNoArray = true;
-                        vouchersConsumidosLog[chaveServico] = {
-                            usado: true,
-                            responsavel: responsavel || 'Sistema',
-                            data: agora
-                        };
-                        // Se for serviço principal, zera o valor
-                        if ((chaveServico === 'banhos' || chaveServico === 'tosa')) {
-                            valorFinal = 0;
-                            usouVoucherBase = true;
                         }
                     }
                 }
@@ -89,11 +97,11 @@ exports.realizarCheckout = onCall(async (request) => {
         let todosExtras = dadosAgendamento.extras || [];
         if (extrasIds && extrasIds.length > 0) {
             for (const extraId of extrasIds) {
-                let extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+                let extraDoc = await db.collection("tenants").doc(tenantId).collection('servicos_extras').doc(extraId).get();
                 let extraData = extraDoc.exists ? extraDoc.data() : null;
 
                 if (!extraDoc.exists) {
-                    extraDoc = await db.collection('produtos').doc(extraId).get();
+                    extraDoc = await db.collection("tenants").doc(tenantId).collection('produtos').doc(extraId).get();
                     if (extraDoc.exists) extraData = extraDoc.data();
                 }
 
@@ -146,12 +154,12 @@ exports.realizarCheckout = onCall(async (request) => {
             vouchers_consumidos: vouchersConsumidosLog,
             extras: todosExtras,
             usou_voucher: usouVoucherBase,
-            // Só data final se for concluído mesmo
             ...(novoStatus === 'concluido' ? { finalizado_em: admin.firestore.FieldValue.serverTimestamp() } : {})
         });
 
-        if (houveAlteracaoNoArray) {
-            batch.update(userRef, { voucher_assinatura: listaAssinaturas });
+        // Aplica updates nos vouchers se houver consumo
+        if (Object.keys(updatesVoucher).length > 0) {
+            batch.update(voucherRef, updatesVoucher);
         }
 
         await batch.commit();

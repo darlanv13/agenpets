@@ -99,8 +99,8 @@ exports.webhookPix = onRequest(async (req, res) => {
             const txid = p.txid;
             console.log(`Recebido PIX txid: ${txid}`);
 
-            // A. Tenta atualizar AGENDAMENTO (Mantém igual)
-            const agendamentoSnap = await db.collection('agendamentos').where('txid', '==', txid).get();
+            // A. Tenta atualizar AGENDAMENTO (Busca em todas as lojas)
+            const agendamentoSnap = await db.collectionGroup('agendamentos').where('txid', '==', txid).get();
             if (!agendamentoSnap.empty) {
                 const batch = db.batch();
                 agendamentoSnap.forEach(doc => {

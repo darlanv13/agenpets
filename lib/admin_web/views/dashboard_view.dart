@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
@@ -100,6 +101,8 @@ class _DashboardViewState extends State<DashboardView> {
             // STREAM PRINCIPAL (Busca Agendamentos do Período)
             StreamBuilder<QuerySnapshot>(
               stream: _db
+                  .collection('tenants')
+                  .doc(AppConfig.tenantId)
                   .collection('agendamentos')
                   .where(
                     'data_inicio',
@@ -540,6 +543,8 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _buildResumoHotel() {
     return StreamBuilder<QuerySnapshot>(
       stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('reservas_hotel')
           .where('status', isEqualTo: 'hospedado')
           .snapshots(),

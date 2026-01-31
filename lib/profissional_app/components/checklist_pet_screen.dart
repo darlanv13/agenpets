@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:image_picker/image_picker.dart';
@@ -58,6 +59,8 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
   Future<void> _loadServices() async {
     try {
       final snapshot = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('servicos_extras')
           .orderBy('nome')
           .get();
@@ -176,9 +179,12 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
 
       // 3. Atualizar Agendamento com Extras (Direct Write)
       if (_selectedServices.isNotEmpty) {
-        await _db.collection('agendamentos').doc(widget.agendamentoId).update({
-          'servicos_extras': _selectedServices,
-        });
+        await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('agendamentos')
+            .doc(widget.agendamentoId)
+            .update({'servicos_extras': _selectedServices});
       }
 
       // 4. Call Cloud Function
@@ -189,6 +195,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
       await functions.httpsCallable('salvarChecklistPet').call({
         'agendamentoId': widget.agendamentoId,
         'checklist': dadosChecklist,
+        'tenantId': AppConfig.tenantId,
       });
 
       if (!mounted) return;
