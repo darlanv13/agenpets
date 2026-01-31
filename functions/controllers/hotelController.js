@@ -5,13 +5,15 @@ const { db, admin } = require("../config/firebase");
 exports.reservarHotel = onCall(async (request) => {
     try {
         console.log("Iniciando reserva...", request.data);
-        const { check_in, check_out, pet_id, cpf_user } = request.data;
+        const { check_in, check_out, pet_id, cpf_user, tenantId } = request.data;
+
+        if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
         // Converte strings para Objetos Date
         const start = new Date(check_in);
         const end = new Date(check_out);
 
-        const reservasRef = db.collection("reservas_hotel");
+        const reservasRef = db.collection("tenants").doc(tenantId).collection("reservas_hotel");
 
         // --- AQUI ESTÁ A CORREÇÃO CRÍTICA ---
         // Só usamos filtro de desigualdade (>) no check_out.
@@ -61,13 +63,16 @@ exports.reservarHotel = onCall(async (request) => {
 
 // --- NOVA FUNÇÃO: Verificar Dias Lotados ---
 exports.obterDiasLotados = onCall(async (request) => {
+    const { tenantId } = request.data;
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+
     // 1. Configurações
     const CAPACIDADE_MAXIMA = 60; // Ou busque do banco config
     const hoje = startOfDay(new Date());
     const limiteFuturo = addDays(hoje, 60); // Verifica os próximos 60 dias
 
     // 2. Busca todas as reservas ativas no período
-    const reservasRef = db.collection("reservas_hotel");
+    const reservasRef = db.collection("tenants").doc(tenantId).collection("reservas_hotel");
     const snapshot = await reservasRef
         .where("check_out", ">=", hoje) // Que ainda não saíram
         .where("status", "in", ["reservado", "hospedado"])
@@ -117,83 +122,15 @@ exports.obterDiasLotados = onCall(async (request) => {
     return { dias_lotados: diasLotados };
 });
 
-// --- NOVA FUNÇÃO: Checkout Hotel Seguro ---
-exports.realizarCheckoutHotel = onCall(async (request) => {
-    const { reservaId, extrasIds, metodoPagamento } = request.data;
-
-    if (!reservaId) throw new HttpsError('invalid-argument', 'ID da reserva obrigatório');
-
-    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
-    const reservaSnap = await reservaRef.get();
-
-    if (!reservaSnap.exists) throw new HttpsError('not-found', 'Reserva não encontrada');
-    const dadosReserva = reservaSnap.data();
-
-    if (dadosReserva.status === 'concluido') throw new HttpsError('failed-precondition', 'Esta estadia já foi finalizada.');
-
-    // 1. Busca Configuração de Preço (Diária)
-    const configDoc = await db.collection("config").doc("parametros").get();
-    const valorDiaria = configDoc.exists ? (configDoc.data().preco_hotel_diaria || 0) : 0;
-
-    // 2. Calcula Dias de Estadia (Data Atual - Check-in Real)
-    // Se não tiver check_in_real (erro de processo), usa o agendado
-    const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
-    const dataCheckOut = new Date(); // Agora
-
-    let diasEstadia = differenceInCalendarDays(dataCheckOut, dataCheckIn);
-    if (diasEstadia < 1) diasEstadia = 1; // Mínimo 1 diária
-
-    let valorTotal = diasEstadia * valorDiaria;
-
-    // 3. Processa Extras (Busca preço real no banco)
-    let extrasProcessados = [];
-    if (extrasIds && extrasIds.length > 0) {
-        for (const extraId of extrasIds) {
-            const extraDoc = await db.collection('servicos_extras').doc(extraId).get();
-            if (extraDoc.exists) {
-                const extraData = extraDoc.data();
-                const precoExtra = Number(extraData.preco || 0);
-
-                valorTotal += precoExtra;
-
-                extrasProcessados.push({
-                    id: extraId,
-                    nome: extraData.nome,
-                    preco: precoExtra
-                });
-            }
-        }
-    }
-
-    // 4. Atualiza Reserva (Batch)
-    await reservaRef.update({
-        status: 'concluido',
-        payment_status: 'paid',
-        check_out_real: admin.firestore.FieldValue.serverTimestamp(),
-        metodo_pagamento_final: metodoPagamento,
-
-        // Detalhes Financeiros salvos para histórico
-        dias_cobrados: diasEstadia,
-        valor_diaria_aplicado: valorDiaria,
-        valor_total_final: valorTotal,
-        extras_consumidos: extrasProcessados,
-    });
-
-    return {
-        sucesso: true,
-        mensagem: 'Estadia finalizada com sucesso!',
-        valorCobrado: valorTotal,
-        dias: diasEstadia
-    };
-});
 
 // --- NOVA FUNÇÃO: Registrar Pagamento Parcial/Antecipado ---
 exports.registrarPagamentoHotel = onCall(async (request) => {
-    const { reservaId, valor, metodo } = request.data;
+    const { reservaId, valor, metodo, tenantId } = request.data;
 
     if (!reservaId || !valor) throw new HttpsError('invalid-argument', 'Dados incompletos');
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
-    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
+    const reservaRef = db.collection("tenants").doc(tenantId).collection('reservas_hotel').doc(reservaId);
 
     // Transação para garantir integridade do saldo
     await db.runTransaction(async (t) => {
@@ -222,14 +159,16 @@ exports.registrarPagamentoHotel = onCall(async (request) => {
 
 // --- ATUALIZADO: Checkout Hotel (Considerando saldo já pago) ---
 exports.realizarCheckoutHotel = onCall(async (request) => {
-    const { reservaId, extrasIds, metodoPagamentoDiferenca } = request.data;
+    const { reservaId, extrasIds, metodoPagamentoDiferenca, tenantId } = request.data;
 
-    const reservaRef = db.collection('reservas_hotel').doc(reservaId);
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+
+    const reservaRef = db.collection("tenants").doc(tenantId).collection('reservas_hotel').doc(reservaId);
     const reservaSnap = await reservaRef.get();
     const dadosReserva = reservaSnap.data();
 
     // 1. Cálculos de Custo (Diária + Extras)
-    const configDoc = await db.collection("config").doc("parametros").get();
+    const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
     const valorDiaria = configDoc.exists ? (configDoc.data().preco_hotel_diaria || 0) : 0;
 
     const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
@@ -245,11 +184,12 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
 
     if (extrasIds && extrasIds.length > 0) {
         for (const extraId of extrasIds) {
-            let extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            let extraDoc = await db.collection("tenants").doc(tenantId).collection('servicos_extras').doc(extraId).get();
             let extraData = extraDoc.exists ? extraDoc.data() : null;
 
             if (!extraDoc.exists) {
-                extraDoc = await db.collection('produtos').doc(extraId).get();
+                // Tenta produtos globais ou da loja? Assumindo da loja também
+                extraDoc = await db.collection("tenants").doc(tenantId).collection('produtos').doc(extraId).get();
                 if (extraDoc.exists) extraData = extraDoc.data();
             }
 

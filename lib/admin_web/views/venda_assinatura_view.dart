@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
@@ -115,16 +116,21 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
 
     try {
       // 1. Histórico
-      await _db.collection('vendas_assinaturas').add({
-        'userId': _clienteId,
-        'user_nome': _clienteSelecionado!['nome'],
-        'pacote_nome': _pacoteSelecionado!['nome'],
-        'pacote_id': _pacoteId,
-        'valor': _pacoteSelecionado!['preco'],
-        'metodo_pagamento': _metodoPagamento,
-        'data_venda': FieldValue.serverTimestamp(),
-        'atendente': 'Admin/Balcão',
-      });
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('vendas_assinaturas')
+          .add({
+            'userId': _clienteId,
+            'tenantId': AppConfig.tenantId,
+            'user_nome': _clienteSelecionado!['nome'],
+            'pacote_nome': _pacoteSelecionado!['nome'],
+            'pacote_id': _pacoteId,
+            'valor': _pacoteSelecionado!['preco'],
+            'metodo_pagamento': _metodoPagamento,
+            'data_venda': FieldValue.serverTimestamp(),
+            'atendente': 'Admin/Balcão',
+          });
 
       // 2. Validade e Objeto
       final dataValidade = DateTime.now().add(Duration(days: 30));
@@ -476,7 +482,9 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
 
         StreamBuilder<QuerySnapshot>(
           stream: _db
-              .collection('pacotes_assinatura')
+              .collection('tenants')
+              .doc(AppConfig.tenantId)
+              .collection('pacotes')
               .where('ativo', isEqualTo: true)
               .snapshots(),
           builder: (context, snapshot) {

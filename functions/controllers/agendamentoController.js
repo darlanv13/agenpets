@@ -14,16 +14,29 @@ function addDays(date, days) {
 exports.buscarHorarios = onCall(async (request) => {
     try {
         const data = request.data;
-        const { dataConsulta, servico } = data;
+        const { dataConsulta, servico, tenantId } = data;
+
+        if (!tenantId) {
+            throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+        }
 
         // CORREÇÃO 1: Criamos a variável servicoNorm que o código usa depois
         const servicoNorm = servico ? servico.toLowerCase() : '';
 
-        const configDoc = await db.collection("config").doc("parametros").get();
+        // Busca Configuração da Loja
+        const configDoc = await db.collection("tenants")
+            .doc(tenantId)
+            .collection("config")
+            .doc("parametros")
+            .get();
         const config = configDoc.exists ? configDoc.data() : {};
 
-        // 1. Separa os Profissionais
-        const prosSnapshot = await db.collection("profissionais").where("ativo", "==", true).get();
+        // 1. Separa os Profissionais da Loja
+        const prosSnapshot = await db.collection("tenants")
+            .doc(tenantId)
+            .collection("profissionais")
+            .where("ativo", "==", true)
+            .get();
         const banhistas = [];
         const tosadores = [];
 
@@ -41,11 +54,13 @@ exports.buscarHorarios = onCall(async (request) => {
 
         const duracaoServico = servicoNorm === 'tosa' ? (config.tempo_tosa_min || 90) : (config.tempo_banho_min || 60);
 
-        // 2. Busca agendamentos do dia
+        // 2. Busca agendamentos do dia (DA LOJA)
         const startOfDay = new Date(`${dataConsulta}T00:00:00`);
         const endOfDay = new Date(`${dataConsulta}T23:59:59`);
 
-        const agendamentosSnapshot = await db.collection("agendamentos")
+        const agendamentosSnapshot = await db.collection("tenants")
+            .doc(tenantId)
+            .collection("agendamentos")
             .where("data_inicio", ">=", startOfDay)
             .where("data_inicio", "<=", endOfDay)
             .where("status", "!=", "cancelado")
@@ -304,48 +319,23 @@ exports.criarAgendamento = onCall(async (request) => {
     return resposta;
 });
 
-// --- Webhook PIX (Atualizado para liberar Vouchers) ---
-exports.webhookPix = onRequest(async (req, res) => {
-    const { pix } = req.body;
-    if (pix) {
-        for (const p of pix) {
-            // 1. Verifica se é pagamento de Agendamento
-            const agendamentoSnap = await db.collection('agendamentos').where('txid', '==', p.txid).get();
-            agendamentoSnap.forEach(async doc => await doc.ref.update({ status: 'agendado' }));
-
-            // 2. Verifica se é pagamento de Assinatura
-            const assinaturaSnap = await db.collection('vendas_assinaturas').where('txid', '==', p.txid).get();
-            assinaturaSnap.forEach(async doc => {
-                const venda = doc.data();
-                if (venda.status !== 'pago') {
-                    await doc.ref.update({ status: 'pago' });
-
-                    // Adiciona Vouchers ao Usuário
-                    const qtdVoucher = 4;
-                    const campo = venda.plano === 'pct_banho' ? 'vouchers_banho' : 'vouchers_tosa';
-
-                    await db.collection('users').doc(venda.cpf_user).update({
-                        [campo]: admin.firestore.FieldValue.increment(qtdVoucher),
-                        validade_assinatura: admin.firestore.Timestamp.fromDate(addMinutes(new Date(), 30 * 24 * 60)) // +30 dias
-                    });
-                }
-            });
-        }
-    }
-    res.status(200).send();
-});
 
 
 
 // --- FUNÇÃO ATUALIZADA: Realizar Venda de Assinatura (Balcão/Admin) ---
 exports.realizarVendaAssinatura = onCall(async (request) => {
-    const { userId, pacoteId, metodoPagamento } = request.data;
+    const { userId, pacoteId, metodoPagamento, tenantId } = request.data;
 
     // 1. Validações
     if (!userId || !pacoteId) throw new HttpsError('invalid-argument', 'Dados incompletos');
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
-    // 2. Busca dados OFICIAIS do Pacote
-    const pacoteRef = db.collection('pacotes_assinatura').doc(pacoteId);
+    // 2. Busca dados OFICIAIS do Pacote (DA LOJA)
+    const pacoteRef = db.collection('tenants')
+        .doc(tenantId)
+        .collection('pacotes')
+        .doc(pacoteId);
+
     const pacoteSnap = await pacoteRef.get();
     if (!pacoteSnap.exists) throw new HttpsError('not-found', 'Pacote não encontrado');
     const pacoteData = pacoteSnap.data();
@@ -365,9 +355,10 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
     const validadeDate = addDays(new Date(), 30);
 
     // A. Registra o Histórico da Venda (Mantém igual para relatórios)
-    const vendaRef = db.collection('vendas_assinaturas').doc();
+    const vendaRef = db.collection('tenants').doc(tenantId).collection('vendas_assinaturas').doc();
     batch.set(vendaRef, {
         userId: userId,
+        tenantId: tenantId, // <--- Importante para filtro
         user_nome: userData.nome || 'Cliente',
         pacote_nome: pacoteData.nome,
         pacote_id: pacoteId,
@@ -397,13 +388,31 @@ exports.realizarVendaAssinatura = onCall(async (request) => {
         }
     }
 
-    // C. Atualiza o Usuário usando arrayUnion
+    // C. Atualiza o Usuário (Agora usando subcoleção da loja)
     batch.update(userRef, {
         assinante_ativo: true,
-        ultima_compra: dataVenda,
-        // Adiciona o novo objeto à lista existente
-        voucher_assinatura: admin.firestore.FieldValue.arrayUnion(novoItemVoucher)
+        ultima_compra: dataVenda
     });
+
+    // Atualiza/Cria o documento de vouchers da loja
+    const voucherRef = userRef.collection('vouchers').doc(tenantId);
+
+    // Prepara update da subcoleção
+    const voucherUpdate = {
+        ultima_compra: dataVenda,
+        validade: admin.firestore.Timestamp.fromDate(validadeDate),
+        // Campos de contagem serão incrementados abaixo
+    };
+
+    // Mapeia os itens do pacote para incrementos
+    for (const [key, value] of Object.entries(pacoteData)) {
+        if (key.startsWith('vouchers_') && typeof value === 'number' && value > 0) {
+            const nomeServico = key.replace('vouchers_', '');
+            voucherUpdate[nomeServico] = admin.firestore.FieldValue.increment(value);
+        }
+    }
+
+    batch.set(voucherRef, voucherUpdate, { merge: true });
 
     // 5. Efetiva tudo
     await batch.commit();
@@ -436,15 +445,22 @@ exports.salvarChecklistPet = onCall({
        }
     */
 
-    const { agendamentoId, checklist } = data;
+    const { agendamentoId, checklist, tenantId } = data;
 
     // 2. Validações básicas
     if (!agendamentoId || !checklist) {
         throw new HttpsError('invalid-argument', 'Dados incompletos: ID ou checklist faltando.');
     }
 
+    if (!tenantId) {
+        throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+    }
+
     // Nota: Usamos 'db' importado no topo do arquivo (não crie admin.firestore() aqui)
-    const agendamentoRef = db.collection('agendamentos').doc(agendamentoId);
+    const agendamentoRef = db.collection('tenants')
+        .doc(tenantId)
+        .collection('agendamentos')
+        .doc(agendamentoId);
 
     try {
         const doc = await agendamentoRef.get();

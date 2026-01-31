@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -25,44 +26,39 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Agora busca na subcoleção do Tenant atual
     return StreamBuilder<DocumentSnapshot>(
-      stream: _db.collection('users').doc(widget.userCpf).snapshots(),
+      stream: _db
+          .collection('users')
+          .doc(widget.userCpf)
+          .collection('vouchers')
+          .doc(AppConfig.tenantId)
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData)
           return Center(child: CircularProgressIndicator(color: _corAcai));
 
-        final userData = snapshot.data!.data() as Map<String, dynamic>?;
-        if (userData == null) return _buildEmptyState();
-
-        // 1. Busca a lista de assinaturas (Array no banco)
-        List<dynamic> listaAssinaturas = userData['voucher_assinatura'] ?? [];
-
-        // 2. Filtra apenas as válidas (Data futura)
-        List<Map<String, dynamic>> assinaturasValidas = [];
-
-        for (var item in listaAssinaturas) {
-          if (item is Map) {
-            // Garante que é um objeto
-            Timestamp? validade = item['validade_pacote'];
-            if (validade != null && validade.toDate().isAfter(DateTime.now())) {
-              assinaturasValidas.add(item as Map<String, dynamic>);
-            }
-          }
-        }
-
-        // 3. Se não tiver nenhuma válida, mostra tela de "Sem Assinatura"
-        if (assinaturasValidas.isEmpty) {
+        if (!snapshot.data!.exists) {
           return _buildSemAssinatura(context);
         }
 
-        // 4. Lista os Cards (Pode ter mais de um agora!)
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+
+        // Verifica Validade
+        Timestamp? validadeTs = data['validade'];
+        if (validadeTs == null ||
+            validadeTs.toDate().isBefore(DateTime.now())) {
+          return _buildSemAssinatura(context);
+        }
+
+        // Como agora é um único documento por loja, tratamos como uma assinatura única ativa
         return SingleChildScrollView(
           padding: EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Suas Assinaturas Ativas",
+                "Sua Assinatura Ativa",
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -70,14 +66,7 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
                 ),
               ),
               SizedBox(height: 15),
-
-              // Gera um card para cada assinatura válida
-              ...assinaturasValidas.map((assinatura) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: _buildAssinaturaCard(assinatura),
-                );
-              }).toList(),
+              _buildAssinaturaCard(data),
             ],
           ),
         );
@@ -86,9 +75,13 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
   }
 
   Widget _buildAssinaturaCard(Map<String, dynamic> dados) {
-    // Extrai dados fixos
-    String nomePacote = dados['nome_pacote'] ?? 'Pacote Premium';
-    DateTime validade = (dados['validade_pacote'] as Timestamp).toDate();
+    // Extrai dados fixos (Adaptado para estrutura nova)
+    // O nome do pacote pode não estar salvo se for apenas contadores,
+    // mas idealmente salvamos no momento da compra. Se não tiver, chamamos de "Assinatura Local"
+    String nomePacote = dados['nome_pacote'] ?? 'Assinatura Ativa';
+
+    // Validade agora é 'validade', não 'validade_pacote'
+    DateTime validade = (dados['validade'] as Timestamp).toDate();
 
     // Identifica chaves de serviços (ignora metadados)
     List<Widget> listaServicos = [];
@@ -96,8 +89,8 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
     dados.forEach((key, value) {
       // Ignora campos que não são serviços (contadores)
       if (key != 'nome_pacote' &&
-          key != 'validade_pacote' &&
-          key != 'data_compra' &&
+          key != 'validade' &&
+          key != 'ultima_compra' &&
           value is int) {
         listaServicos.add(_buildSaldoRowDinamyc(key, value));
         listaServicos.add(Divider(height: 20));

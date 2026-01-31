@@ -5,20 +5,26 @@ const { db, admin } = require("../config/firebase");
 exports.reservarCreche = onCall(async (request) => {
     try {
         console.log("Iniciando reserva creche...", request.data);
-        const { dates, pet_id, cpf_user } = request.data;
+        const { dates, pet_id, cpf_user, tenantId } = request.data;
 
+        if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
         if (!dates || !Array.isArray(dates) || dates.length === 0) {
             throw new HttpsError('invalid-argument', 'Nenhuma data selecionada.');
         }
 
-        const reservasRef = db.collection("reservas_creche");
+        const reservasRef = db.collection("tenants").doc(tenantId).collection("reservas_creche");
         const userRef = db.collection("users").doc(cpf_user);
 
-        // 1. Verificar Vouchers Disponíveis
-        const userDoc = await userRef.get();
+        // 1. Verificar Vouchers Disponíveis (NA LOJA ESPECÍFICA)
+        // Vouchers ficam em users/{cpf}/vouchers/{tenantId}
+        const voucherRef = userRef.collection('vouchers').doc(tenantId);
+        const voucherDoc = await voucherRef.get();
+
         let vouchersDisponiveis = 0;
-        if (userDoc.exists) {
-            vouchersDisponiveis = userDoc.data().vouchers_creche || 0;
+        if (voucherDoc.exists) {
+            // Assume que o campo se chama 'creche' ou 'vouchers_creche'? 
+            // PaymentController usa 'creche'. Flutter usa 'creche'.
+            vouchersDisponiveis = voucherDoc.data().creche || voucherDoc.data().vouchers_creche || 0;
         }
 
         let vouchersAUsar = 0;
@@ -54,8 +60,10 @@ exports.reservarCreche = onCall(async (request) => {
         const batch = db.batch();
 
         if (vouchersAUsar > 0) {
-            batch.update(userRef, {
-                vouchers_creche: admin.firestore.FieldValue.increment(-vouchersAUsar)
+            // Deduz do documento de vouchers da loja
+            // Usando 'creche' para manter consistência com o paymentController
+            batch.update(voucherRef, {
+                creche: admin.firestore.FieldValue.increment(-vouchersAUsar)
             });
         }
 
@@ -101,13 +109,16 @@ exports.reservarCreche = onCall(async (request) => {
 
 // --- Verificar Dias Lotados Creche ---
 exports.obterDiasLotadosCreche = onCall(async (request) => {
+    const { tenantId } = request.data;
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+
     // 1. Configurações
     const CAPACIDADE_MAXIMA = 60; // Ou busque do banco config
     const hoje = startOfDay(new Date());
     const limiteFuturo = addDays(hoje, 60); // Verifica os próximos 60 dias
 
     // 2. Busca todas as reservas ativas no período
-    const reservasRef = db.collection("reservas_creche");
+    const reservasRef = db.collection("tenants").doc(tenantId).collection("reservas_creche");
     const snapshot = await reservasRef
         .where("check_out", ">=", hoje) // Que ainda não saíram
         .where("status", "in", ["reservado", "hospedado"])
@@ -159,7 +170,10 @@ exports.obterDiasLotadosCreche = onCall(async (request) => {
 // --- Obter Preço da Creche (Segurança) ---
 exports.obterPrecoCreche = onCall(async (request) => {
     try {
-        const doc = await db.collection("config").doc("parametros").get();
+        const { tenantId } = request.data;
+        if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+
+        const doc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
         if (doc.exists) {
             return { preco: Number(doc.data().preco_creche || 0) };
         }
@@ -172,11 +186,12 @@ exports.obterPrecoCreche = onCall(async (request) => {
 
 // --- Registrar Pagamento Parcial/Antecipado Creche ---
 exports.registrarPagamentoCreche = onCall(async (request) => {
-    const { reservaId, valor, metodo } = request.data;
+    const { reservaId, valor, metodo, tenantId } = request.data;
 
     if (!reservaId || !valor) throw new HttpsError('invalid-argument', 'Dados incompletos');
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
-    const reservaRef = db.collection('reservas_creche').doc(reservaId);
+    const reservaRef = db.collection("tenants").doc(tenantId).collection('reservas_creche').doc(reservaId);
 
     // Transação para garantir integridade do saldo
     await db.runTransaction(async (t) => {
@@ -205,14 +220,16 @@ exports.registrarPagamentoCreche = onCall(async (request) => {
 
 // --- Checkout Creche ---
 exports.realizarCheckoutCreche = onCall(async (request) => {
-    const { reservaId, extrasIds, metodoPagamentoDiferenca } = request.data;
+    const { reservaId, extrasIds, metodoPagamentoDiferenca, tenantId } = request.data;
 
-    const reservaRef = db.collection('reservas_creche').doc(reservaId);
+    if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
+
+    const reservaRef = db.collection("tenants").doc(tenantId).collection('reservas_creche').doc(reservaId);
     const reservaSnap = await reservaRef.get();
     const dadosReserva = reservaSnap.data();
 
     // 1. Cálculos de Custo (Diária + Extras)
-    const configDoc = await db.collection("config").doc("parametros").get();
+    const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
     const valorDiaria = configDoc.exists ? (configDoc.data().preco_creche || 0) : 0;
 
     const dataCheckIn = dadosReserva.check_in_real ? dadosReserva.check_in_real.toDate() : dadosReserva.check_in.toDate();
@@ -228,11 +245,11 @@ exports.realizarCheckoutCreche = onCall(async (request) => {
 
     if (extrasIds && extrasIds.length > 0) {
         for (const extraId of extrasIds) {
-            let extraDoc = await db.collection('servicos_extras').doc(extraId).get();
+            let extraDoc = await db.collection("tenants").doc(tenantId).collection('servicos_extras').doc(extraId).get();
             let extraData = extraDoc.exists ? extraDoc.data() : null;
 
             if (!extraDoc.exists) {
-                extraDoc = await db.collection('produtos').doc(extraId).get();
+                extraDoc = await db.collection("tenants").doc(tenantId).collection('produtos').doc(extraId).get();
                 if (extraDoc.exists) extraData = extraDoc.data();
             }
 

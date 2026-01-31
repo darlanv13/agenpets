@@ -38,7 +38,7 @@
   "hosting": [
     {
       "target": "agenpets",
-      "public": "build/web",
+      "public": "build/web_agenpets",
       "ignore": [
         "firebase.json",
         "**/.*",

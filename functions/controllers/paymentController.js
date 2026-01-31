@@ -63,7 +63,7 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
-    const vendaRef = db.collection('vendas_assinaturas').doc();
+    const vendaRef = db.collection('tenants').doc(tenantId).collection('vendas_assinaturas').doc();
 
     await vendaRef.set({
         userId: cpf_user,
@@ -99,8 +99,8 @@ exports.webhookPix = onRequest(async (req, res) => {
             const txid = p.txid;
             console.log(`Recebido PIX txid: ${txid}`);
 
-            // A. Tenta atualizar AGENDAMENTO (Mantém igual)
-            const agendamentoSnap = await db.collection('agendamentos').where('txid', '==', txid).get();
+            // A. Tenta atualizar AGENDAMENTO (Busca em todas as lojas)
+            const agendamentoSnap = await db.collectionGroup('agendamentos').where('txid', '==', txid).get();
             if (!agendamentoSnap.empty) {
                 const batch = db.batch();
                 agendamentoSnap.forEach(doc => {
@@ -111,7 +111,7 @@ exports.webhookPix = onRequest(async (req, res) => {
             }
 
             // B. Tenta atualizar VENDA DE ASSINATURA/PACOTE
-            const vendaSnap = await db.collection('vendas_assinaturas').where('txid', '==', txid).get();
+            const vendaSnap = await db.collectionGroup('vendas_assinaturas').where('txid', '==', txid).get();
             if (!vendaSnap.empty) {
                 const vendaDoc = vendaSnap.docs[0];
                 const vendaData = vendaDoc.data();

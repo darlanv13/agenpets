@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:936955635480:android:f1b2efe2875bb49b86e06d",
+        "android_client_info": {
+          "package_name": "com.agenpets.afazendinha"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDd4yk9yjyEIA1vVlBuFyDMmfyY_-ti96k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:936955635480:android:dad2a038ccd3cf2286e06d",
         "android_client_info": {
           "package_name": "com.example.agenpet"
