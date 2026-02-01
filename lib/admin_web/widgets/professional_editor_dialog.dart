@@ -30,6 +30,23 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
   // Colors (copied from EquipeView for consistency)
   final Color _corAcai = Color(0xFF4A148C);
 
+  // --- PERMISSÕES DE ACESSO (PÁGINAS) ---
+  final Map<String, String> _availablePages = {
+    'dashboard': 'Dashboard',
+    'loja_pdv': 'Loja / PDV',
+    'banhos_tosa': 'Banhos & Tosa',
+    'hotel': 'Hotel & Estadia',
+    'creche': 'Creche',
+    'venda_planos': 'Venda de Planos',
+    'gestao_precos': 'Tabela de Preços',
+    'banners_app': 'Banners do App',
+    'equipe': 'Gestão de Equipe',
+    'configuracoes': 'Configurações',
+    'gestao_estoque': 'Gestão de Estoque',
+  };
+
+  final Map<String, bool> _selectedAccess = {};
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +61,12 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
     fazVendas = skills.contains('vendedor');
     fazCaixa = skills.contains('caixa');
     fazMaster = skills.contains('master');
+
+    // Init Access
+    final List<dynamic> currentAccess = data['acessos'] ?? [];
+    _availablePages.forEach((key, value) {
+      _selectedAccess[key] = currentAccess.contains(key);
+    });
   }
 
   Future<void> _salvar() async {
@@ -61,11 +84,24 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
 
       String perfil = fazMaster ? 'master' : 'padrao';
 
+      // Prepare Access List
+      List<String> acessos = [];
+      if (fazMaster) {
+         // Optionally save all keys, or just empty if logic relies only on master profile.
+         // Saving keys allows easier downgrade later.
+         acessos = _availablePages.keys.toList();
+      } else {
+        _selectedAccess.forEach((key, value) {
+          if (value) acessos.add(key);
+        });
+      }
+
       await widget.profissional.reference.update({
         'nome': _nomeCtrl.text.trim(),
         'habilidades': habs,
         'perfil': perfil,
         'ativo': ativo,
+        'acessos': acessos,
         // CPF não atualiza pois é chave/login
       });
 
@@ -263,10 +299,43 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
                   fazMaster,
                   (v) => setState(() {
                     fazMaster = v!;
-                    if (v) fazCaixa = true;
+                    if (v) {
+                       fazCaixa = true;
+                       _availablePages.forEach((key, val) => _selectedAccess[key] = true);
+                    }
                   }),
                   isAlert: true,
                 ),
+
+                // --- SEÇÃO DE ACESSOS ---
+                if (!fazMaster) ...[
+                  SizedBox(height: 20),
+                  Divider(),
+                  Text(
+                    "Acesso às Páginas (Permissões)",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  ..._availablePages.entries.map((entry) {
+                    return CheckboxListTile(
+                      title: Text(entry.value),
+                      value: _selectedAccess[entry.key] ?? false,
+                      activeColor: _corAcai,
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedAccess[entry.key] = val ?? false;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ],
               ],
             ),
           ),

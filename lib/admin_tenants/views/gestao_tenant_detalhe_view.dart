@@ -2,6 +2,7 @@ import 'package:agenpet/admin_tenants/widgets/tenant_team_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class GestaoTenantDetalheView extends StatefulWidget {
   final String tenantId;
@@ -24,6 +25,10 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
+
+  // Colors
+  final Color _corAcai = Color(0xFF4A148C);
+  final Color _corFundo = Color(0xFFF5F7FA);
 
   // Config Controllers
   final _efipayClientIdCtrl = TextEditingController();
@@ -121,22 +126,24 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFF5F7FA),
+      backgroundColor: _corFundo,
       appBar: AppBar(
         title: Text(
           "Gerenciar: ${widget.nomeLoja}",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.blue[900],
+        backgroundColor: _corAcai,
+        elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          unselectedLabelColor: Colors.white54,
           indicatorColor: Colors.amber,
+          indicatorWeight: 4,
           tabs: [
-            Tab(text: "Configurações"),
-            Tab(text: "Equipe de Acesso"),
+            Tab(text: "Configurações da Loja", icon: Icon(Icons.store)),
+            Tab(text: "Gestão de Acesso", icon: Icon(Icons.people_alt)),
           ],
         ),
       ),
@@ -151,57 +158,40 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   }
 
   Widget _buildConfigTab() {
-    if (_isLoading) return Center(child: CircularProgressIndicator());
+    if (_isLoading) return Center(child: CircularProgressIndicator(color: _corAcai));
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle("Serviços Disponíveis"),
+          _buildSectionTitle("Serviços Disponíveis", FontAwesomeIcons.layerGroup),
           Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             child: Column(
               children: [
-                SwitchListTile(
-                  title: Text("Banho"),
-                  value: _temBanho,
-                  onChanged: (v) => setState(() => _temBanho = v),
-                ),
-                SwitchListTile(
-                  title: Text("Tosa"),
-                  value: _temTosa,
-                  onChanged: (v) => setState(() => _temTosa = v),
-                ),
-                SwitchListTile(
-                  title: Text("Creche"),
-                  value: _temCreche,
-                  onChanged: (v) => setState(() => _temCreche = v),
-                ),
-                SwitchListTile(
-                  title: Text("Hotel"),
-                  value: _temHotel,
-                  onChanged: (v) => setState(() => _temHotel = v),
-                ),
+                _buildSwitch("Banho", _temBanho, (v) => setState(() => _temBanho = v), FontAwesomeIcons.shower),
+                Divider(height: 1),
+                _buildSwitch("Tosa", _temTosa, (v) => setState(() => _temTosa = v), FontAwesomeIcons.scissors),
+                Divider(height: 1),
+                _buildSwitch("Creche", _temCreche, (v) => setState(() => _temCreche = v), FontAwesomeIcons.dog),
+                Divider(height: 1),
+                _buildSwitch("Hotel", _temHotel, (v) => setState(() => _temHotel = v), FontAwesomeIcons.hotel),
               ],
             ),
           ),
           SizedBox(height: 30),
 
-          _buildSectionTitle("Identidade Visual (URLs)"),
+          _buildSectionTitle("Identidade Visual", Icons.palette),
           Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             child: Padding(
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  TextField(
-                    controller: _logoAppCtrl,
-                    decoration: InputDecoration(
-                      labelText: "URL Logo App Cliente",
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.image),
-                    ),
-                    onChanged: (v) => setState(() {}),
-                  ),
+                  _buildTextField(_logoAppCtrl, "URL Logo App Cliente", Icons.image),
                   if (_logoAppCtrl.text.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 10, bottom: 20),
@@ -218,15 +208,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                       ),
                     ),
                   SizedBox(height: 15),
-                  TextField(
-                    controller: _logoAdminCtrl,
-                    decoration: InputDecoration(
-                      labelText: "URL Logo Painel Admin",
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.image),
-                    ),
-                    onChanged: (v) => setState(() {}),
-                  ),
+                  _buildTextField(_logoAdminCtrl, "URL Logo Painel Admin", Icons.admin_panel_settings),
                   if (_logoAdminCtrl.text.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
@@ -248,8 +230,10 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           ),
           SizedBox(height: 30),
 
-          _buildSectionTitle("Pagamento (Gateway)"),
+          _buildSectionTitle("Pagamento (Gateway)", Icons.payment),
           Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             child: Padding(
               padding: EdgeInsets.all(20),
               child: Column(
@@ -258,7 +242,8 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                     value: _gatewayPagamento,
                     decoration: InputDecoration(
                       labelText: "Gateway Principal",
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      prefixIcon: Icon(Icons.account_balance_wallet, color: _corAcai),
                     ),
                     items: [
                       DropdownMenuItem(
@@ -278,37 +263,19 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                   if (_gatewayPagamento == 'efipay') ...[
                     Text(
                       "Credenciais EfiPay",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700]),
                     ),
+                    SizedBox(height: 15),
+                    _buildTextField(_efipayClientIdCtrl, "Client ID (Homolog/Prod)", Icons.key),
                     SizedBox(height: 10),
-                    TextField(
-                      controller: _efipayClientIdCtrl,
-                      decoration: InputDecoration(
-                        labelText: "Client ID (Homolog/Prod)",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _efipayClientSecretCtrl,
-                      decoration: InputDecoration(
-                        labelText: "Client Secret (Homolog/Prod)",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+                    _buildTextField(_efipayClientSecretCtrl, "Client Secret (Homolog/Prod)", Icons.lock),
                   ] else ...[
                     Text(
                       "Credenciais Mercado Pago",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700]),
                     ),
-                    SizedBox(height: 10),
-                    TextField(
-                      controller: _mpAccessTokenCtrl,
-                      decoration: InputDecoration(
-                        labelText: "Access Token",
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+                    SizedBox(height: 15),
+                    _buildTextField(_mpAccessTokenCtrl, "Access Token", Icons.vpn_key),
                   ],
                 ],
               ),
@@ -318,7 +285,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           SizedBox(height: 40),
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 55,
             child: ElevatedButton.icon(
               icon: _isLoading
                   ? SizedBox(
@@ -332,8 +299,12 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                   : Icon(Icons.save),
               label: Text(_isLoading ? "SALVANDO..." : "SALVAR CONFIGURAÇÕES"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[900],
+                backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                   borderRadius: BorderRadius.circular(15)
+                ),
+                elevation: 4,
               ),
               onPressed: _isLoading ? null : _salvarConfiguracoes,
             ),
@@ -343,16 +314,50 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.blue[900],
-        ),
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Row(
+        children: [
+          Icon(icon, color: _corAcai, size: 22),
+          SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitch(String title, bool val, Function(bool) onChanged, IconData icon) {
+    return SwitchListTile(
+      title: Row(
+        children: [
+           FaIcon(icon, color: val ? _corAcai : Colors.grey, size: 18),
+           SizedBox(width: 15),
+           Text(title, style: TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+      value: val,
+      activeColor: _corAcai,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildTextField(TextEditingController ctrl, String label, IconData icon) {
+    return TextField(
+      controller: ctrl,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        prefixIcon: Icon(icon, color: _corAcai),
+        filled: true,
+        fillColor: Colors.grey[50],
       ),
     );
   }
