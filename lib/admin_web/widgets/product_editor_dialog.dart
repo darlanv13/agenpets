@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 
 class ProductEditorDialog extends StatefulWidget {
@@ -96,10 +97,19 @@ class _ProductEditorDialogState extends State<ProductEditorDialog> {
         // Criar
         data['qtd_vendida'] = 0;
         data['criado_em'] = FieldValue.serverTimestamp();
-        await _db.collection('produtos').add(data);
+        await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('produtos')
+            .add(data);
       } else {
         // Editar
-        await _db.collection('produtos').doc(widget.produto!.id).update(data);
+        await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('produtos')
+            .doc(widget.produto!.id)
+            .update(data);
       }
 
       if (mounted) {
