@@ -5,7 +5,8 @@ class RegistrarPagamentoCrecheDialog extends StatefulWidget {
   final String reservaId;
   final String nomePet;
 
-  const RegistrarPagamentoCrecheDialog({super.key, 
+  const RegistrarPagamentoCrecheDialog({
+    super.key,
     required this.reservaId,
     required this.nomePet,
   });

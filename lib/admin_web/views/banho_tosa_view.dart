@@ -1,6 +1,7 @@
 import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
 import 'package:agenpet/admin_web/views/components/novo_agendamento_dialog.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -59,6 +60,8 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
     );
 
     _agendamentosStream = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
         .collection('agendamentos')
         .where(
           'data_inicio',
@@ -146,6 +149,8 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
     final userData = userDoc.data() ?? {};
 
     final extrasSnap = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
         .collection('servicos_extras')
         .where('ativo', isEqualTo: true)
         .get();
@@ -167,6 +172,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
       builder: (ctx) => UnifiedCheckoutDialog(
         contextType: CheckoutContext.agenda,
         referenceId: agendamentoDoc.id,
+        userId: userId,
         clientData: userData,
         baseItem: {
           'nome': servicoNome,
@@ -385,6 +391,8 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                       : StreamBuilder<DocumentSnapshot>(
                           key: ValueKey(_selectedAgendamentoId),
                           stream: _db
+                              .collection('tenants')
+                              .doc(AppConfig.tenantId)
                               .collection('agendamentos')
                               .doc(_selectedAgendamentoId)
                               .snapshots(),
@@ -780,27 +788,23 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                             child: Column(
                               children: [
                                 if (data['extras'] != null)
-                                  ...(data['extras'] as List)
-                                      .map(
-                                        (e) => _row(
-                                          "+ ${e['nome']}",
-                                          "R\$ ${e['preco']}",
-                                          color: _corAtencao,
-                                          fontSize: 12,
-                                        ),
-                                      )
-                                      ,
+                                  ...(data['extras'] as List).map(
+                                    (e) => _row(
+                                      "+ ${e['nome']}",
+                                      "R\$ ${e['preco']}",
+                                      color: _corAtencao,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 if (data['servicos_extras'] != null)
-                                  ...(data['servicos_extras'] as List)
-                                      .map(
-                                        (e) => _row(
-                                          "+ ${e['nome']}",
-                                          "R\$ ${e['preco']}",
-                                          color: _corAtencao,
-                                          fontSize: 12,
-                                        ),
-                                      )
-                                      ,
+                                  ...(data['servicos_extras'] as List).map(
+                                    (e) => _row(
+                                      "+ ${e['nome']}",
+                                      "R\$ ${e['preco']}",
+                                      color: _corAtencao,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 if ((data['extras'] == null ||
                                         (data['extras'] as List).isEmpty) &&
                                     (data['servicos_extras'] == null ||

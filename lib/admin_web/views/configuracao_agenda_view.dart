@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -41,7 +42,12 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
 
   Future<void> _carregarDados() async {
     try {
-      final doc = await _db.collection('config').doc('parametros').get();
+      final doc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
@@ -65,14 +71,19 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
   Future<void> _salvar() async {
     setState(() => _isSaving = true);
     try {
-      await _db.collection('config').doc('parametros').set({
-        'horario_abertura': _timeToString(_abertura),
-        'horario_fechamento': _timeToString(_fechamento),
-        'tempo_banho_min': int.tryParse(_tempoBanhoController.text) ?? 60,
-        'tempo_tosa_min': int.tryParse(_tempoTosaController.text) ?? 90,
-        'dias_funcionamento': _diasFuncionamento,
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .set({
+            'horario_abertura': _timeToString(_abertura),
+            'horario_fechamento': _timeToString(_fechamento),
+            'tempo_banho_min': int.tryParse(_tempoBanhoController.text) ?? 60,
+            'tempo_tosa_min': int.tryParse(_tempoTosaController.text) ?? 90,
+            'dias_funcionamento': _diasFuncionamento,
+            'updated_at': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

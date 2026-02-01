@@ -133,26 +133,37 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
             'atendente': 'Admin/Balcão',
           });
 
-      // 2. Validade e Objeto
+      // 2. Validade e Objeto (Atualização para Subcoleção Tenant)
       final dataValidade = DateTime.now().add(Duration(days: 30));
-      Map<String, dynamic> novoItemVoucher = {
+
+      Map<String, dynamic> voucherData = {
         'nome_pacote': _pacoteSelecionado!['nome'],
-        'validade_pacote': Timestamp.fromDate(dataValidade),
-        'data_compra': Timestamp.now(),
+        'validade': Timestamp.fromDate(
+          dataValidade,
+        ), // Compatível com MeusVouchersTab
+        'ultima_compra': FieldValue.serverTimestamp(),
       };
 
-      // 3. Mapeamento
+      // 3. Mapeamento (Incrementa saldos existentes)
       _pacoteSelecionado!.forEach((key, value) {
         if (key.startsWith('vouchers_') && (value is int || value is double)) {
           String nomeServico = key.replaceFirst('vouchers_', '');
-          novoItemVoucher[nomeServico] = value;
+          // Usa incremento para somar ao saldo atual
+          voucherData[nomeServico] = FieldValue.increment(value);
         }
       });
 
-      // 4. Update User
+      // 4. Update User Tenant Vouchers
+      await _db
+          .collection('users')
+          .doc(_clienteId)
+          .collection('vouchers')
+          .doc(AppConfig.tenantId)
+          .set(voucherData, SetOptions(merge: true));
+
+      // 5. Update Legacy Metadata (Opcional, mas bom para lista de clientes geral)
       await _db.collection('users').doc(_clienteId).update({
         'ultima_compra': FieldValue.serverTimestamp(),
-        'voucher_assinatura': FieldValue.arrayUnion([novoItemVoucher]),
       });
 
       if (mounted) {
@@ -593,14 +604,12 @@ class _VendaAssinaturaViewState extends State<VendaAssinaturaView> {
                                 if (tosas > 0)
                                   _itemListaClean("$tosas x Tosa", true),
                                 // Loop nos Extras
-                                ...extras
-                                    .map(
-                                      (e) => _itemListaClean(
-                                        "${e['qtd']}x ${e['servico']}",
-                                        false,
-                                      ),
-                                    )
-                                    ,
+                                ...extras.map(
+                                  (e) => _itemListaClean(
+                                    "${e['qtd']}x ${e['servico']}",
+                                    false,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
