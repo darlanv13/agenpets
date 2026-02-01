@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -93,7 +94,11 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
             // Lista de Banners
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _db.collection('banners').snapshots(),
+                stream: _db
+                    .collection('tenants')
+                    .doc(AppConfig.tenantId)
+                    .collection('banners')
+                    .snapshots(),
                 builder: (ctx, snap) {
                   if (!snap.hasData) {
                     return Center(
@@ -548,9 +553,15 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                   };
 
                   if (docId == null) {
-                    await _db.collection('banners').add(bannerData);
+                    await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
+                        .collection('banners')
+                        .add(bannerData);
                   } else {
                     await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
                         .collection('banners')
                         .doc(docId)
                         .update(bannerData);

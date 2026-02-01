@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,7 +45,12 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
 
   Widget _buildContent() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _db.collection('produtos').orderBy('nome').snapshots(),
+      stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('produtos')
+          .orderBy('nome')
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
@@ -642,9 +648,14 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                     int novoEstoque = isAdicionar ? atual + qtd : atual - qtd;
                     if (novoEstoque < 0) novoEstoque = 0;
 
-                    await _db.collection('produtos').doc(docId).update({
-                      'qtd_estoque': novoEstoque,
-                    });
+                    await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
+                        .collection('produtos')
+                        .doc(docId)
+                        .update({
+                          'qtd_estoque': novoEstoque,
+                        });
 
                     // Idealmente aqui salvaríamos no histórico 'movimentacoes_estoque'
                     // Mas para manter simples e dentro do escopo do pedido, ficamos por aqui.

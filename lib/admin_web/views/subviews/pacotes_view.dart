@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -77,7 +78,11 @@ class _PacotesViewState extends State<PacotesView> {
 
   Widget _buildGrid() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _db.collection('pacotes_assinatura').snapshots(),
+      stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('pacotes')
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
@@ -129,7 +134,7 @@ class _PacotesViewState extends State<PacotesView> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 15,
             offset: Offset(0, 5),
           ),
@@ -142,7 +147,7 @@ class _PacotesViewState extends State<PacotesView> {
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
             decoration: BoxDecoration(
               color: isAtivo
-                  ? Colors.green.withValues(alpha: 0.1)
+                  ? Colors.green.withOpacity(0.1)
                   : Colors.grey[100],
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
@@ -499,6 +504,8 @@ class _PacotesViewState extends State<PacotesView> {
                                     // Future Builder para outros serviços
                                     StreamBuilder<QuerySnapshot>(
                                       stream: _db
+                                          .collection('tenants')
+                                          .doc(AppConfig.tenantId)
                                           .collection('servicos_extras')
                                           .snapshots(),
                                       builder: (context, snap) {
@@ -683,9 +690,18 @@ class _PacotesViewState extends State<PacotesView> {
     };
 
     if (docId == null) {
-      await _db.collection('pacotes_assinatura').add(data);
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('pacotes')
+          .add(data);
     } else {
-      await _db.collection('pacotes_assinatura').doc(docId).update(data);
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('pacotes')
+          .doc(docId)
+          .update(data);
     }
 
     if (!context.mounted) return;

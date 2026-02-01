@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -30,7 +31,12 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
 
   void _carregarDados() async {
     try {
-      final doc = await _db.collection('config').doc('parametros').get();
+      final doc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
@@ -45,12 +51,18 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
 
   void _salvar() async {
     try {
-      await _db.collection('config').doc('parametros').set({
-        'preco_hotel_diaria':
-            double.tryParse(_precoHotelCtrl.text.replaceAll(',', '.')) ?? 0,
-        'preco_creche':
-            double.tryParse(_precoCrecheCtrl.text.replaceAll(',', '.')) ?? 0,
-      }, SetOptions(merge: true));
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .set({
+            'preco_hotel_diaria':
+                double.tryParse(_precoHotelCtrl.text.replaceAll(',', '.')) ?? 0,
+            'preco_creche':
+                double.tryParse(_precoCrecheCtrl.text.replaceAll(',', '.')) ??
+                0,
+          }, SetOptions(merge: true));
 
       if (!context.mounted) return;
 
@@ -103,7 +115,7 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
                   borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withOpacity(0.05),
                       blurRadius: 20,
                       offset: Offset(0, 5),
                     ),
@@ -175,7 +187,7 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
         Container(
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: FaIcon(icon, color: color, size: 28),
