@@ -58,6 +58,32 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   bool fazCaixa = false; // Operador de Caixa
   bool fazMaster = false; // Gerente / Admin
 
+  // --- PERMISSÕES DE ACESSO (PÁGINAS) ---
+  final Map<String, String> _availablePages = {
+    'dashboard': 'Dashboard',
+    'loja_pdv': 'Loja / PDV',
+    'banhos_tosa': 'Banhos & Tosa',
+    'hotel': 'Hotel & Estadia',
+    'creche': 'Creche',
+    'venda_planos': 'Venda de Planos',
+    'gestao_precos': 'Tabela de Preços',
+    'banners_app': 'Banners do App',
+    'equipe': 'Gestão de Equipe',
+    'configuracoes': 'Configurações',
+    'gestao_estoque': 'Gestão de Estoque',
+  };
+
+  final Map<String, bool> _selectedAccess = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize access selection (default to none or specific ones)
+    _availablePages.forEach((key, value) {
+      _selectedAccess[key] = false;
+    });
+  }
+
   void _cadastrarFuncionario() async {
     if (_nomeController.text.isEmpty ||
         _cpfController.text.isEmpty ||
@@ -87,9 +113,20 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       return;
     }
 
-    // 2. Define Perfil de Segurança (Isso que define o acesso no Login)
-    // Se marcou Master, o perfil é 'master' (Acesso total).
-    // Senão, é 'padrao' (Acesso restrito às suas funções).
+    // 2. Prepare Access List
+    List<String> acessos = [];
+    if (fazMaster) {
+      // If Master, technically they get everything in the UI check,
+      // but we can save all keys or just rely on the 'master' profile.
+      // Let's save them anyway for granularity if they get demoted later.
+      acessos = _availablePages.keys.toList();
+    } else {
+      _selectedAccess.forEach((key, value) {
+        if (value) acessos.add(key);
+      });
+    }
+
+    // 3. Define Perfil de Segurança
     String perfilEnvio = fazMaster ? 'master' : 'padrao';
 
     try {
@@ -103,6 +140,22 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         'tenantId': widget.tenantId, // USANDO O TENANT ID PASSADO
       });
 
+      // 4. Update with Permissions (Acessos)
+      // Since we don't know the UID for sure, we query by document
+      final querySnapshot = await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('profissionais')
+          .where('documento', isEqualTo: _cpfController.text)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        await querySnapshot.docs.first.reference.update({
+          'acessos': acessos,
+        });
+      }
+
       // Sucesso
       _nomeController.clear();
       _cpfController.clear();
@@ -113,6 +166,9 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         fazVendas = false;
         fazCaixa = false;
         fazMaster = false;
+        _availablePages.forEach((key, value) {
+          _selectedAccess[key] = false;
+        });
       });
 
       _showSnack("Profissional criado com sucesso!", Colors.green);
@@ -355,13 +411,47 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                               setState(() {
                                 fazMaster = v;
                                 if (v) {
-                                  fazCaixa =
-                                      true; // Master geralmente também opera caixa se quiser
+                                  fazCaixa = true;
+                                  // Auto select all pages if master
+                                  _availablePages.forEach((key, val) {
+                                    _selectedAccess[key] = true;
+                                  });
                                 }
                               });
                             },
                             isAlert: true,
                           ),
+
+                          // --- SEÇÃO DE ACESSOS ---
+                          if (!fazMaster) ...[
+                            SizedBox(height: 20),
+                            Divider(),
+                            Text(
+                              "Acesso às Páginas (Permissões)",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            ..._availablePages.entries.map((entry) {
+                              return CheckboxListTile(
+                                title: Text(entry.value),
+                                value: _selectedAccess[entry.key] ?? false,
+                                activeColor: _corAcai,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                contentPadding: EdgeInsets.zero,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _selectedAccess[entry.key] = val ?? false;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ],
 
                           SizedBox(height: 30),
                           SizedBox(

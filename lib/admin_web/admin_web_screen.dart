@@ -1,9 +1,12 @@
 import 'package:agenpet/admin_tenants/views/gestao_tenants_view.dart';
 import 'package:agenpet/admin_web/views/creche_view.dart';
 import 'package:agenpet/admin_web/views/gestao_estoque_view.dart';
+import 'package:agenpet/admin_web/views/gestao_equipe_view.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // --- IMPORTS DAS VIEWS ---
 import 'views/dashboard_view.dart';
@@ -22,12 +25,15 @@ class AdminWebScreen extends StatefulWidget {
 
 class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
+  bool _isLoading = true;
+
+  // Dados do Usuário
   bool _isMaster = false;
   String _perfil = 'padrao';
+  List<String> _acessos = [];
 
-  // Controle de Menu Dinâmico
-  late List<Widget> _telas;
-  late List<_MenuItem> _menuItems;
+  // Menu Dinâmico
+  List<PageDefinition> _visiblePages = [];
 
   // Cores da Identidade Visual
   final Color _corAcaiStart = Color(0xFF4A148C);
@@ -37,109 +43,195 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Recupera argumentos passados pela rota
+    _loadUserPermissions();
+  }
+
+  Future<void> _loadUserPermissions() async {
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    // Defaults from Login Screen
     if (args != null) {
       _isMaster = args['isMaster'] == true;
       _perfil = args['perfil'] ?? 'padrao';
     }
 
-    // LISTA COMPLETA DE TELAS (Índices devem bater com os do menu filtrado)
-    // Para simplificar a filtragem, vamos reconstruir a lista baseada no que é visível
-    _construirMenuETelas();
-  }
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+       // Should redirect to login, but let's just stop here
+       setState(() => _isLoading = false);
+       return;
+    }
 
-  void _construirMenuETelas() {
-    // Se não é Master, é restrito (inclui caixa, vendedor, tosador, banhista, etc.)
-    bool isRestrito = !_isMaster;
+    try {
+      // Fetch permissions from Firestore
+      // Path: tenants/{tenantId}/profissionais/{uid}
+      final docRef = FirebaseFirestore.instance
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('profissionais')
+          .doc(user.uid);
 
-    if (isRestrito) {
-      // PERFIL RESTRITO (Caixa, Vendedor, Tosador, Banhista): Acesso limitado
-      _telas = [
-        LojaView(isMaster: false), // 0
-        BanhosTosaView(), // 1
-        HotelView(), // 2
-        VendaAssinaturaView(), // 3
-        CrecheView(), // 4
-        GestaoEstoqueView(), // 5
-      ];
+      final snapshot = await docRef.get();
 
-      _menuItems = [
-        _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
-        _MenuItem("Banhos & Tosa ", FontAwesomeIcons.scissors),
-        _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
-        _MenuItem("Venda de Planos", FontAwesomeIcons.cartShopping),
-        _MenuItem("Creche", FontAwesomeIcons.dog),
-        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
-      ];
-    } else {
-      // MASTER / ADMIN: Acesso Total
-      _telas = [
-        DashboardView(), // 0
-        LojaView(isMaster: _isMaster), // 1
-        BanhosTosaView(), // 2
-        HotelView(), // 3
-        CrecheView(), // 4
-        VendaAssinaturaView(), // 5
-        GestaoPrecosView(), // 6
-        GestaoBannersView(), // 7
-        ConfiguracaoAgendaView(), // 8
-        GestaoEstoqueView(), // 9
-        GestaoTenantsView(), // 10
-      ];
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        _perfil = data['perfil'] ?? _perfil;
 
-      _menuItems = [
-        _MenuItem(
-          "Dashboard",
-          Icons.space_dashboard_rounded,
-          section: "PRINCIPAL",
-        ),
-        _MenuItem("Loja / PDV", FontAwesomeIcons.cashRegister),
-        _MenuItem("Banhos & Tosa", FontAwesomeIcons.scissors),
-        _MenuItem("Hotel & Estadia", FontAwesomeIcons.hotel),
-        _MenuItem("Creche", FontAwesomeIcons.dog),
-        _MenuItem(
-          "Venda de Planos",
-          FontAwesomeIcons.cartShopping,
-          section: "VENDAS & PRODUTOS",
-        ),
-        _MenuItem("Tabela de Preços", Icons.price_change_rounded),
-        _MenuItem("Banners do App", Icons.view_carousel_rounded),
-        _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
-        _MenuItem("Configurações", Icons.settings_rounded),
-        _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
-        _MenuItem(
-          "Gestão Multi-Tenants",
-          FontAwesomeIcons.building,
-          section: "SUPER ADMIN",
-        ),
-      ];
+        // Se for Master no banco, garante a flag
+        if (_perfil == 'master') _isMaster = true;
+
+        if (data['acessos'] != null) {
+          _acessos = List<String>.from(data['acessos']);
+        }
+      }
+
+      _buildMenu();
+
+    } catch (e) {
+      print("Erro ao carregar permissões: $e");
+      // Fallback: build menu based on basic args
+      _buildMenu();
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(FontAwesomeIcons.personDigging, size: 50, color: Colors.grey),
-          SizedBox(height: 20),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-            ),
-          ),
-          Text("Módulo em produção", style: TextStyle(color: Colors.grey[600])),
-        ],
+  void _buildMenu() {
+    // Definition of ALL available pages
+    final allPages = [
+      PageDefinition(
+        id: 'dashboard',
+        title: "Dashboard",
+        icon: Icons.space_dashboard_rounded,
+        section: "PRINCIPAL",
+        widget: DashboardView(),
       ),
-    );
+      PageDefinition(
+        id: 'loja_pdv',
+        title: "Loja / PDV",
+        icon: FontAwesomeIcons.cashRegister,
+        widget: LojaView(isMaster: _isMaster),
+      ),
+      PageDefinition(
+        id: 'banhos_tosa',
+        title: "Banhos & Tosa",
+        icon: FontAwesomeIcons.scissors,
+        widget: BanhosTosaView(),
+      ),
+      PageDefinition(
+        id: 'hotel',
+        title: "Hotel & Estadia",
+        icon: FontAwesomeIcons.hotel,
+        widget: HotelView(),
+      ),
+      PageDefinition(
+        id: 'creche',
+        title: "Creche",
+        icon: FontAwesomeIcons.dog,
+        widget: CrecheView(),
+      ),
+      PageDefinition(
+        id: 'venda_planos',
+        title: "Venda de Planos",
+        icon: FontAwesomeIcons.cartShopping,
+        section: "VENDAS & PRODUTOS",
+        widget: VendaAssinaturaView(),
+      ),
+      PageDefinition(
+        id: 'gestao_precos',
+        title: "Tabela de Preços",
+        icon: Icons.price_change_rounded,
+        widget: GestaoPrecosView(),
+      ),
+      PageDefinition(
+        id: 'banners_app',
+        title: "Banners do App",
+        icon: Icons.view_carousel_rounded,
+        widget: GestaoBannersView(),
+      ),
+      PageDefinition(
+        id: 'equipe',
+        title: "Equipe",
+        icon: Icons.people_alt_rounded,
+        section: "ADMINISTRAÇÃO",
+        widget: GestaoEquipeView(),
+      ),
+      PageDefinition(
+        id: 'configuracoes',
+        title: "Configurações",
+        icon: Icons.settings_rounded,
+        widget: ConfiguracaoAgendaView(),
+      ),
+      PageDefinition(
+        id: 'gestao_estoque',
+        title: "Gestão de Estoque",
+        icon: Icons.inventory_rounded,
+        widget: GestaoEstoqueView(),
+      ),
+      PageDefinition(
+        id: 'gestao_tenants',
+        title: "Gestão Multi-Tenants",
+        icon: FontAwesomeIcons.building,
+        section: "SUPER ADMIN",
+        widget: GestaoTenantsView(),
+      ),
+    ];
+
+    if (_isMaster) {
+      // Master gets EVERYTHING (except maybe tenants if logic dictates, but for now everything)
+      _visiblePages = allPages;
+    } else {
+      // Filter based on 'acessos'
+      _visiblePages = allPages.where((page) {
+        return _acessos.contains(page.id);
+      }).toList();
+
+      // Ensure Dashboard is always there? Or maybe not.
+      // If list is empty, maybe show a "No Access" page.
+      if (_visiblePages.isEmpty) {
+        // Fallback or "Contact Admin"
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: _corFundo,
+        body: Center(child: CircularProgressIndicator(color: _corAcaiStart)),
+      );
+    }
+
+    if (_visiblePages.isEmpty) {
+       return Scaffold(
+        backgroundColor: _corFundo,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 60, color: Colors.grey),
+              SizedBox(height: 20),
+              Text("Acesso Restrito", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text("Você não tem permissão para acessar nenhuma página."),
+              SizedBox(height: 20),
+              TextButton(
+                onPressed: () async {
+                   await FirebaseAuth.instance.signOut();
+                   Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                },
+                child: Text("Sair"),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Safety check for index
+    if (_selectedIndex >= _visiblePages.length) {
+      _selectedIndex = 0;
+    }
+
     return Scaffold(
       backgroundColor: _corFundo,
       body: Row(
@@ -215,21 +307,21 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                   ),
                 ),
 
-                // --- 3. ITENS DO MENU DINÂMICOS ---
+                // --- ITENS DO MENU DINÂMICOS ---
                 Expanded(
                   child: ListView.builder(
                     padding: EdgeInsets.symmetric(horizontal: 15),
-                    itemCount: _menuItems.length,
+                    itemCount: _visiblePages.length,
                     itemBuilder: (ctx, index) {
-                      final item = _menuItems[index];
+                      final page = _visiblePages[index];
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (item.section != null) ...[
+                          if (page.section != null) ...[
                             SizedBox(height: 20),
-                            _buildSectionTitle(item.section!),
+                            _buildSectionTitle(page.section!),
                           ],
-                          _buildMenuItem(index, item.title, item.icon),
+                          _buildMenuItem(index, page),
                         ],
                       );
                     },
@@ -299,8 +391,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
                     topLeft: Radius.circular(30),
                     bottomLeft: Radius.circular(30),
                   ),
-                  child:
-                      _telas[_selectedIndex], // Exibe a tela baseada no índice clicado
+                  child: _visiblePages[_selectedIndex].widget,
                 ),
               ),
             ),
@@ -325,7 +416,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     );
   }
 
-  Widget _buildMenuItem(int index, String title, IconData icon) {
+  Widget _buildMenuItem(int index, PageDefinition page) {
     bool isSelected = _selectedIndex == index;
 
     return Container(
@@ -354,13 +445,13 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
             child: Row(
               children: [
                 FaIcon(
-                  icon,
+                  page.icon,
                   color: isSelected ? _corAcaiStart : Colors.white70,
                   size: 20,
                 ),
                 SizedBox(width: 15),
                 Text(
-                  title,
+                  page.title,
                   style: TextStyle(
                     color: isSelected ? _corAcaiStart : Colors.white,
                     fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
@@ -383,10 +474,18 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   }
 }
 
-class _MenuItem {
+class PageDefinition {
+  final String id;
   final String title;
   final IconData icon;
   final String? section;
+  final Widget widget;
 
-  _MenuItem(this.title, this.icon, {this.section});
+  PageDefinition({
+    required this.id,
+    required this.title,
+    required this.icon,
+    this.section,
+    required this.widget,
+  });
 }
