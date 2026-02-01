@@ -28,6 +28,9 @@ exports.webhookPix = paymentController.webhookPix;
 
 // --- Módulo Admin Tenants ---
 exports.testarCredenciaisGateway = adminTenantsController.testarCredenciaisGateway;
+exports.criarTenant = adminTenantsController.criarTenant;
+exports.atualizarTenant = adminTenantsController.atualizarTenant;
+exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;
