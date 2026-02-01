@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -41,7 +42,12 @@ class _ServicosViewState extends State<ServicosView> {
 
   Widget _buildContent() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _db.collection('servicos_extras').orderBy('nome').snapshots(),
+      stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('servicos_extras')
+          .orderBy('nome')
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
@@ -133,7 +139,7 @@ class _ServicosViewState extends State<ServicosView> {
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
           ),
         ],
@@ -153,7 +159,7 @@ class _ServicosViewState extends State<ServicosView> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              Icon(icon, color: color.withValues(alpha: 0.5), size: 20),
+              Icon(icon, color: color.withOpacity(0.5), size: 20),
             ],
           ),
           SizedBox(height: 10),
@@ -224,7 +230,7 @@ class _ServicosViewState extends State<ServicosView> {
         borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
           ),
         ],
@@ -270,7 +276,7 @@ class _ServicosViewState extends State<ServicosView> {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _corAcai.withValues(alpha: 0.1),
+                  color: _corAcai.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(Icons.cleaning_services, color: _corAcai, size: 18),
@@ -497,9 +503,15 @@ class _ServicosViewState extends State<ServicosView> {
                   };
 
                   if (docId == null) {
-                    await _db.collection('servicos_extras').add(payload);
+                    await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
+                        .collection('servicos_extras')
+                        .add(payload);
                   } else {
                     await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
                         .collection('servicos_extras')
                         .doc(docId)
                         .update(payload);

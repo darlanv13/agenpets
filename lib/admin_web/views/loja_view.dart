@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -279,6 +280,8 @@ class _LojaViewState extends State<LojaView> {
     try {
       // 1. Tenta buscar por Código de Barras Exato
       var queryBarra = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('produtos')
           .where('codigo_barras', isEqualTo: value)
           .limit(1)
@@ -324,7 +327,12 @@ class _LojaViewState extends State<LojaView> {
 
   Widget _buildProductGridWithPagination() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _db.collection('produtos').orderBy('nome').snapshots(),
+      stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('produtos')
+          .orderBy('nome')
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
@@ -960,7 +968,11 @@ class _LojaViewState extends State<LojaView> {
     try {
       WriteBatch batch = _db.batch();
 
-      var vendaRef = _db.collection('vendas').doc();
+      var vendaRef = _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('vendas')
+          .doc();
       batch.set(vendaRef, {
         'itens': _carrinho,
         'valor_total': _totalCart,
@@ -972,7 +984,11 @@ class _LojaViewState extends State<LojaView> {
       });
 
       for (var item in _carrinho) {
-        var prodRef = _db.collection('produtos').doc(item['id']);
+        var prodRef = _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('produtos')
+            .doc(item['id']);
         batch.update(prodRef, {
           'qtd_vendida': FieldValue.increment(item['qtd']),
         });

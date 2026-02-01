@@ -1,6 +1,7 @@
 import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/admin_web/views/components/nova_reserva_dialog.dart';
 import 'package:agenpet/admin_web/views/components/registrar_pagamento_dialog.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,7 +45,12 @@ class _HotelViewState extends State<HotelView> {
   }
 
   void _carregarPrecoDiaria() async {
-    final doc = await _db.collection('config').doc('parametros').get();
+    final doc = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('config')
+        .doc('parametros')
+        .get();
     if (doc.exists) {
       setState(() {
         _precoDiariaCache = (doc.data()?['preco_hotel_diaria'] ?? 0).toDouble();
@@ -71,10 +77,15 @@ class _HotelViewState extends State<HotelView> {
   }
 
   void _fazerCheckIn(String docId) async {
-    await _db.collection('reservas_hotel').doc(docId).update({
-      'status': 'hospedado',
-      'check_in_real': FieldValue.serverTimestamp(),
-    });
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('reservas_hotel')
+        .doc(docId)
+        .update({
+          'status': 'hospedado',
+          'check_in_real': FieldValue.serverTimestamp(),
+        });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Check-in realizado! 🐶"),
@@ -102,6 +113,8 @@ class _HotelViewState extends State<HotelView> {
 
     // 3. Fetch Extras
     final extrasSnap = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
         .collection('servicos_extras')
         .where('ativo', isEqualTo: true)
         .get();
@@ -123,6 +136,7 @@ class _HotelViewState extends State<HotelView> {
       builder: (ctx) => UnifiedCheckoutDialog(
         contextType: CheckoutContext.hotel,
         referenceId: docId,
+        userId: data['cpf_user'],
         clientData: clientData,
         baseItem: {'nome': "Estadia Hotel ($dias dias)", 'preco': totalEstadia},
         availableServices: listaExtras,
@@ -259,6 +273,8 @@ class _HotelViewState extends State<HotelView> {
                         Expanded(
                           child: StreamBuilder<QuerySnapshot>(
                             stream: _db
+                                .collection('tenants')
+                                .doc(AppConfig.tenantId)
                                 .collection('reservas_hotel')
                                 .orderBy('check_in', descending: true)
                                 .snapshots(),
@@ -325,6 +341,8 @@ class _HotelViewState extends State<HotelView> {
                       : StreamBuilder<DocumentSnapshot>(
                           key: ValueKey(_selectedReservaId),
                           stream: _db
+                              .collection('tenants')
+                              .doc(AppConfig.tenantId)
                               .collection('reservas_hotel')
                               .doc(_selectedReservaId)
                               .snapshots(),

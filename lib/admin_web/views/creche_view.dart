@@ -1,6 +1,7 @@
 import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/admin_web/views/components/nova_reserva_creche_dialog.dart';
 import 'package:agenpet/admin_web/views/components/registrar_pagamento_creche_dialog.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,7 +45,12 @@ class _CrecheViewState extends State<CrecheView> {
   }
 
   void _carregarPrecoDiaria() async {
-    final doc = await _db.collection('config').doc('parametros').get();
+    final doc = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('config')
+        .doc('parametros')
+        .get();
     if (doc.exists) {
       setState(() {
         _precoDiariaCache = (doc.data()?['preco_creche'] ?? 0).toDouble();
@@ -71,11 +77,16 @@ class _CrecheViewState extends State<CrecheView> {
   }
 
   void _fazerCheckIn(String docId) async {
-    await _db.collection('reservas_creche').doc(docId).update({
-      'status':
-          'na creche', // Mantemos 'na creche' ou usamos 'presente' - para consistência com Hotel, manterei 'na creche'
-      'check_in_real': FieldValue.serverTimestamp(),
-    });
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('reservas_creche')
+        .doc(docId)
+        .update({
+          'status':
+              'na creche', // Mantemos 'na creche' ou usamos 'presente' - para consistência com Hotel, manterei 'na creche'
+          'check_in_real': FieldValue.serverTimestamp(),
+        });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Check-in realizado! 🎒"),
@@ -103,6 +114,8 @@ class _CrecheViewState extends State<CrecheView> {
 
     // 3. Fetch Extras
     final extrasSnap = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
         .collection('servicos_extras')
         .where('ativo', isEqualTo: true)
         .get();
@@ -124,6 +137,7 @@ class _CrecheViewState extends State<CrecheView> {
       builder: (ctx) => UnifiedCheckoutDialog(
         contextType: CheckoutContext.creche,
         referenceId: docId,
+        userId: data['cpf_user'],
         clientData: clientData,
         baseItem: {'nome': "Creche ($dias dias)", 'preco': totalEstadia},
         availableServices: listaExtras,
@@ -260,6 +274,8 @@ class _CrecheViewState extends State<CrecheView> {
                         Expanded(
                           child: StreamBuilder<QuerySnapshot>(
                             stream: _db
+                                .collection('tenants')
+                                .doc(AppConfig.tenantId)
                                 .collection('reservas_creche')
                                 .orderBy('check_in', descending: true)
                                 .snapshots(),
@@ -326,6 +342,8 @@ class _CrecheViewState extends State<CrecheView> {
                       : StreamBuilder<DocumentSnapshot>(
                           key: ValueKey(_selectedReservaId),
                           stream: _db
+                              .collection('tenants')
+                              .doc(AppConfig.tenantId)
                               .collection('reservas_creche')
                               .doc(_selectedReservaId)
                               .snapshots(),

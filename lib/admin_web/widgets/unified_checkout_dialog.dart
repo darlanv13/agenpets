@@ -1,3 +1,4 @@
+import 'package:agenpet/config/app_config.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,7 +10,8 @@ enum CheckoutContext { hotel, creche, agenda }
 class UnifiedCheckoutDialog extends StatefulWidget {
   final CheckoutContext contextType;
   final String referenceId; // reservaId or agendamentoId
-  final Map<String, dynamic> clientData; // User data for vouchers
+  final String? userId; // Client User ID for voucher lookup
+  final Map<String, dynamic> clientData; // User data for display info
   final Map<String, dynamic> baseItem; // {nome, preco, detalhes, ...}
   final List<Map<String, dynamic>>
   availableServices; // "Catalog" of extras (servicos_extras)
@@ -22,6 +24,7 @@ class UnifiedCheckoutDialog extends StatefulWidget {
     super.key,
     required this.contextType,
     required this.referenceId,
+    this.userId,
     required this.clientData,
     required this.baseItem,
     required this.availableServices,
@@ -60,6 +63,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   Map<String, bool> _vouchersToUse = {};
   Map<String, int> _availableVouchers = {};
   bool _voucherConsumedPreviously = false;
+  bool _loadingVouchers = true;
 
   bool _isLoading = false;
 
@@ -67,7 +71,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   void initState() {
     super.initState();
     _initExtrasFromBaseItem();
-    _initVouchers();
+    _loadVouchers();
     _performSearch(''); // Init with available services
   }
 
@@ -89,27 +93,44 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     }
   }
 
-  void _initVouchers() {
+  Future<void> _loadVouchers() async {
     _availableVouchers = {};
     _vouchersToUse = {};
 
     // Check previous consumption (for Agenda mostly)
     if (widget.vouchersConsumedHistory != null &&
         widget.vouchersConsumedHistory!.isNotEmpty) {
-      _voucherConsumedPreviously = true;
-      // If consumed, we don't init available vouchers for the base item
+      if (mounted) {
+        setState(() {
+          _voucherConsumedPreviously = true;
+          _loadingVouchers = false;
+        });
+      }
       return;
     }
 
-    List<dynamic> packs = widget.clientData['voucher_assinatura'] ?? [];
-    for (var pack in packs) {
-      if (pack is Map) {
-        Timestamp? validade = pack['validade_pacote'];
+    if (widget.userId == null) {
+      if (mounted) setState(() => _loadingVouchers = false);
+      return;
+    }
+
+    try {
+      final voucherDoc = await _db
+          .collection('users')
+          .doc(widget.userId)
+          .collection('vouchers')
+          .doc(AppConfig.tenantId)
+          .get();
+
+      if (voucherDoc.exists) {
+        final data = voucherDoc.data()!;
+        // Verify validity
+        Timestamp? validade = data['validade']; // Field name in new structure
         if (validade != null && validade.toDate().isAfter(DateTime.now())) {
-          pack.forEach((key, value) {
+          data.forEach((key, value) {
             if (key != 'nome_pacote' &&
-                key != 'validade_pacote' &&
-                key != 'data_compra' &&
+                key != 'validade' &&
+                key != 'ultima_compra' &&
                 value is int &&
                 value > 0) {
               _availableVouchers[key] = (_availableVouchers[key] ?? 0) + value;
@@ -117,15 +138,21 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
           });
         }
       }
-    }
 
-    // Auto-select if base item matches
-    String baseName = (widget.baseItem['nome'] ?? '').toString().toLowerCase();
-    _availableVouchers.forEach((key, value) {
-      if (baseName.contains(key.toLowerCase())) {
-        _vouchersToUse[key] = true;
-      }
-    });
+      // Auto-select if base item matches
+      String baseName = (widget.baseItem['nome'] ?? '')
+          .toString()
+          .toLowerCase();
+      _availableVouchers.forEach((key, value) {
+        if (baseName.contains(key.toLowerCase())) {
+          _vouchersToUse[key] = true;
+        }
+      });
+    } catch (e) {
+      print("Erro ao carregar vouchers: $e");
+    } finally {
+      if (mounted) setState(() => _loadingVouchers = false);
+    }
   }
 
   // --- CALCULATIONS ---
@@ -222,6 +249,8 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         }
 
         final snapshot = await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
             .collection('produtos')
             .orderBy('nome')
             .startAt([searchQuery])
@@ -299,12 +328,14 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       // 2. Call Cloud Function
       if (widget.contextType == CheckoutContext.hotel) {
         await _functions.httpsCallable('realizarCheckoutHotel').call({
+          'tenantId': AppConfig.tenantId,
           'reservaId': widget.referenceId,
           'extrasIds': extrasIds,
           'metodoPagamentoDiferenca': paymentString,
         });
       } else if (widget.contextType == CheckoutContext.creche) {
         await _functions.httpsCallable('realizarCheckoutCreche').call({
+          'tenantId': AppConfig.tenantId,
           'reservaId': widget.referenceId,
           'extrasIds': extrasIds,
           'metodoPagamentoDiferenca': paymentString,
@@ -317,6 +348,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         });
 
         await _functions.httpsCallable('realizarCheckout').call({
+          'tenantId': AppConfig.tenantId,
           'agendamentoId': widget.referenceId,
           'extrasIds': extrasIds,
           'metodoPagamento': paymentString,
@@ -437,7 +469,13 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                     SizedBox(height: 8),
 
                     // VOUCHERS SECTION
-                    if (_voucherConsumedPreviously)
+                    if (_loadingVouchers)
+                      Container(
+                        height: 100,
+                        alignment: Alignment.center,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else if (_voucherConsumedPreviously)
                       Container(
                         padding: EdgeInsets.all(10),
                         margin: EdgeInsets.only(bottom: 12),
