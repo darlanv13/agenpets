@@ -31,6 +31,7 @@ exports.testarCredenciaisGateway = adminTenantsController.testarCredenciaisGatew
 exports.criarTenant = adminTenantsController.criarTenant;
 exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
+exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
 
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;

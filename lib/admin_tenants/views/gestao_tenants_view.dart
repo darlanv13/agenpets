@@ -20,7 +20,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
   );
   String _filtro = "";
 
-  // Cores locais (herdarão do tema, mas para referências rápidas)
+  // Cores locais
   Color get _primary => Theme.of(context).primaryColor;
 
   Future<void> _criarTenantDialog() async {
@@ -57,6 +57,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                       decoration: InputDecoration(
                         labelText: "Nome da Loja",
                         prefixIcon: Icon(Icons.business),
+                        border: OutlineInputBorder(),
                       ),
                       validator: (v) => v!.isEmpty ? "Obrigatório" : null,
                       onChanged: (val) {
@@ -72,10 +73,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                               .replaceAll(RegExp(r'[úùûü]'), 'u')
                               .replaceAll(RegExp(r'[ç]'), 'c')
                               .replaceAll(RegExp(r'[^a-z0-9]'), '_')
-                              .replaceAll(
-                                RegExp(r'_+'),
-                                '_',
-                              ); // remove duplicados
+                              .replaceAll(RegExp(r'_+'), '_');
                           _slugCtrl.text = slug;
                         }
                       },
@@ -87,6 +85,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                         labelText: "ID Único (Slug)",
                         prefixIcon: Icon(Icons.fingerprint),
                         helperText: "Usado na URL e IDs internos",
+                        border: OutlineInputBorder(),
                       ),
                       validator: (v) => v!.isEmpty ? "Obrigatório" : null,
                     ),
@@ -96,6 +95,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                       decoration: InputDecoration(
                         labelText: "Cidade / UF",
                         prefixIcon: Icon(Icons.location_city),
+                        border: OutlineInputBorder(),
                       ),
                     ),
                   ],
@@ -109,6 +109,10 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                 child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: _isLoading
                     ? null
                     : () async {
@@ -151,6 +155,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: _primary,
         icon: Icon(Icons.add, color: Colors.white),
@@ -161,128 +166,141 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
         onPressed: _criarTenantDialog,
         elevation: 4,
       ),
-      body: Column(
-        children: [
+      body: CustomScrollView(
+        slivers: [
           // Header Moderno
-          Container(
-            padding: EdgeInsets.fromLTRB(40, 60, 40, 40),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_primary, Color(0xFF2E0C59)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          SliverToBoxAdapter(
+            child: Container(
+              padding: EdgeInsets.fromLTRB(40, 60, 40, 40),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_primary, Color(0xFF2E0C59)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 10,
-                  offset: Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: FaIcon(
+                      FontAwesomeIcons.buildingColumns,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                   ),
-                  child: FaIcon(
-                    FontAwesomeIcons.buildingColumns,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-                SizedBox(width: 20),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Gestão de Tenants",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  SizedBox(width: 20),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Gestão de Tenants",
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    Text(
-                      "Gerencie parceiros, contratos e acessos",
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ],
+                      Text(
+                        "Gerencie parceiros, contratos e acessos",
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
           // Área de Busca
-          Transform.translate(
-            offset: Offset(0, -25),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Container(
-                constraints: BoxConstraints(maxWidth: 800),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 20,
-                      offset: Offset(0, 4),
+          SliverToBoxAdapter(
+            child: Transform.translate(
+              offset: Offset(0, -25),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Center(
+                  child: Container(
+                    constraints: BoxConstraints(maxWidth: 800),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: "Buscar por nome, ID ou cidade...",
-                    prefixIcon: Icon(Icons.search, color: Colors.grey),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: 20,
-                      horizontal: 20,
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: "Buscar por nome, ID ou cidade...",
+                        prefixIcon: Icon(Icons.search, color: Colors.grey),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 20,
+                        ),
+                      ),
+                      onChanged: (v) => setState(() => _filtro = v.toLowerCase()),
                     ),
                   ),
-                  onChanged: (v) => setState(() => _filtro = v.toLowerCase()),
                 ),
               ),
             ),
           ),
 
-          // Lista de Tenants
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _db.collection('tenants').snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return Center(child: CircularProgressIndicator());
+          // Grid de Tenants
+          StreamBuilder<QuerySnapshot>(
+            stream: _db.collection('tenants').snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 50),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
+                );
+              }
 
-                final docs = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final nome = (data['nome'] ?? '').toString().toLowerCase();
-                  final id = doc.id.toLowerCase();
-                  return nome.contains(_filtro) || id.contains(_filtro);
-                }).toList();
+              final docs = snapshot.data!.docs.where((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final nome = (data['nome'] ?? '').toString().toLowerCase();
+                final id = doc.id.toLowerCase();
+                return nome.contains(_filtro) || id.contains(_filtro);
+              }).toList();
 
-                if (docs.isEmpty) return _buildEmptyState();
+              if (docs.isEmpty) {
+                return SliverToBoxAdapter(child: _buildEmptyState());
+              }
 
-                return GridView.builder(
-                  padding: EdgeInsets.fromLTRB(40, 0, 40, 80),
+              return SliverPadding(
+                padding: EdgeInsets.fromLTRB(40, 0, 40, 80),
+                sliver: SliverGrid(
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 400,
-                    mainAxisExtent: 160, // Altura fixa do card
+                    mainAxisExtent: 160,
                     crossAxisSpacing: 20,
                     mainAxisSpacing: 20,
                   ),
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) =>
-                      _buildTenantCard(docs[index]),
-                );
-              },
-            ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _TenantCard(
+                      doc: docs[index],
+                      primaryColor: _primary,
+                    ),
+                    childCount: docs.length,
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -308,12 +326,22 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
       ),
     );
   }
+}
 
-  Widget _buildTenantCard(DocumentSnapshot doc) {
+class _TenantCard extends StatelessWidget {
+  final DocumentSnapshot doc;
+  final Color primaryColor;
+
+  const _TenantCard({required this.doc, required this.primaryColor});
+
+  @override
+  Widget build(BuildContext context) {
     final data = doc.data() as Map<String, dynamic>;
     final bool ativo = data['ativo'] ?? true;
 
     return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.push(
@@ -334,7 +362,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: _primary.withOpacity(0.1),
+                  color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
@@ -343,7 +371,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
-                      color: _primary,
+                      color: primaryColor,
                     ),
                   ),
                 ),
