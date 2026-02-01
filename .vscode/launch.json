@@ -22,6 +22,16 @@
             ]
         },
         {
+            "name": "Agenpet Admin Tenants",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/admin_tanants/main_admin_tenants.dart",
+            "args": [
+                "--flavor",
+                "tenants"
+            ]
+        },
+        {
             "name": "agenpet (profile mode)",
             "request": "launch",
             "type": "dart",

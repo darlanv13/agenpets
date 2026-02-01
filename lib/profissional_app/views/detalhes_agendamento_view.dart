@@ -8,8 +8,7 @@ import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
 class DetalhesAgendamentoView extends StatefulWidget {
   final String agendamentoId;
 
-  const DetalhesAgendamentoView({Key? key, required this.agendamentoId})
-    : super(key: key);
+  const DetalhesAgendamentoView({super.key, required this.agendamentoId});
 
   @override
   _DetalhesAgendamentoViewState createState() =>

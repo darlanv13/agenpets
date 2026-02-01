@@ -1,5 +1,4 @@
 import 'package:agenpet/profissional_app/components/checklist_pet_screen.dart';
-import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
 import 'package:agenpet/profissional_app/views/detalhes_agendamento_view.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ProfissionalScreen extends StatefulWidget {
+  const ProfissionalScreen({super.key});
+
   @override
   _ProfissionalScreenState createState() => _ProfissionalScreenState();
 }
@@ -357,7 +358,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                               ),
                             ),
                           );
-                        }).toList(),
+                        }),
 
                         SizedBox(height: 15),
                         Divider(),
@@ -689,8 +690,9 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                             if (status != 'concluido' && status != 'pronto')
                               PopupMenuButton<String>(
                                 onSelected: (v) {
-                                  if (v == 'cancelar')
+                                  if (v == 'cancelar') {
                                     _cancelarAgendamento(doc.id);
+                                  }
                                 },
                                 itemBuilder: (ctx) => [
                                   PopupMenuItem(
@@ -777,8 +779,9 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                                   .get(),
                             ]),
                             builder: (context, snapshot) {
-                              if (!snapshot.hasData)
+                              if (!snapshot.hasData) {
                                 return Text("Carregando...");
+                              }
 
                               final userDoc = snapshot.data![0]; // Doc do Tutor
                               final petDoc = snapshot.data![1]; // Doc do Pet
@@ -915,10 +918,11 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_dadosPro == null)
+    if (_dadosPro == null) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator(color: _corAcai)),
       );
+    }
 
     final inicioDia = DateTime(
       _dataFiltro.year,
@@ -966,10 +970,11 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                   .orderBy('data_inicio')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(
                     child: CircularProgressIndicator(color: _corAcai),
                   );
+                }
                 var docs = snapshot.data?.docs ?? [];
 
                 // Filtro Local
@@ -979,9 +984,9 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
                     String servico = (data['servicoNorm'] ?? '')
                         .toString()
                         .toLowerCase();
-                    if (_filtroServico == 'Tosa')
+                    if (_filtroServico == 'Tosa') {
                       return servico.contains('tosa');
-                    else if (_filtroServico == 'Banho')
+                    } else if (_filtroServico == 'Banho')
                       return servico.contains('banho') &&
                           !servico.contains('tosa');
                     return true;
@@ -1122,7 +1127,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
   }
 
   Widget _buildFilterButtons() {
-    return Container(
+    return SizedBox(
       height: 40,
       child: ListView(
         scrollDirection: Axis.horizontal,

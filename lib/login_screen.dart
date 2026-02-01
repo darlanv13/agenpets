@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 import '../../services/firebase_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -64,6 +65,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (isDesktop) {
       try {
         final proQuery = await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
             .collection('profissionais')
             .where('cpf', isEqualTo: cpfFormatado)
             .limit(1)
@@ -209,12 +212,17 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       DocumentSnapshot doc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('profissionais')
           .doc(userCred.user!.uid)
           .get();
 
       if (!doc.exists) {
-        _mostrarSnack("Erro: Perfil não encontrado no banco.", cor: Colors.red);
+        _mostrarSnack(
+          "Erro: Perfil profissional não encontrado nesta loja.",
+          cor: Colors.red,
+        );
         await _auth.signOut();
         return null;
       }

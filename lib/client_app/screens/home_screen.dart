@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -107,10 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_dadosUsuario == null)
+    if (_dadosUsuario == null) {
       return Scaffold(
         body: Center(child: CircularProgressIndicator(color: _corAcai)),
       );
+    }
 
     return Scaffold(
       backgroundColor: _corFundo,

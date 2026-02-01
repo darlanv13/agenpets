@@ -6,8 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 class ServicosSelectDialog extends StatefulWidget {
   final List<Map<String, dynamic>> initialSelected;
 
-  const ServicosSelectDialog({Key? key, this.initialSelected = const []})
-    : super(key: key);
+  const ServicosSelectDialog({super.key, this.initialSelected = const []});
 
   @override
   _ServicosSelectDialogState createState() => _ServicosSelectDialogState();
@@ -163,10 +162,11 @@ class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
                           // BUSCA
                           Autocomplete<Map<String, dynamic>>(
                             optionsBuilder: (TextEditingValue textValue) {
-                              if (textValue.text.isEmpty)
+                              if (textValue.text.isEmpty) {
                                 return const Iterable<
                                   Map<String, dynamic>
                                 >.empty();
+                              }
                               return _availableServices.where((opt) {
                                 return opt['nome']
                                     .toString()

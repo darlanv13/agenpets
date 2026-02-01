@@ -6,7 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 class LojaView extends StatefulWidget {
   final bool isMaster;
 
-  const LojaView({Key? key, this.isMaster = false}) : super(key: key);
+  const LojaView({super.key, this.isMaster = false});
 
   @override
   _LojaViewState createState() => _LojaViewState();
@@ -22,21 +22,21 @@ class _LojaViewState extends State<LojaView> {
   final Color _corFundo = Color(0xFFF5F7FA);
 
   // Carrinho
-  List<Map<String, dynamic>> _carrinho = [];
+  final List<Map<String, dynamic>> _carrinho = [];
   final ScrollController _cartScrollCtrl = ScrollController();
 
   // Pagamentos Multiplos
-  List<Map<String, dynamic>> _pagamentos = [];
+  final List<Map<String, dynamic>> _pagamentos = [];
   String _metodoSelecionado = 'Dinheiro';
-  TextEditingController _valorPagamentoCtrl = TextEditingController();
+  final TextEditingController _valorPagamentoCtrl = TextEditingController();
 
   // Vendedor
-  TextEditingController _vendedorCodeCtrl = TextEditingController();
+  final TextEditingController _vendedorCodeCtrl = TextEditingController();
 
   // Busca e Foco
   String _filtroBusca = '';
-  TextEditingController _searchCtrl = TextEditingController();
-  FocusNode _searchFocus = FocusNode();
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   // Paginação
   final int _itensPorPagina = 4;
@@ -326,8 +326,9 @@ class _LojaViewState extends State<LojaView> {
     return StreamBuilder<QuerySnapshot>(
       stream: _db.collection('produtos').orderBy('nome').snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
+        }
 
         var docs = snapshot.data!.docs;
 
@@ -796,7 +797,7 @@ class _LojaViewState extends State<LojaView> {
                 SizedBox(width: 10),
                 Expanded(
                   flex: 4,
-                  child: Container(
+                  child: SizedBox(
                     height: 50,
                     child: TextField(
                       controller: _valorPagamentoCtrl,

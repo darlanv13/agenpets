@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class GestaoBannersView extends StatefulWidget {
+  const GestaoBannersView({super.key});
+
   @override
   _GestaoBannersViewState createState() => _GestaoBannersViewState();
 }
@@ -246,7 +248,7 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                     children: [
                       Switch(
                         value: ativo,
-                        activeColor: Colors.green,
+                        activeThumbColor: Colors.green,
                         onChanged: (val) =>
                             doc.reference.update({'ativo': val}),
                       ),
@@ -287,19 +289,19 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
     String? docId,
     Map<String, dynamic>? data,
   }) {
-    final _tituloCtrl = TextEditingController(text: data?['titulo']);
-    final _subtituloCtrl = TextEditingController(text: data?['subtitulo']);
-    String _corSelecionada = data?['cor_id'] ?? 'acai';
-    String _iconeSelecionado = data?['icone_id'] ?? 'percentage';
-    bool _ativo = data?['ativo'] ?? true;
+    final tituloCtrl = TextEditingController(text: data?['titulo']);
+    final subtituloCtrl = TextEditingController(text: data?['subtitulo']);
+    String corSelecionada = data?['cor_id'] ?? 'acai';
+    String iconeSelecionado = data?['icone_id'] ?? 'percentage';
+    bool ativo = data?['ativo'] ?? true;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           // Helper para construir o preview dentro do dialog
-          Color corPreview = _mapaCores[_corSelecionada]!;
-          IconData iconPreview = _mapaIcones[_iconeSelecionado]!;
+          Color corPreview = _mapaCores[corSelecionada]!;
+          IconData iconPreview = _mapaIcones[iconeSelecionado]!;
 
           return AlertDialog(
             shape: RoundedRectangleBorder(
@@ -351,9 +353,9 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                _tituloCtrl.text.isEmpty
+                                tituloCtrl.text.isEmpty
                                     ? "Título do Banner"
-                                    : _tituloCtrl.text,
+                                    : tituloCtrl.text,
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
@@ -361,9 +363,9 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                                 ),
                               ),
                               Text(
-                                _subtituloCtrl.text.isEmpty
+                                subtituloCtrl.text.isEmpty
                                     ? "Subtítulo da promoção"
-                                    : _subtituloCtrl.text,
+                                    : subtituloCtrl.text,
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
@@ -379,7 +381,7 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
 
                   // CAMPOS
                   TextField(
-                    controller: _tituloCtrl,
+                    controller: tituloCtrl,
                     decoration: InputDecoration(
                       labelText: "Título Principal",
                       border: OutlineInputBorder(
@@ -391,7 +393,7 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                   ),
                   SizedBox(height: 15),
                   TextField(
-                    controller: _subtituloCtrl,
+                    controller: subtituloCtrl,
                     decoration: InputDecoration(
                       labelText: "Subtítulo / Chamada",
                       border: OutlineInputBorder(
@@ -421,10 +423,10 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                             Wrap(
                               spacing: 8,
                               children: _mapaCores.entries.map((e) {
-                                bool isSelected = _corSelecionada == e.key;
+                                bool isSelected = corSelecionada == e.key;
                                 return GestureDetector(
                                   onTap: () => setStateDialog(
-                                    () => _corSelecionada = e.key,
+                                    () => corSelecionada = e.key,
                                   ),
                                   child: Container(
                                     width: 30,
@@ -473,7 +475,7 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                             ),
                             SizedBox(height: 5),
                             DropdownButtonFormField<String>(
-                              value: _iconeSelecionado,
+                              initialValue: iconeSelecionado,
                               isExpanded: true,
                               decoration: InputDecoration(
                                 contentPadding: EdgeInsets.symmetric(
@@ -506,7 +508,7 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                                   )
                                   .toList(),
                               onChanged: (v) =>
-                                  setStateDialog(() => _iconeSelecionado = v!),
+                                  setStateDialog(() => iconeSelecionado = v!),
                             ),
                           ],
                         ),
@@ -517,10 +519,10 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                   SizedBox(height: 20),
                   CheckboxListTile(
                     title: Text("Banner Ativo?"),
-                    value: _ativo,
+                    value: ativo,
                     activeColor: _corAcai,
                     contentPadding: EdgeInsets.zero,
-                    onChanged: (v) => setStateDialog(() => _ativo = v!),
+                    onChanged: (v) => setStateDialog(() => ativo = v!),
                   ),
                 ],
               ),
@@ -537,11 +539,11 @@ class _GestaoBannersViewState extends State<GestaoBannersView> {
                 ),
                 onPressed: () async {
                   final bannerData = {
-                    'titulo': _tituloCtrl.text,
-                    'subtitulo': _subtituloCtrl.text,
-                    'cor_id': _corSelecionada,
-                    'icone_id': _iconeSelecionado,
-                    'ativo': _ativo,
+                    'titulo': tituloCtrl.text,
+                    'subtitulo': subtituloCtrl.text,
+                    'cor_id': corSelecionada,
+                    'icone_id': iconeSelecionado,
+                    'ativo': ativo,
                     'updated_at': FieldValue.serverTimestamp(),
                   };
 

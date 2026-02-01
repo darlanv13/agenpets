@@ -7,7 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 class CadastroRapidoDialog extends StatefulWidget {
   final String? cpfInicial;
 
-  const CadastroRapidoDialog({Key? key, this.cpfInicial}) : super(key: key);
+  const CadastroRapidoDialog({super.key, this.cpfInicial});
 
   @override
   _CadastroRapidoDialogState createState() => _CadastroRapidoDialogState();

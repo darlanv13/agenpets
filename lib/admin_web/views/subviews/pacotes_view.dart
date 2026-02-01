@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class PacotesView extends StatefulWidget {
+  const PacotesView({super.key});
+
   @override
   _PacotesViewState createState() => _PacotesViewState();
 }
@@ -281,22 +283,24 @@ class _PacotesViewState extends State<PacotesView> {
     Map<String, dynamic>? data,
   }) {
     // Controllers e State
-    final _nomeCtrl = TextEditingController(text: data?['nome']);
-    final _precoCtrl = TextEditingController(text: data?['preco']?.toString());
-    final _descCtrl = TextEditingController(text: data?['descricao']);
-    String _porteSelecionado = data?['porte'] ?? 'Pequeno Porte';
-    bool _ativo = data?['ativo'] ?? true;
+    final nomeCtrl = TextEditingController(text: data?['nome']);
+    final precoCtrl = TextEditingController(text: data?['preco']?.toString());
+    final descCtrl = TextEditingController(text: data?['descricao']);
+    String porteSelecionado = data?['porte'] ?? 'Pequeno Porte';
+    bool ativo = data?['ativo'] ?? true;
 
     // Lista de itens
-    List<Map<String, dynamic>> _itens = [];
+    List<Map<String, dynamic>> itens = [];
     if (data != null) {
-      if ((data['vouchers_banho'] ?? 0) > 0)
-        _itens.add({'servico': 'Banho', 'qtd': data['vouchers_banho']});
-      if ((data['vouchers_tosa'] ?? 0) > 0)
-        _itens.add({'servico': 'Tosa', 'qtd': data['vouchers_tosa']});
+      if ((data['vouchers_banho'] ?? 0) > 0) {
+        itens.add({'servico': 'Banho', 'qtd': data['vouchers_banho']});
+      }
+      if ((data['vouchers_tosa'] ?? 0) > 0) {
+        itens.add({'servico': 'Tosa', 'qtd': data['vouchers_tosa']});
+      }
       if (data['itens_extra'] != null) {
         for (var item in data['itens_extra']) {
-          _itens.add({'servico': item['servico'], 'qtd': item['qtd']});
+          itens.add({'servico': item['servico'], 'qtd': item['qtd']});
         }
       }
     }
@@ -305,21 +309,21 @@ class _PacotesViewState extends State<PacotesView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
-          void _addItem(String nome) {
-            int idx = _itens.indexWhere((e) => e['servico'] == nome);
+          void addItem(String nome) {
+            int idx = itens.indexWhere((e) => e['servico'] == nome);
             if (idx >= 0) {
-              setState(() => _itens[idx]['qtd']++);
+              setState(() => itens[idx]['qtd']++);
             } else {
-              setState(() => _itens.add({'servico': nome, 'qtd': 1}));
+              setState(() => itens.add({'servico': nome, 'qtd': 1}));
             }
           }
 
-          void _removeItem(int idx) {
+          void removeItem(int idx) {
             setState(() {
-              if (_itens[idx]['qtd'] > 1) {
-                _itens[idx]['qtd']--;
+              if (itens[idx]['qtd'] > 1) {
+                itens[idx]['qtd']--;
               } else {
-                _itens.removeAt(idx);
+                itens.removeAt(idx);
               }
             });
           }
@@ -329,7 +333,7 @@ class _PacotesViewState extends State<PacotesView> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Container(
+            child: SizedBox(
               width: 900,
               height: 600,
               child: Column(
@@ -385,7 +389,7 @@ class _PacotesViewState extends State<PacotesView> {
                                 ),
                                 SizedBox(height: 20),
                                 TextField(
-                                  controller: _nomeCtrl,
+                                  controller: nomeCtrl,
                                   decoration: InputDecoration(
                                     labelText: "Nome do Pacote",
                                     filled: true,
@@ -397,7 +401,7 @@ class _PacotesViewState extends State<PacotesView> {
                                   children: [
                                     Expanded(
                                       child: TextField(
-                                        controller: _precoCtrl,
+                                        controller: precoCtrl,
                                         keyboardType: TextInputType.number,
                                         decoration: InputDecoration(
                                           labelText: "Preço (R\$)",
@@ -409,7 +413,7 @@ class _PacotesViewState extends State<PacotesView> {
                                     SizedBox(width: 15),
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
-                                        value: _porteSelecionado,
+                                        initialValue: porteSelecionado,
                                         decoration: InputDecoration(
                                           labelText: "Porte",
                                           filled: true,
@@ -429,7 +433,7 @@ class _PacotesViewState extends State<PacotesView> {
                                                 )
                                                 .toList(),
                                         onChanged: (v) => setState(
-                                          () => _porteSelecionado = v!,
+                                          () => porteSelecionado = v!,
                                         ),
                                       ),
                                     ),
@@ -437,7 +441,7 @@ class _PacotesViewState extends State<PacotesView> {
                                 ),
                                 SizedBox(height: 15),
                                 TextField(
-                                  controller: _descCtrl,
+                                  controller: descCtrl,
                                   maxLines: 3,
                                   decoration: InputDecoration(
                                     labelText: "Descrição App",
@@ -448,8 +452,8 @@ class _PacotesViewState extends State<PacotesView> {
                                 Spacer(),
                                 SwitchListTile(
                                   title: Text("Ativo no App?"),
-                                  value: _ativo,
-                                  onChanged: (v) => setState(() => _ativo = v),
+                                  value: ativo,
+                                  onChanged: (v) => setState(() => ativo = v),
                                 ),
                               ],
                             ),
@@ -482,7 +486,7 @@ class _PacotesViewState extends State<PacotesView> {
                                         FontAwesomeIcons.shower,
                                         size: 14,
                                       ),
-                                      onPressed: () => _addItem("Banho"),
+                                      onPressed: () => addItem("Banho"),
                                     ),
                                     ActionChip(
                                       label: Text("Add Tosa"),
@@ -490,7 +494,7 @@ class _PacotesViewState extends State<PacotesView> {
                                         FontAwesomeIcons.scissors,
                                         size: 14,
                                       ),
-                                      onPressed: () => _addItem("Tosa"),
+                                      onPressed: () => addItem("Tosa"),
                                     ),
                                     // Future Builder para outros serviços
                                     StreamBuilder<QuerySnapshot>(
@@ -501,7 +505,7 @@ class _PacotesViewState extends State<PacotesView> {
                                         if (!snap.hasData) return SizedBox();
                                         return PopupMenuButton<String>(
                                           child: Chip(label: Text("Outros +")),
-                                          onSelected: (v) => _addItem(v),
+                                          onSelected: (v) => addItem(v),
                                           itemBuilder: (ctx) =>
                                               snap.data!.docs.map((d) {
                                                 String nome = d['nome'];
@@ -526,11 +530,11 @@ class _PacotesViewState extends State<PacotesView> {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: ListView.separated(
-                                      itemCount: _itens.length,
+                                      itemCount: itens.length,
                                       separatorBuilder: (_, __) =>
                                           Divider(height: 1),
                                       itemBuilder: (ctx, i) {
-                                        final item = _itens[i];
+                                        final item = itens[i];
                                         return ListTile(
                                           title: Text(
                                             item['servico'],
@@ -546,7 +550,7 @@ class _PacotesViewState extends State<PacotesView> {
                                                   Icons.remove_circle,
                                                   color: Colors.grey,
                                                 ),
-                                                onPressed: () => _removeItem(i),
+                                                onPressed: () => removeItem(i),
                                               ),
                                               Text(
                                                 "${item['qtd']}",
@@ -561,7 +565,7 @@ class _PacotesViewState extends State<PacotesView> {
                                                   color: _corAcai,
                                                 ),
                                                 onPressed: () =>
-                                                    _addItem(item['servico']),
+                                                    addItem(item['servico']),
                                               ),
                                             ],
                                           ),
@@ -602,12 +606,12 @@ class _PacotesViewState extends State<PacotesView> {
                           onPressed: () => _salvarPacote(
                             context,
                             docId,
-                            _nomeCtrl.text,
-                            _precoCtrl.text,
-                            _porteSelecionado,
-                            _descCtrl.text,
-                            _ativo,
-                            _itens,
+                            nomeCtrl.text,
+                            precoCtrl.text,
+                            porteSelecionado,
+                            descCtrl.text,
+                            ativo,
+                            itens,
                           ),
                           child: Text(
                             "SALVAR PACOTE",
@@ -652,16 +656,15 @@ class _PacotesViewState extends State<PacotesView> {
     for (var item in itens) {
       String servico = item['servico'];
       int qtd = item['qtd'];
-      if (servico == 'Banho')
+      if (servico == 'Banho') {
         totalBanho += qtd;
-      else if (servico == 'Tosa')
+      } else if (servico == 'Tosa')
         totalTosa += qtd;
       else {
         extrasVisual.add(item);
         // Gera chave segura para vouchers dinâmicos
         String key =
-            "vouchers_" +
-            servico.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+            "vouchers_${servico.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}";
         vouchersDinamicos[key] = (vouchersDinamicos[key] ?? 0) + qtd;
       }
     }

@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class NovoAgendamentoDialog extends StatefulWidget {
+  const NovoAgendamentoDialog({super.key});
+
   @override
   _NovoAgendamentoDialogState createState() => _NovoAgendamentoDialogState();
 }
@@ -230,7 +232,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
-      child: Container(
+      child: SizedBox(
         width: 900,
         height: 550, // Altura reduzida para garantir que cabe em telas menores
         child: Column(
@@ -363,7 +365,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
                               _label("Pet"),
                               SizedBox(height: 5),
                               DropdownButtonFormField<String>(
-                                value: _petIdSelecionado,
+                                initialValue: _petIdSelecionado,
                                 isDense: true,
                                 decoration: _inputDecoration(
                                   "Selecione o Pet",
@@ -388,7 +390,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
                             _label("2. Serviço"),
                             SizedBox(height: 8),
                             DropdownButtonFormField<String>(
-                              value: _servicoSelecionado,
+                              initialValue: _servicoSelecionado,
                               isDense: true,
                               decoration: _inputDecoration(
                                 "Tipo de Serviço",
@@ -549,8 +551,9 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
                                           bool isSelected =
                                               _horarioSelecionado == hora;
 
-                                          if (!livre)
+                                          if (!livre) {
                                             return SizedBox(); // Esconde ocupados
+                                          }
 
                                           return InkWell(
                                             onTap: () => setState(

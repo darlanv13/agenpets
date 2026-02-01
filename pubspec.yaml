@@ -58,6 +58,7 @@ dependencies:
   table_calendar: ^3.2.0
 
 
+  path_provider: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

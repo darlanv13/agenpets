@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import 'package:cpf_cnpj_validator/cpf_validator.dart';
+import 'package:cpf_cnpj_validator/cnpj_validator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,6 +8,8 @@ import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LoginProfissionalScreen extends StatefulWidget {
+  const LoginProfissionalScreen({super.key});
+
   @override
   _LoginProfissionalScreenState createState() =>
       _LoginProfissionalScreenState();
@@ -30,6 +32,11 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
 
   var maskCpf = MaskTextInputFormatter(
     mask: '###.###.###-##',
+    filter: {"#": RegExp(r'[0-9]')},
+  );
+
+  var maskCnpj = MaskTextInputFormatter(
+    mask: '##.###.###/####-##',
     filter: {"#": RegExp(r'[0-9]')},
   );
 
@@ -78,13 +85,23 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
   }
 
   Future<void> _fazerLogin() async {
-    String cpfLimpo = maskCpf.getUnmaskedText();
+    // Tenta pegar de CNPJ primeiro, se vazio tenta CPF (mas a UI vai forçar CNPJ visualmente se desejado)
+    String docLimpo = _cpfController.text.replaceAll(RegExp(r'[^0-9]'), '');
     String senha = _passController.text;
 
-    if (!CPFValidator.isValid(cpfLimpo)) {
-      _mostrarSnack("CPF Inválido.", cor: Colors.red);
+    bool isCnpj = docLimpo.length > 11;
+
+    // Validação estrita: O usuário pediu "Acesso só permitido com CNPJ" no App.
+    if (!isCnpj) {
+      _mostrarSnack("Acesso permitido apenas para PJ (CNPJ).", cor: Colors.red);
       return;
+    } else {
+      if (!CNPJValidator.isValid(docLimpo)) {
+        _mostrarSnack("CNPJ Inválido.", cor: Colors.red);
+        return;
+      }
     }
+
     if (senha.isEmpty) {
       _mostrarSnack("Digite a senha.", cor: Colors.red);
       return;
@@ -92,7 +109,7 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
 
     setState(() => _isLoading = true);
 
-    final emailLogin = "$cpfLimpo@agenpets.pro";
+    final emailLogin = "$docLimpo@agenpets.pro";
 
     try {
       UserCredential userCred = await _auth.signInWithEmailAndPassword(
@@ -132,8 +149,9 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
       }
     } on FirebaseAuthException catch (e) {
       String msg = "Erro no login.";
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential')
-        msg = "Senha ou CPF incorretos.";
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        msg = "Senha ou Documento incorretos.";
+      }
       if (e.code == 'user-not-found') msg = "Profissional não cadastrado.";
       if (e.code == 'too-many-requests') msg = "Muitas tentativas. Aguarde.";
       _mostrarSnack(msg, cor: Colors.red);
@@ -258,14 +276,16 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
                   children: [
                     TextField(
                       controller: _cpfController,
-                      inputFormatters: [maskCpf],
+                      // Permite digitar CNPJ
+                      inputFormatters: [maskCnpj],
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: "CPF",
-                        prefixIcon: Icon(Icons.person, color: _corAcai),
+                        labelText: "CNPJ de Acesso", // Alterado label
+                        prefixIcon: Icon(Icons.domain, color: _corAcai),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),
+                        helperText: "Acesso exclusivo para PJ",
                       ),
                     ),
                     SizedBox(height: 20),

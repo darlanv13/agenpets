@@ -1,3 +1,4 @@
+import 'package:agenpet/admin_tenants/views/gestao_tenants_view.dart';
 import 'package:agenpet/admin_web/views/creche_view.dart';
 import 'package:agenpet/admin_web/views/gestao_estoque_view.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,6 @@ import 'views/dashboard_view.dart';
 import 'views/banho_tosa_view.dart';
 import 'views/hotel_view.dart';
 import 'views/gestao_precos_view.dart';
-import 'views/gestao_equipe_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
@@ -83,9 +83,9 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         VendaAssinaturaView(), // 5
         GestaoPrecosView(), // 6
         GestaoBannersView(), // 7
-        GestaoEquipeView(), // 8
-        ConfiguracaoAgendaView(), // 9
-        GestaoEstoqueView(), // 10
+        ConfiguracaoAgendaView(), // 8
+        GestaoEstoqueView(), // 9
+        GestaoTenantsView(), // 10
       ];
 
       _menuItems = [
@@ -108,6 +108,11 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         _MenuItem("Equipe", Icons.people_alt_rounded, section: "ADMINISTRAÇÃO"),
         _MenuItem("Configurações", Icons.settings_rounded),
         _MenuItem("Gestão de Estoque", Icons.inventory_rounded),
+        _MenuItem(
+          "Gestão Multi-Tenants",
+          FontAwesomeIcons.building,
+          section: "SUPER ADMIN",
+        ),
       ];
     }
   }

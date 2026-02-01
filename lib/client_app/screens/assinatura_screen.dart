@@ -7,6 +7,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/firebase_service.dart';
 
 class AssinaturaScreen extends StatefulWidget {
+  const AssinaturaScreen({super.key});
+
   @override
   _AssinaturaScreenState createState() => _AssinaturaScreenState();
 }
@@ -83,8 +85,9 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_cpfUser == null)
+    if (_cpfUser == null) {
       return Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       backgroundColor: _corFundo,
@@ -136,10 +139,12 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
           .orderBy('preco', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text("Erro ao carregar planos"));
-        if (snapshot.connectionState == ConnectionState.waiting)
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
+        }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Center(child: Text("Nenhum plano disponível."));
@@ -154,7 +159,7 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
             ...snapshot.data!.docs.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               return _buildPlanCardVibrante(doc.id, data);
-            }).toList(),
+            }),
           ],
         );
       },
@@ -229,10 +234,12 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
 
     // Ícone Principal do Plano
     IconData iconePlano = FontAwesomeIcons.paw;
-    if (nome.toLowerCase().contains('tosa'))
+    if (nome.toLowerCase().contains('tosa')) {
       iconePlano = FontAwesomeIcons.scissors;
-    if (nome.toLowerCase().contains('vip') || destaque)
+    }
+    if (nome.toLowerCase().contains('vip') || destaque) {
       iconePlano = FontAwesomeIcons.crown;
+    }
 
     // --- LISTAGEM DINÂMICA DE BENEFÍCIOS ---
     List<Widget> listaBeneficios = [];
@@ -253,9 +260,9 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
 
         // Escolhe um ícone bonitinho baseado no nome
         IconData iconeItem = FontAwesomeIcons.check;
-        if (key.contains('banho'))
+        if (key.contains('banho')) {
           iconeItem = FontAwesomeIcons.shower;
-        else if (key.contains('tosa'))
+        } else if (key.contains('tosa'))
           iconeItem = FontAwesomeIcons.scissors;
         else if (key.contains('hidratacao'))
           iconeItem = FontAwesomeIcons.droplet;

@@ -7,12 +7,12 @@ class DefaultButton extends StatelessWidget {
   final Color color;
 
   const DefaultButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.isLoading = false,
     this.color = Colors.blue,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -10,6 +10,9 @@
         ],
         "agenpets": [
           "agenpets"
+        ],
+        "tenantsagenpets": [
+          "tenants"
         ]
       }
     }

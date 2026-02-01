@@ -5,8 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 class ProfessionalEditorDialog extends StatefulWidget {
   final DocumentSnapshot profissional;
 
-  const ProfessionalEditorDialog({Key? key, required this.profissional})
-    : super(key: key);
+  const ProfessionalEditorDialog({super.key, required this.profissional});
 
   @override
   _ProfessionalEditorDialogState createState() =>
@@ -193,7 +192,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
                           : "O acesso está bloqueado.",
                     ),
                     value: ativo,
-                    activeColor: Colors.green,
+                    activeThumbColor: Colors.green,
                     onChanged: (v) => setState(() => ativo = v),
                   ),
                 ),

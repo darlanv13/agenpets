@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../widgets/product_editor_dialog.dart';
 
 class GestaoEstoqueView extends StatefulWidget {
+  const GestaoEstoqueView({super.key});
+
   @override
   _GestaoEstoqueViewState createState() => _GestaoEstoqueViewState();
 }
@@ -74,8 +76,9 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
             }
 
             if (_filtroStatus == 'Sem Estoque') return estoque <= 0;
-            if (_filtroStatus == 'Baixo Estoque')
+            if (_filtroStatus == 'Baixo Estoque') {
               return estoque > 0 && estoque < 5;
+            }
             if (_filtroStatus == 'Vencidos') {
               if (validade == null) return false;
               return validade.isBefore(DateTime.now());
@@ -353,7 +356,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
           child: ConstrainedBox(
             constraints: BoxConstraints(minWidth: 800),
             child: DataTable(
-              headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+              headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
               dataRowMinHeight: 50,
               dataRowMaxHeight: 50,
               columns: [
@@ -501,8 +504,8 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
   }
 
   void _showEditStockDialog(String docId, String nome, int atual) {
-    TextEditingController _qtdCtrl = TextEditingController();
-    bool _isAdicionar = true; // true = Adicionar, false = Remover
+    TextEditingController qtdCtrl = TextEditingController();
+    bool isAdicionar = true; // true = Adicionar, false = Remover
 
     showDialog(
       context: context,
@@ -529,16 +532,16 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                       Expanded(
                         child: InkWell(
                           onTap: () =>
-                              setStateDialog(() => _isAdicionar = true),
+                              setStateDialog(() => isAdicionar = true),
                           child: Container(
                             padding: EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              color: _isAdicionar
+                              color: isAdicionar
                                   ? Colors.green.withOpacity(0.1)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: _isAdicionar
+                                color: isAdicionar
                                     ? Colors.green
                                     : Colors.grey[300]!,
                               ),
@@ -547,14 +550,14 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                               children: [
                                 Icon(
                                   Icons.add_circle,
-                                  color: _isAdicionar
+                                  color: isAdicionar
                                       ? Colors.green
                                       : Colors.grey,
                                 ),
                                 Text(
                                   "Entrada",
                                   style: TextStyle(
-                                    color: _isAdicionar
+                                    color: isAdicionar
                                         ? Colors.green
                                         : Colors.grey,
                                     fontWeight: FontWeight.bold,
@@ -569,16 +572,16 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                       Expanded(
                         child: InkWell(
                           onTap: () =>
-                              setStateDialog(() => _isAdicionar = false),
+                              setStateDialog(() => isAdicionar = false),
                           child: Container(
                             padding: EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              color: !_isAdicionar
+                              color: !isAdicionar
                                   ? Colors.red.withOpacity(0.1)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: !_isAdicionar
+                                color: !isAdicionar
                                     ? Colors.red
                                     : Colors.grey[300]!,
                               ),
@@ -587,14 +590,14 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                               children: [
                                 Icon(
                                   Icons.remove_circle,
-                                  color: !_isAdicionar
+                                  color: !isAdicionar
                                       ? Colors.red
                                       : Colors.grey,
                                 ),
                                 Text(
                                   "Saída/Perda",
                                   style: TextStyle(
-                                    color: !_isAdicionar
+                                    color: !isAdicionar
                                         ? Colors.red
                                         : Colors.grey,
                                     fontWeight: FontWeight.bold,
@@ -609,7 +612,7 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                   ),
                   SizedBox(height: 15),
                   TextField(
-                    controller: _qtdCtrl,
+                    controller: qtdCtrl,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
                       labelText: "Quantidade",
@@ -633,10 +636,10 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                     ),
                   ),
                   onPressed: () async {
-                    int qtd = int.tryParse(_qtdCtrl.text) ?? 0;
+                    int qtd = int.tryParse(qtdCtrl.text) ?? 0;
                     if (qtd <= 0) return;
 
-                    int novoEstoque = _isAdicionar ? atual + qtd : atual - qtd;
+                    int novoEstoque = isAdicionar ? atual + qtd : atual - qtd;
                     if (novoEstoque < 0) novoEstoque = 0;
 
                     await _db.collection('produtos').doc(docId).update({

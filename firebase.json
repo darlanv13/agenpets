@@ -65,6 +65,21 @@
           "destination": "/index.html"
         }
       ]
+    },
+    {
+      "target": "tenants",
+      "public": "build/web_tenants",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
     }
   ]
 }

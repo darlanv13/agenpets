@@ -17,10 +17,10 @@ class ChecklistPetScreen extends StatefulWidget {
   final String nomePet;
 
   const ChecklistPetScreen({
-    Key? key,
+    super.key,
     required this.agendamentoId,
     required this.nomePet,
-  }) : super(key: key);
+  });
 
   @override
   _ChecklistPetScreenState createState() => _ChecklistPetScreenState();
@@ -40,7 +40,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
   bool _temPulgas = false;
 
   bool _temLesoes = false;
-  List<XFile> _fotosLesoes = [];
+  final List<XFile> _fotosLesoes = [];
 
   bool _temOtite = false;
   bool _agressivo = false;
@@ -48,7 +48,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
 
   // --- SERVIÇOS EXTRAS ---
   List<Map<String, dynamic>> _availableServices = [];
-  List<Map<String, dynamic>> _selectedServices = [];
+  final List<Map<String, dynamic>> _selectedServices = [];
 
   @override
   void initState() {
@@ -380,8 +380,8 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
           style: ButtonStyle(
             visualDensity: VisualDensity.compact,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            backgroundColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.selected)) {
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
                 return _nivelNos == NivelSeveridade.critico
                     ? Colors.red[100]
                     : Color(0xFFE1BEE7);
@@ -623,7 +623,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
               : Colors.black87,
         ),
       ),
-      activeColor: isAlert ? Colors.red : Color(0xFF4A148C),
+      activeThumbColor: isAlert ? Colors.red : Color(0xFF4A148C),
     );
   }
 
@@ -668,7 +668,7 @@ class _ChecklistPetScreenState extends State<ChecklistPetScreen> {
               ),
             ],
           );
-        }).toList(),
+        }),
         InkWell(
           onTap: _tirarFoto,
           child: Container(

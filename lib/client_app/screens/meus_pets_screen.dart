@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 class MeusPetsScreen extends StatefulWidget {
+  const MeusPetsScreen({super.key});
+
   @override
   _MeusPetsScreenState createState() => _MeusPetsScreenState();
 }
@@ -287,30 +289,30 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
     String? petId,
     Map<String, dynamic>? dadosAtuais,
   }) {
-    final _formKey = GlobalKey<FormState>();
-    final _nomeController = TextEditingController(
+    final formKey = GlobalKey<FormState>();
+    final nomeController = TextEditingController(
       text: dadosAtuais?['nome'] ?? '',
     );
-    final _racaController = TextEditingController(
+    final racaController = TextEditingController(
       text: dadosAtuais?['raca'] ?? '',
     );
-    final _pesoController = TextEditingController(
+    final pesoController = TextEditingController(
       text: dadosAtuais?['peso']?.toString() ?? '',
     );
-    final _obsController = TextEditingController(
+    final obsController = TextEditingController(
       text: dadosAtuais?['observacoes'] ?? '',
     );
-    final _nascimentoController = TextEditingController();
+    final nascimentoController = TextEditingController();
 
-    String _tipoSelecionado = dadosAtuais?['tipo'] ?? 'cao';
-    String _sexoSelecionado = dadosAtuais?['sexo'] ?? 'Macho';
-    DateTime? _dataNascimento;
+    String tipoSelecionado = dadosAtuais?['tipo'] ?? 'cao';
+    String sexoSelecionado = dadosAtuais?['sexo'] ?? 'Macho';
+    DateTime? dataNascimento;
 
     if (dadosAtuais?['data_nascimento'] != null) {
-      _dataNascimento = (dadosAtuais!['data_nascimento'] as Timestamp).toDate();
-      _nascimentoController.text = DateFormat(
+      dataNascimento = (dadosAtuais!['data_nascimento'] as Timestamp).toDate();
+      nascimentoController.text = DateFormat(
         'dd/MM/yyyy',
-      ).format(_dataNascimento);
+      ).format(dataNascimento);
     }
 
     bool isEditing = petId != null;
@@ -371,7 +373,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                 // Conteúdo Scrollável
                 Expanded(
                   child: Form(
-                    key: _formKey,
+                    key: formKey,
                     child: ListView(
                       padding: EdgeInsets.all(24),
                       physics: BouncingScrollPhysics(),
@@ -391,18 +393,18 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                               "Cão",
                               FontAwesomeIcons.dog,
                               'cao',
-                              _tipoSelecionado,
+                              tipoSelecionado,
                               setStateModal,
-                              (v) => _tipoSelecionado = v,
+                              (v) => tipoSelecionado = v,
                             ),
                             SizedBox(width: 15),
                             _buildTypeCard(
                               "Gato",
                               FontAwesomeIcons.cat,
                               'gato',
-                              _tipoSelecionado,
+                              tipoSelecionado,
                               setStateModal,
-                              (v) => _tipoSelecionado = v,
+                              (v) => tipoSelecionado = v,
                             ),
                           ],
                         ),
@@ -412,7 +414,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                         // Inputs Principais
                         _buildLabel("Nome do Pet *"),
                         TextFormField(
-                          controller: _nomeController,
+                          controller: nomeController,
                           style: GoogleFonts.poppins(),
                           decoration: _buildInputDecoration(
                             "Ex: Thor",
@@ -429,17 +431,17 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                             _buildGenderOption(
                               "Macho",
                               Icons.male,
-                              _sexoSelecionado,
+                              sexoSelecionado,
                               setStateModal,
-                              (v) => _sexoSelecionado = v,
+                              (v) => sexoSelecionado = v,
                             ),
                             SizedBox(width: 15),
                             _buildGenderOption(
                               "Fêmea",
                               Icons.female,
-                              _sexoSelecionado,
+                              sexoSelecionado,
                               setStateModal,
-                              (v) => _sexoSelecionado = v,
+                              (v) => sexoSelecionado = v,
                             ),
                           ],
                         ),
@@ -454,7 +456,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                                 children: [
                                   _buildLabel("Raça"),
                                   TextFormField(
-                                    controller: _racaController,
+                                    controller: racaController,
                                     decoration: _buildInputDecoration(
                                       "Opcional",
                                       Icons.category,
@@ -471,7 +473,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                                 children: [
                                   _buildLabel("Peso (kg)"),
                                   TextFormField(
-                                    controller: _pesoController,
+                                    controller: pesoController,
                                     keyboardType:
                                         TextInputType.numberWithOptions(
                                           decimal: true,
@@ -490,12 +492,12 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
 
                         _buildLabel("Data de Nascimento"),
                         TextFormField(
-                          controller: _nascimentoController,
+                          controller: nascimentoController,
                           readOnly: true,
                           onTap: () async {
                             DateTime? picked = await showDatePicker(
                               context: context,
-                              initialDate: _dataNascimento ?? DateTime.now(),
+                              initialDate: dataNascimento ?? DateTime.now(),
                               firstDate: DateTime(2000),
                               lastDate: DateTime.now(),
                               builder: (context, child) {
@@ -512,8 +514,8 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                               },
                             );
                             if (picked != null) {
-                              _dataNascimento = picked;
-                              _nascimentoController.text = DateFormat(
+                              dataNascimento = picked;
+                              nascimentoController.text = DateFormat(
                                 'dd/MM/yyyy',
                               ).format(picked);
                             }
@@ -528,7 +530,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
 
                         _buildLabel("Observações (Alergias, medos...)"),
                         TextFormField(
-                          controller: _obsController,
+                          controller: obsController,
                           maxLines: 3,
                           decoration: _buildInputDecoration(
                             "Digite aqui...",
@@ -543,7 +545,7 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                               onPressed: () {
                                 _confirmarExclusao(
                                   rootContext,
-                                  petId!,
+                                  petId,
                                   dadosAtuais!['nome'],
                                 );
                               },
@@ -584,22 +586,22 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                       onPressed: isLoading
                           ? null
                           : () async {
-                              if (_formKey.currentState!.validate()) {
+                              if (formKey.currentState!.validate()) {
                                 setStateModal(() => isLoading = true);
 
                                 Map<String, dynamic> petData = {
-                                  'nome': _nomeController.text.trim(),
-                                  'tipo': _tipoSelecionado,
-                                  'sexo': _sexoSelecionado,
-                                  'raca': _racaController.text.isEmpty
+                                  'nome': nomeController.text.trim(),
+                                  'tipo': tipoSelecionado,
+                                  'sexo': sexoSelecionado,
+                                  'raca': racaController.text.isEmpty
                                       ? 'SRD'
-                                      : _racaController.text.trim(),
+                                      : racaController.text.trim(),
                                   'peso': double.tryParse(
-                                    _pesoController.text.replaceAll(',', '.'),
+                                    pesoController.text.replaceAll(',', '.'),
                                   ),
-                                  'observacoes': _obsController.text.trim(),
-                                  'data_nascimento': _dataNascimento != null
-                                      ? Timestamp.fromDate(_dataNascimento!)
+                                  'observacoes': obsController.text.trim(),
+                                  'data_nascimento': dataNascimento != null
+                                      ? Timestamp.fromDate(dataNascimento!)
                                       : null,
                                   'donoCpf': _userCpf,
                                   'updated_at': FieldValue.serverTimestamp(),

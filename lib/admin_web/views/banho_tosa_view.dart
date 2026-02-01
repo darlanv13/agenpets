@@ -9,6 +9,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class BanhosTosaView extends StatefulWidget {
+  const BanhosTosaView({super.key});
+
   @override
   _BanhosTosaViewState createState() => _BanhosTosaViewState();
 }
@@ -149,7 +151,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
         .get();
 
     final List<Map<String, dynamic>> listaExtras = extrasSnap.docs.map((e) {
-      final data = e.data() as Map<String, dynamic>;
+      final data = e.data();
       return {
         'id': e.id,
         'nome': data['nome'],
@@ -329,12 +331,13 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                           child: StreamBuilder<QuerySnapshot>(
                             stream: _agendamentosStream,
                             builder: (context, snapshot) {
-                              if (!snapshot.hasData)
+                              if (!snapshot.hasData) {
                                 return Center(
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
                                 );
+                              }
 
                               List<DocumentSnapshot> docs = snapshot.data!.docs;
 
@@ -386,8 +389,9 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                               .doc(_selectedAgendamentoId)
                               .snapshots(),
                           builder: (context, snapshot) {
-                            if (!snapshot.hasData || !snapshot.data!.exists)
+                            if (!snapshot.hasData || !snapshot.data!.exists) {
                               return Center(child: CircularProgressIndicator());
+                            }
                             return _buildPainelDetalhesCompacto(snapshot.data!);
                           },
                         ),
@@ -785,7 +789,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                                           fontSize: 12,
                                         ),
                                       )
-                                      .toList(),
+                                      ,
                                 if (data['servicos_extras'] != null)
                                   ...(data['servicos_extras'] as List)
                                       .map(
@@ -796,7 +800,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                                           fontSize: 12,
                                         ),
                                       )
-                                      .toList(),
+                                      ,
                                 if ((data['extras'] == null ||
                                         (data['extras'] as List).isEmpty) &&
                                     (data['servicos_extras'] == null ||

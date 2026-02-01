@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 
 enum CheckoutContext { hotel, creche, agenda }
 
@@ -20,7 +19,7 @@ class UnifiedCheckoutDialog extends StatefulWidget {
   final VoidCallback onSuccess;
 
   const UnifiedCheckoutDialog({
-    Key? key,
+    super.key,
     required this.contextType,
     required this.referenceId,
     required this.clientData,
@@ -30,7 +29,7 @@ class UnifiedCheckoutDialog extends StatefulWidget {
     this.vouchersConsumedHistory,
     this.themeColor = const Color(0xFF4A148C),
     required this.onSuccess,
-  }) : super(key: key);
+  });
 
   @override
   _UnifiedCheckoutDialogState createState() => _UnifiedCheckoutDialogState();
@@ -47,13 +46,13 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   );
 
   // State - Extras
-  List<Map<String, dynamic>> _addedExtras = [];
+  final List<Map<String, dynamic>> _addedExtras = [];
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
 
   // State - Payments (Split Payment Logic)
-  List<Map<String, dynamic>> _payments = [];
+  final List<Map<String, dynamic>> _payments = [];
   String _selectedMethod = 'Dinheiro';
   final TextEditingController _amountController = TextEditingController();
 
@@ -226,7 +225,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
             .collection('produtos')
             .orderBy('nome')
             .startAt([searchQuery])
-            .endAt([searchQuery + '\uf8ff'])
+            .endAt(['$searchQuery\uf8ff'])
             .limit(20)
             .get();
 
@@ -289,13 +288,12 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       } else {
         // Composite string for backend
         paymentString =
-            "Misto: " +
-            _payments
+            "Misto: ${_payments
                 .map(
                   (p) =>
                       "${p['metodo']} R\$${(p['valor'] as double).toStringAsFixed(2)}",
                 )
-                .join(', ');
+                .join(', ')}";
       }
 
       // 2. Call Cloud Function
@@ -382,7 +380,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       contentPadding: EdgeInsets.all(0),
-      content: Container(
+      content: SizedBox(
         width: 900,
         height: 650,
         child: Row(
@@ -683,7 +681,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                           Expanded(
                             flex: 2,
                             child: DropdownButtonFormField<String>(
-                              value: _selectedMethod,
+                              initialValue: _selectedMethod,
                               items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
                                   .map(
                                     (m) => DropdownMenuItem(
@@ -929,12 +927,12 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
           contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: CircleAvatar(
             backgroundColor: isProduct ? Colors.orange[50] : Colors.blue[50],
+            radius: 15,
             child: Icon(
               isProduct ? FontAwesomeIcons.box : FontAwesomeIcons.conciergeBell,
               size: 14,
               color: isProduct ? Colors.orange : Colors.blue,
             ),
-            radius: 15,
           ),
           title: Text(
             item['nome'],

@@ -6,8 +6,9 @@ class Formatters {
   static String cpf(String? cpf) {
     if (cpf == null || cpf.isEmpty) return "";
     var nums = cpf.replaceAll(RegExp(r'[^0-9]'), '');
-    if (nums.length != 11)
+    if (nums.length != 11) {
       return cpf; // Retorna original se não tiver 11 dígitos
+    }
     return "${nums.substring(0, 3)}.${nums.substring(3, 6)}.${nums.substring(6, 9)}-${nums.substring(9, 11)}";
   }
 

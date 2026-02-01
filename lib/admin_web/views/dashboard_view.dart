@@ -3,9 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 
 class DashboardView extends StatefulWidget {
+  const DashboardView({super.key});
+
   @override
   _DashboardViewState createState() => _DashboardViewState();
 }
@@ -114,8 +115,9 @@ class _DashboardViewState extends State<DashboardView> {
                   )
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return Center(child: CircularProgressIndicator());
+                }
 
                 final docs = snapshot.data!.docs;
 
@@ -156,9 +158,9 @@ class _DashboardViewState extends State<DashboardView> {
                     qtdAtendimentos++;
 
                     // Contagem Serviços
-                    if (servico.contains('banho'))
+                    if (servico.contains('banho')) {
                       countBanho++;
-                    else if (servico.contains('tosa'))
+                    } else if (servico.contains('tosa'))
                       countTosa++;
 
                     // Contagem Pagamento

@@ -7,11 +7,11 @@ class PetCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const PetCard({
-    Key? key,
+    super.key,
     required this.pet,
     required this.onTap,
     this.isSelected = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -5,6 +5,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; // Para abrir WhatsApp de suporte (opcional)
 
 class PerfilScreen extends StatefulWidget {
+  const PerfilScreen({super.key});
+
   @override
   _PerfilScreenState createState() => _PerfilScreenState();
 }

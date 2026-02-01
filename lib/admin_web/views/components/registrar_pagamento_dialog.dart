@@ -5,7 +5,7 @@ class RegistrarPagamentoDialog extends StatefulWidget {
   final String reservaId;
   final String nomePet;
 
-  const RegistrarPagamentoDialog({
+  const RegistrarPagamentoDialog({super.key, 
     required this.reservaId,
     required this.nomePet,
   });
@@ -65,7 +65,7 @@ class _RegistrarPagamentoDialogState extends State<RegistrarPagamentoDialog> {
           ),
           SizedBox(height: 15),
           DropdownButtonFormField<String>(
-            value: _metodo,
+            initialValue: _metodo,
             decoration: InputDecoration(
               border: OutlineInputBorder(),
               labelText: "Forma de Pagamento",

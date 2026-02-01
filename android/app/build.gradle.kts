@@ -63,6 +63,12 @@ android {
             // Adiciona "Pro" ao nome. Ex: A Fazendinha Pro
             resValue("string", "app_name", "$customAppName Pro") 
         }
+
+        create("tenants") {
+            dimension = "app"
+            applicationIdSuffix = ".admin"
+            resValue("string", "app_name", "Painel Admin Agenpets")
+        }
     }
 }
 

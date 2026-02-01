@@ -9,6 +9,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CrecheView extends StatefulWidget {
+  const CrecheView({super.key});
+
   @override
   _CrecheViewState createState() => _CrecheViewState();
 }
@@ -32,7 +34,7 @@ class _CrecheViewState extends State<CrecheView> {
   double _precoDiariaCache = 0.0;
 
   // Busca
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String _termoBusca = "";
 
   @override
@@ -106,7 +108,7 @@ class _CrecheViewState extends State<CrecheView> {
         .get();
 
     final List<Map<String, dynamic>> listaExtras = extrasSnap.docs.map((e) {
-      final data = e.data() as Map<String, dynamic>;
+      final data = e.data();
       return {
         'id': e.id,
         'nome': data['nome'],
@@ -262,22 +264,24 @@ class _CrecheViewState extends State<CrecheView> {
                                 .orderBy('check_in', descending: true)
                                 .snapshots(),
                             builder: (context, snapshot) {
-                              if (!snapshot.hasData)
+                              if (!snapshot.hasData) {
                                 return Center(
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
                                 );
+                              }
 
                               List<DocumentSnapshot> docs = snapshot.data!.docs;
 
-                              if (docs.isEmpty)
+                              if (docs.isEmpty) {
                                 return Center(
                                   child: Text(
                                     "Nenhuma reserva encontrada",
                                     style: TextStyle(color: Colors.grey),
                                   ),
                                 );
+                              }
 
                               // Seleção Automática (apenas se nenhum estiver selecionado e a lista não for vazia)
                               if (_selectedReservaId == null &&
@@ -326,8 +330,9 @@ class _CrecheViewState extends State<CrecheView> {
                               .doc(_selectedReservaId)
                               .snapshots(),
                           builder: (context, snapshot) {
-                            if (!snapshot.hasData || !snapshot.data!.exists)
+                            if (!snapshot.hasData || !snapshot.data!.exists) {
                               return Center(child: CircularProgressIndicator());
+                            }
                             return _buildPainelDetalhesCompacto(snapshot.data!);
                           },
                         ),
@@ -364,8 +369,9 @@ class _CrecheViewState extends State<CrecheView> {
             .get(),
       ]),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return SizedBox(); // Carregando (invisível para não piscar)
+        }
 
         String tutor = snap.data![0].exists
             ? (snap.data![0]['nome'] ?? 'Tutor')
@@ -556,10 +562,12 @@ class _CrecheViewState extends State<CrecheView> {
                             var pData = snap.data![1].data() as Map;
                             pet = pData['nome'];
                             raca = pData['raca'] ?? '';
-                            if (pData['tipo'] == 'gato')
+                            if (pData['tipo'] == 'gato') {
                               iconPet = FontAwesomeIcons.cat;
-                            if (pData['tipo'] == 'cao')
+                            }
+                            if (pData['tipo'] == 'cao') {
                               iconPet = FontAwesomeIcons.dog;
+                            }
                           }
                         }
 

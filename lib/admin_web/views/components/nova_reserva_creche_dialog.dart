@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class NovaReservaCrecheDialog extends StatefulWidget {
+  const NovaReservaCrecheDialog({super.key});
+
   @override
   _NovaReservaCrecheDialogState createState() =>
       _NovaReservaCrecheDialogState();
@@ -104,8 +106,9 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
       setState(() {
         if (isCheckIn) {
           _checkIn = picked;
-          if (!_checkOut.isAfter(_checkIn))
+          if (!_checkOut.isAfter(_checkIn)) {
             _checkOut = _checkIn.add(Duration(days: 1));
+          }
         } else {
           if (picked.isAfter(_checkIn)) _checkOut = picked;
         }
@@ -227,7 +230,7 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
-      child: Container(
+      child: SizedBox(
         width: 900,
         height: 550, // Altura otimizada
         child: Column(
@@ -436,7 +439,7 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                               _label("2. Selecionar Pet"),
                               SizedBox(height: 8),
                               DropdownButtonFormField<String>(
-                                value: _petIdSelecionado,
+                                initialValue: _petIdSelecionado,
                                 isDense: true,
                                 decoration: _inputDecoration(
                                   "Escolha o Aluno",

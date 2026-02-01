@@ -5,6 +5,8 @@ import 'subviews/servicos_view.dart';
 import 'subviews/pacotes_view.dart';
 
 class GestaoPrecosView extends StatefulWidget {
+  const GestaoPrecosView({super.key});
+
   @override
   _GestaoPrecosViewState createState() => _GestaoPrecosViewState();
 }

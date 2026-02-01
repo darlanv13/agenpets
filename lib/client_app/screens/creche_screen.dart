@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../services/firebase_service.dart';
 
 class CrecheScreen extends StatefulWidget {
+  const CrecheScreen({super.key});
+
   @override
   _CrecheScreenState createState() => _CrecheScreenState();
 }
@@ -33,7 +34,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
   // Controle do Calendário
   DateTime _focusedDay = DateTime.now();
   final Set<DateTime> _selectedDays = {};
-  RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.disabled;
+  final RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.disabled;
 
   Set<DateTime> _diasLotados = {};
 
@@ -520,8 +521,9 @@ class _CrecheScreenState extends State<CrecheScreen> {
         onDaySelected: _onDaySelected,
         enabledDayPredicate: (day) {
           // Desabilita dias passados e lotados
-          if (day.isBefore(DateTime.now().subtract(Duration(days: 1))))
+          if (day.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
             return false;
+          }
           return !_isDayLotado(day);
         },
         headerStyle: HeaderStyle(

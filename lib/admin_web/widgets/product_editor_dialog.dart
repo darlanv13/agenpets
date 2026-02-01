@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 class ProductEditorDialog extends StatefulWidget {
   final DocumentSnapshot? produto; // Se null, é criação. Se não, é edição.
 
-  const ProductEditorDialog({Key? key, this.produto}) : super(key: key);
+  const ProductEditorDialog({super.key, this.produto});
 
   @override
   _ProductEditorDialogState createState() => _ProductEditorDialogState();

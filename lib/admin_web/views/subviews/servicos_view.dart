@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ServicosView extends StatefulWidget {
+  const ServicosView({super.key});
+
   @override
   _ServicosViewState createState() => _ServicosViewState();
 }
@@ -236,7 +238,7 @@ class _ServicosViewState extends State<ServicosView> {
             child: ConstrainedBox(
               constraints: BoxConstraints(minWidth: 800),
               child: DataTable(
-                headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
+                headingRowColor: WidgetStateProperty.all(Colors.grey[100]),
                 dataRowMinHeight: 60,
                 dataRowMaxHeight: 60,
                 columns: [
@@ -374,20 +376,20 @@ class _ServicosViewState extends State<ServicosView> {
     String? docId,
     Map<String, dynamic>? data,
   }) {
-    final _nomeCtrl = TextEditingController(text: data?['nome']);
-    final _precoCtrl = TextEditingController(text: data?['preco']?.toString());
+    final nomeCtrl = TextEditingController(text: data?['nome']);
+    final precoCtrl = TextEditingController(text: data?['preco']?.toString());
 
     // State for Dropdowns
-    String? _porteSelecionado = data?['porte'];
-    String? _pelagemSelecionada = data?['pelagem'];
+    String? porteSelecionado = data?['porte'];
+    String? pelagemSelecionada = data?['pelagem'];
 
-    final List<String> _opcoesPorte = [
+    final List<String> opcoesPorte = [
       'Todos',
       'Pequeno Porte',
       'Médio Porte',
       'Grande Porte',
     ];
-    final List<String> _opcoesPelagem = ['Todos', 'Curta', 'Média', 'Longa'];
+    final List<String> opcoesPelagem = ['Todos', 'Curta', 'Média', 'Longa'];
 
     showDialog(
       context: context,
@@ -403,7 +405,7 @@ class _ServicosViewState extends State<ServicosView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                    controller: _nomeCtrl,
+                    controller: nomeCtrl,
                     decoration: InputDecoration(
                       labelText: "Nome do Serviço",
                       border: OutlineInputBorder(
@@ -413,7 +415,7 @@ class _ServicosViewState extends State<ServicosView> {
                   ),
                   SizedBox(height: 15),
                   TextField(
-                    controller: _precoCtrl,
+                    controller: precoCtrl,
                     keyboardType: TextInputType.numberWithOptions(
                       decimal: true,
                     ),
@@ -426,14 +428,14 @@ class _ServicosViewState extends State<ServicosView> {
                   ),
                   SizedBox(height: 15),
                   DropdownButtonFormField<String>(
-                    value: _porteSelecionado,
+                    initialValue: porteSelecionado,
                     decoration: InputDecoration(
                       labelText: "Porte Atendido",
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    items: _opcoesPorte.map((String value) {
+                    items: opcoesPorte.map((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
                         child: Text(value),
@@ -441,20 +443,20 @@ class _ServicosViewState extends State<ServicosView> {
                     }).toList(),
                     onChanged: (newValue) {
                       setStateDialog(() {
-                        _porteSelecionado = newValue;
+                        porteSelecionado = newValue;
                       });
                     },
                   ),
                   SizedBox(height: 15),
                   DropdownButtonFormField<String>(
-                    value: _pelagemSelecionada,
+                    initialValue: pelagemSelecionada,
                     decoration: InputDecoration(
                       labelText: "Tipo de Pelagem",
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    items: _opcoesPelagem.map((String value) {
+                    items: opcoesPelagem.map((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
                         child: Text(value),
@@ -462,7 +464,7 @@ class _ServicosViewState extends State<ServicosView> {
                     }).toList(),
                     onChanged: (newValue) {
                       setStateDialog(() {
-                        _pelagemSelecionada = newValue;
+                        pelagemSelecionada = newValue;
                       });
                     },
                   ),
@@ -482,16 +484,16 @@ class _ServicosViewState extends State<ServicosView> {
                   ),
                 ),
                 onPressed: () async {
-                  if (_nomeCtrl.text.isEmpty || _precoCtrl.text.isEmpty) return;
+                  if (nomeCtrl.text.isEmpty || precoCtrl.text.isEmpty) return;
 
                   double preco =
-                      double.tryParse(_precoCtrl.text.replaceAll(',', '.')) ??
+                      double.tryParse(precoCtrl.text.replaceAll(',', '.')) ??
                       0.0;
                   final payload = {
-                    'nome': _nomeCtrl.text,
+                    'nome': nomeCtrl.text,
                     'preco': preco,
-                    'porte': _porteSelecionado,
-                    'pelagem': _pelagemSelecionada,
+                    'porte': porteSelecionado,
+                    'pelagem': pelagemSelecionada,
                   };
 
                   if (docId == null) {

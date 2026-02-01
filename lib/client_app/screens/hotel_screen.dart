@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../services/firebase_service.dart';
 
 class HotelScreen extends StatefulWidget {
+  const HotelScreen({super.key});
+
   @override
   _HotelScreenState createState() => _HotelScreenState();
 }
@@ -523,8 +524,9 @@ class _HotelScreenState extends State<HotelScreen> {
 
         // Disable individual days (past and blocked)
         enabledDayPredicate: (day) {
-          if (day.isBefore(DateTime.now().subtract(Duration(days: 1))))
+          if (day.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
             return false;
+          }
           return !_isDayLotado(day);
         },
 

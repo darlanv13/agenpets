@@ -8,6 +8,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../services/firebase_service.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -89,9 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
     String cpfLimpo,
     DocumentSnapshot docPro,
   ) {
-    final _passCtrl = TextEditingController();
-    bool _senhaVisivel = false;
-    bool _logandoDialog = false;
+    final passCtrl = TextEditingController();
+    bool senhaVisivel = false;
+    bool logandoDialog = false;
 
     showDialog(
       context: context,
@@ -120,22 +122,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 SizedBox(height: 20),
                 TextField(
-                  controller: _passCtrl,
-                  obscureText: !_senhaVisivel,
+                  controller: passCtrl,
+                  obscureText: !senhaVisivel,
                   autofocus: true,
                   decoration: InputDecoration(
                     labelText: "Senha",
                     border: OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _senhaVisivel ? Icons.visibility : Icons.visibility_off,
+                        senhaVisivel ? Icons.visibility : Icons.visibility_off,
                       ),
                       onPressed: () =>
-                          setStateDialog(() => _senhaVisivel = !_senhaVisivel),
+                          setStateDialog(() => senhaVisivel = !senhaVisivel),
                     ),
                   ),
                 ),
-                if (_logandoDialog)
+                if (logandoDialog)
                   Padding(
                     padding: const EdgeInsets.only(top: 15.0),
                     child: LinearProgressIndicator(color: _corAcai),
@@ -144,27 +146,27 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: _logandoDialog ? null : () => Navigator.pop(ctx),
+                onPressed: logandoDialog ? null : () => Navigator.pop(ctx),
                 child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: _corAcai),
-                onPressed: _logandoDialog
+                onPressed: logandoDialog
                     ? null
                     : () async {
-                        setStateDialog(() => _logandoDialog = true);
+                        setStateDialog(() => logandoDialog = true);
 
                         // CHAMA O LOGIN REAL
                         bool sucesso = await _autenticarProfissionalFirebase(
                           cpfLimpo,
-                          _passCtrl.text,
+                          passCtrl.text,
                         );
 
                         if (sucesso) {
                           Navigator.pop(ctx); // Fecha dialog
                           // O redirecionamento é feito dentro da função _autenticar
                         } else {
-                          setStateDialog(() => _logandoDialog = false);
+                          setStateDialog(() => logandoDialog = false);
                         }
                       },
                 child: Text("ENTRAR", style: TextStyle(color: Colors.white)),

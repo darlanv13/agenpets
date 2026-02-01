@@ -5,6 +5,8 @@ import '../../models/user_model.dart';
 import '../../services/firebase_service.dart';
 
 class CadastroScreen extends StatefulWidget {
+  const CadastroScreen({super.key});
+
   @override
   _CadastroScreenState createState() => _CadastroScreenState();
 }

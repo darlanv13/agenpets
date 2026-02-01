@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ConfiguracaoAgendaView extends StatefulWidget {
+  const ConfiguracaoAgendaView({super.key});
+
   @override
   _ConfiguracaoAgendaViewState createState() => _ConfiguracaoAgendaViewState();
 }
@@ -139,28 +141,31 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
     );
     if (picked != null) {
       setState(() {
-        if (isAbertura)
+        if (isAbertura) {
           _abertura = picked;
-        else
+        } else {
           _fechamento = picked;
+        }
       });
     }
   }
 
   void _toggleDia(int dia) {
     setState(() {
-      if (_diasFuncionamento.contains(dia))
+      if (_diasFuncionamento.contains(dia)) {
         _diasFuncionamento.remove(dia);
-      else
+      } else {
         _diasFuncionamento.add(dia);
+      }
       _diasFuncionamento.sort();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return Center(child: CircularProgressIndicator(color: _corAcai));
+    }
 
     // Cálculos para o Resumo
     int totalMinutos = _calculaMinutosAbertos();
@@ -576,7 +581,7 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _buildStepBtn(Icons.remove, () => _ajustarTempo(ctrl, -5)),
-              Container(
+              SizedBox(
                 width: 60,
                 child: TextField(
                   controller: ctrl,

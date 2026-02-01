@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class NovaReservaDialog extends StatefulWidget {
+  const NovaReservaDialog({super.key});
+
   @override
   _NovaReservaDialogState createState() => _NovaReservaDialogState();
 }
@@ -103,8 +105,9 @@ class _NovaReservaDialogState extends State<NovaReservaDialog> {
       setState(() {
         if (isCheckIn) {
           _checkIn = picked;
-          if (!_checkOut.isAfter(_checkIn))
+          if (!_checkOut.isAfter(_checkIn)) {
             _checkOut = _checkIn.add(Duration(days: 1));
+          }
         } else {
           if (picked.isAfter(_checkIn)) _checkOut = picked;
         }
@@ -226,7 +229,7 @@ class _NovaReservaDialogState extends State<NovaReservaDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
-      child: Container(
+      child: SizedBox(
         width: 900,
         height: 550, // Altura otimizada
         child: Column(
@@ -435,7 +438,7 @@ class _NovaReservaDialogState extends State<NovaReservaDialog> {
                               _label("2. Selecionar Pet"),
                               SizedBox(height: 8),
                               DropdownButtonFormField<String>(
-                                value: _petIdSelecionado,
+                                initialValue: _petIdSelecionado,
                                 isDense: true,
                                 decoration: _inputDecoration(
                                   "Escolha o Hóspede",

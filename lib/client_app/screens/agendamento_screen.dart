@@ -8,6 +8,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AgendamentoScreen extends StatefulWidget {
+  const AgendamentoScreen({super.key});
+
   @override
   _AgendamentoScreenState createState() => _AgendamentoScreenState();
 }
@@ -988,8 +990,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   void _abrirModalAdicionarPet() {
     // Reutilizando lógica simples, ou idealmente chamar o modal da tela de Pets
     // Por brevidade, implementação simples inline:
-    final _nomeController = TextEditingController();
-    String _tipoSelecionado = 'cao';
+    final nomeController = TextEditingController();
+    String tipoSelecionado = 'cao';
 
     showDialog(
       context: context,
@@ -1004,7 +1006,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: _nomeController,
+                  controller: nomeController,
                   decoration: InputDecoration(
                     labelText: "Nome",
                     border: OutlineInputBorder(
@@ -1018,11 +1020,11 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () =>
-                            setModalState(() => _tipoSelecionado = 'cao'),
+                            setModalState(() => tipoSelecionado = 'cao'),
                         child: Container(
                           padding: EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: _tipoSelecionado == 'cao'
+                            color: tipoSelecionado == 'cao'
                                 ? _corAcai
                                 : Colors.grey[200],
                             borderRadius: BorderRadius.circular(10),
@@ -1031,7 +1033,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                             child: Text(
                               "Cão",
                               style: TextStyle(
-                                color: _tipoSelecionado == 'cao'
+                                color: tipoSelecionado == 'cao'
                                     ? Colors.white
                                     : Colors.black,
                               ),
@@ -1044,11 +1046,11 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () =>
-                            setModalState(() => _tipoSelecionado = 'gato'),
+                            setModalState(() => tipoSelecionado = 'gato'),
                         child: Container(
                           padding: EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: _tipoSelecionado == 'gato'
+                            color: tipoSelecionado == 'gato'
                                 ? _corAcai
                                 : Colors.grey[200],
                             borderRadius: BorderRadius.circular(10),
@@ -1057,7 +1059,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                             child: Text(
                               "Gato",
                               style: TextStyle(
-                                color: _tipoSelecionado == 'gato'
+                                color: tipoSelecionado == 'gato'
                                     ? Colors.white
                                     : Colors.black,
                               ),
@@ -1077,14 +1079,14 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (_nomeController.text.isNotEmpty) {
+                  if (nomeController.text.isNotEmpty) {
                     await _db
                         .collection('users')
                         .doc(_userCpf)
                         .collection('pets')
                         .add({
-                          'nome': _nomeController.text.trim(),
-                          'tipo': _tipoSelecionado,
+                          'nome': nomeController.text.trim(),
+                          'tipo': tipoSelecionado,
                           'created_at': FieldValue.serverTimestamp(),
                         });
                     Navigator.pop(context);

@@ -10,44 +10,70 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     const { cpf_user, pacoteId, tenantId } = request.data;
 
     if (!cpf_user || !pacoteId || !tenantId) {
-        throw new HttpsError('invalid-argument', 'CPF, ID do pacote e ID da Loja são obrigatórios.');
+        throw new HttpsError("invalid-argument", "CPF, ID do pacote e ID da Loja são obrigatórios.");
+    }
+
+    // 1. Busca Configuração da Loja (Chaves de API)
+    const configDoc = await db.collection("tenants")
+        .doc(tenantId)
+        .collection("config")
+        .doc("parametros")
+        .get();
+    const config = configDoc.exists ? configDoc.data() : {};
+
+    // Verifica Gateway selecionado
+    if (config.gateway_pagamento === "mercadopago") {
+        throw new HttpsError("unimplemented", "Integração com Mercado Pago em desenvolvimento.");
+    }
+
+    // Configura credenciais dinâmicas do EfiPay
+    const currentOptions = { ...optionsEfi }; // Copia padrão (incluindo certificado)
+
+    if (config.efipay_client_id && config.efipay_client_secret) {
+        currentOptions.client_id = config.efipay_client_id;
+        currentOptions.client_secret = config.efipay_client_secret;
+        // Nota: O certificado ainda será o padrão definido em optionsEfi.
+        // Para suporte total a contas diferentes, seria necessário gerenciar múltiplos certificados.
     }
 
     // Busca o pacote (Pode ser global ou da loja, aqui assumindo global para simplificar, mas salvando a venda na loja)
-    ///db.collection('tenants').doc(tenantId).collection('pacotes').doc(pacoteId)...
-    const pacoteRef = db.collection('tenants').doc(tenantId).collection('pacotes').doc(pacoteId);
+    // /db.collection('tenants').doc(tenantId).collection('pacotes').doc(pacoteId)...
+    const pacoteRef = db.collection("tenants").doc(tenantId).collection("pacotes").doc(pacoteId);
     const pacoteSnap = await pacoteRef.get();
 
     if (!pacoteSnap.exists) {
-        throw new HttpsError('not-found', 'Pacote não encontrado.');
+        throw new HttpsError("not-found", "Pacote não encontrado.");
     }
 
     const pacoteData = pacoteSnap.data();
     const valor = parseFloat(pacoteData.preco);
-    const nomePacote = pacoteData.nome || 'Pacote AgenPet';
+    const nomePacote = pacoteData.nome || "Pacote AgenPet";
 
     // Extrai Vouchers (Snapshot)
     const vouchersSnapshot = {};
     for (const [key, value] of Object.entries(pacoteData)) {
-        if (key.startsWith('vouchers_') && typeof value === 'number' && value > 0) {
+        if (key.startsWith("vouchers_") && typeof value === "number" && value > 0) {
             // Remove o prefixo 'vouchers_' para ficar limpo no banco (ex: 'banho': 4)
-            const nomeServico = key.replace('vouchers_', '');
+            const nomeServico = key.replace("vouchers_", "");
             vouchersSnapshot[nomeServico] = value;
         }
     }
 
     // Gera Cobrança na EfiPay
-    let pixCopiaCola = '', imagemQrcode = '', txid = '';
+    let pixCopiaCola = ""; let imagemQrcode = ""; let txid = "";
 
     try {
-        const efipay = new EfiPay(optionsEfi);
-        const cpfLimpo = cpf_user.replace(/\D/g, '');
+        const efipay = new EfiPay(currentOptions);
+        const cpfLimpo = cpf_user.replace(/\D/g, "");
+
+        // Usa chave PIX da config se existir, senão usa padrão
+        const chavePix = config.chave_pix || "client_id_homologacao";
 
         const bodyPix = {
             calendario: { expiracao: 3600 },
             devedor: { cpf: cpfLimpo, nome: "Cliente AgenPet" },
             valor: { original: valor.toFixed(2) },
-            chave: "client_id_homologacao" // [ATENÇÃO] Use sua chave PIX real aqui
+            chave: chavePix,
         };
 
         const cobranca = await efipay.pixCreateImmediateCharge([], bodyPix);
@@ -56,14 +82,13 @@ exports.gerarPixAssinatura = onCall(async (request) => {
         const qrCode = await efipay.pixGenerateQRCode({ id: cobranca.loc.id });
         pixCopiaCola = qrCode.qrcode;
         imagemQrcode = qrCode.imagemQrcode;
-
     } catch (error) {
         console.error("Erro EfiPay:", error);
-        throw new HttpsError('internal', 'Erro ao gerar PIX: ' + error.message);
+        throw new HttpsError("internal", "Erro ao gerar PIX: " + error.message);
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
-    const vendaRef = db.collection('tenants').doc(tenantId).collection('vendas_assinaturas').doc();
+    const vendaRef = db.collection("tenants").doc(tenantId).collection("vendas_assinaturas").doc();
 
     await vendaRef.set({
         userId: cpf_user,
@@ -72,17 +97,17 @@ exports.gerarPixAssinatura = onCall(async (request) => {
         pacote_nome: nomePacote,
         valor: valor,
         txid: txid,
-        status: 'pendente',
+        status: "pendente",
         vouchers_snapshot: vouchersSnapshot,
         created_at: admin.firestore.FieldValue.serverTimestamp(),
-        metodo_pagamento: 'pix'
+        metodo_pagamento: "pix",
     });
 
     return {
         pix_copia_cola: pixCopiaCola,
         imagem_qrcode: imagemQrcode,
         vendaId: vendaRef.id,
-        valor: valor
+        valor: valor,
     };
 });
 
@@ -100,23 +125,23 @@ exports.webhookPix = onRequest(async (req, res) => {
             console.log(`Recebido PIX txid: ${txid}`);
 
             // A. Tenta atualizar AGENDAMENTO (Busca em todas as lojas)
-            const agendamentoSnap = await db.collectionGroup('agendamentos').where('txid', '==', txid).get();
+            const agendamentoSnap = await db.collectionGroup("agendamentos").where("txid", "==", txid).get();
             if (!agendamentoSnap.empty) {
                 const batch = db.batch();
-                agendamentoSnap.forEach(doc => {
-                    batch.update(doc.ref, { status: 'agendado' });
+                agendamentoSnap.forEach((doc) => {
+                    batch.update(doc.ref, { status: "agendado" });
                 });
                 await batch.commit();
                 continue;
             }
 
             // B. Tenta atualizar VENDA DE ASSINATURA/PACOTE
-            const vendaSnap = await db.collectionGroup('vendas_assinaturas').where('txid', '==', txid).get();
+            const vendaSnap = await db.collectionGroup("vendas_assinaturas").where("txid", "==", txid).get();
             if (!vendaSnap.empty) {
                 const vendaDoc = vendaSnap.docs[0];
                 const vendaData = vendaDoc.data();
 
-                if (vendaData.status !== 'pago') {
+                if (vendaData.status !== "pago") {
                     const userId = vendaData.userId;
                     const tenantId = vendaData.tenantId; // Recupera a loja
                     const vouchersSnapshot = vendaData.vouchers_snapshot || {};
@@ -125,23 +150,23 @@ exports.webhookPix = onRequest(async (req, res) => {
 
                     // [MUDANÇA CRÍTICA] Define a referência para a subcoleção DA LOJA
                     // Caminho: users/{cpf}/vouchers/{tenantId}
-                    const userVoucherRef = db.collection('users')
+                    const userVoucherRef = db.collection("users")
                         .doc(userId)
-                        .collection('vouchers')
+                        .collection("vouchers")
                         .doc(tenantId);
 
                     const batch = db.batch();
 
                     // 1. Atualiza status da venda
                     batch.update(vendaDoc.ref, {
-                        status: 'pago',
-                        data_pagamento: dataPagamento
+                        status: "pago",
+                        data_pagamento: dataPagamento,
                     });
 
                     // 2. Prepara atualização dos vouchers na loja específica
                     const updatesVoucher = {
                         ultima_compra: dataPagamento,
-                        validade: admin.firestore.Timestamp.fromDate(validadeDate)
+                        validade: admin.firestore.Timestamp.fromDate(validadeDate),
                     };
 
                     // Soma os novos vouchers ao saldo existente (Atomicamente)
@@ -164,3 +189,4 @@ exports.webhookPix = onRequest(async (req, res) => {
         res.status(500).send("Erro interno");
     }
 });
+

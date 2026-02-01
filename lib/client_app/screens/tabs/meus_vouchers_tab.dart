@@ -8,7 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 class MeusVouchersTab extends StatefulWidget {
   final String userCpf;
 
-  const MeusVouchersTab({Key? key, required this.userCpf}) : super(key: key);
+  const MeusVouchersTab({super.key, required this.userCpf});
 
   @override
   _MeusVouchersTabState createState() => _MeusVouchersTabState();
@@ -35,8 +35,9 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
           .doc(AppConfig.tenantId)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
+        }
 
         if (!snapshot.data!.exists) {
           return _buildSemAssinatura(context);
