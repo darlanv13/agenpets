@@ -41,6 +41,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   bool _temTosa = false;
   String _gatewayPagamento = 'efipay';
   bool _isLoading = true;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -73,16 +74,17 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao carregar: $e")));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Erro ao carregar: $e")));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _salvarConfiguracoes() async {
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
     try {
       // 1. Salvar Configurações Visuais/Públicas (Escrita direta no Firestore é OK aqui)
       await _db
@@ -113,28 +115,30 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         'mercadopago_access_token': _mpAccessTokenCtrl.text.trim(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.shield, color: Colors.white),
-              SizedBox(width: 10),
-              Text("Configurações e Chaves salvas com segurança!"),
-            ],
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.shield, color: Colors.white),
+                SizedBox(width: 10),
+                Text("Configurações e Chaves salvas com segurança!"),
+              ],
+            ),
+            backgroundColor: Colors.green[700],
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: Colors.green[700],
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro ao salvar: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao salvar: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -142,6 +146,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
           widget.nomeLoja.toUpperCase(),
@@ -161,11 +166,36 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildConfigTab(theme),
-          TenantTeamManager(tenantId: widget.tenantId),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildConfigTab(theme),
+              TenantTeamManager(tenantId: widget.tenantId),
+            ],
+          ),
+          if (_isSaving)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 20),
+                    Text(
+                      "Salvando configurações...",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -177,153 +207,180 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
     return Center(
       child: Container(
         constraints: BoxConstraints(maxWidth: 900),
-        child: SingleChildScrollView(
+        child: ListView(
           padding: EdgeInsets.all(30),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSectionHeader(
-                "Módulos de Serviço",
-                FontAwesomeIcons.layerGroup,
+          children: [
+            _buildSectionHeader(
+              "Módulos de Serviço",
+              FontAwesomeIcons.layerGroup,
+            ),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Column(
-                    children: [
-                      _buildSwitch(
-                        "Banho & Higiene",
-                        "Módulo de agendamento de banhos",
-                        _temBanho,
-                        (v) => setState(() => _temBanho = v),
-                        FontAwesomeIcons.shower,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Tosa & Estética",
-                        "Módulo de tosa",
-                        _temTosa,
-                        (v) => setState(() => _temTosa = v),
-                        FontAwesomeIcons.scissors,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Creche / Daycare",
-                        "Gestão de entrada e saída diária",
-                        _temCreche,
-                        (v) => setState(() => _temCreche = v),
-                        FontAwesomeIcons.dog,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Hotel & Hospedagem",
-                        "Gestão de pernoites e baias",
-                        _temHotel,
-                        (v) => setState(() => _temHotel = v),
-                        FontAwesomeIcons.hotel,
-                      ),
-                    ],
-                  ),
+              child: Padding(
+                padding: EdgeInsets.all(10),
+                child: Column(
+                  children: [
+                    _buildSwitch(
+                      "Banho & Higiene",
+                      "Módulo de agendamento de banhos",
+                      _temBanho,
+                      (v) => setState(() => _temBanho = v),
+                      FontAwesomeIcons.shower,
+                    ),
+                    Divider(),
+                    _buildSwitch(
+                      "Tosa & Estética",
+                      "Módulo de tosa",
+                      _temTosa,
+                      (v) => setState(() => _temTosa = v),
+                      FontAwesomeIcons.scissors,
+                    ),
+                    Divider(),
+                    _buildSwitch(
+                      "Creche / Daycare",
+                      "Gestão de entrada e saída diária",
+                      _temCreche,
+                      (v) => setState(() => _temCreche = v),
+                      FontAwesomeIcons.dog,
+                    ),
+                    Divider(),
+                    _buildSwitch(
+                      "Hotel & Hospedagem",
+                      "Gestão de pernoites e baias",
+                      _temHotel,
+                      (v) => setState(() => _temHotel = v),
+                      FontAwesomeIcons.hotel,
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              SizedBox(height: 30),
-              _buildSectionHeader(
-                "Identidade Visual (White Label)",
-                Icons.palette,
+            SizedBox(height: 30),
+            _buildSectionHeader(
+              "Identidade Visual (White Label)",
+              Icons.palette,
+            ),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      _buildImageInput(
-                        _logoAppCtrl,
-                        "Logo App Cliente",
-                        Icons.phone_iphone,
-                      ),
-                      SizedBox(height: 20),
-                      _buildImageInput(
-                        _logoAdminCtrl,
-                        "Logo Painel Administrativo",
-                        Icons.monitor,
-                      ),
-                    ],
-                  ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    _buildImageInput(
+                      _logoAppCtrl,
+                      "Logo App Cliente",
+                      Icons.phone_iphone,
+                    ),
+                    SizedBox(height: 20),
+                    _buildImageInput(
+                      _logoAdminCtrl,
+                      "Logo Painel Administrativo",
+                      Icons.monitor,
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              SizedBox(height: 30),
-              _buildSectionHeader("Gateway de Pagamento", Icons.credit_card),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _gatewayPagamento,
-                        decoration: InputDecoration(
-                          labelText: "Provedor Principal",
-                          prefixIcon: Icon(Icons.hub),
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'efipay',
-                            child: Text("EfiPay (Gerencianet)"),
-                          ),
-                          DropdownMenuItem(
-                            value: 'mercadopago',
-                            child: Text("Mercado Pago"),
-                          ),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _gatewayPagamento = v!),
+            SizedBox(height: 30),
+            _buildSectionHeader("Gateway de Pagamento", Icons.credit_card),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: _gatewayPagamento,
+                      decoration: InputDecoration(
+                        labelText: "Provedor Principal",
+                        prefixIcon: Icon(Icons.hub),
+                        border: OutlineInputBorder(),
                       ),
-                      SizedBox(height: 20),
-                      if (_gatewayPagamento == 'efipay') ...[
-                        TextFormField(
-                          controller: _efipayClientIdCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Client ID",
-                            prefixIcon: Icon(Icons.key),
-                          ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'efipay',
+                          child: Text("EfiPay (Gerencianet)"),
                         ),
-                        SizedBox(height: 15),
-                        TextFormField(
-                          controller: _efipayClientSecretCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Client Secret",
-                            prefixIcon: Icon(Icons.lock),
-                          ),
-                        ),
-                      ] else ...[
-                        TextFormField(
-                          controller: _mpAccessTokenCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Access Token (Production)",
-                            prefixIcon: Icon(Icons.vpn_key),
-                          ),
+                        DropdownMenuItem(
+                          value: 'mercadopago',
+                          child: Text("Mercado Pago"),
                         ),
                       ],
-                    ],
-                  ),
+                      onChanged: (v) => setState(() => _gatewayPagamento = v!),
+                    ),
+                    SizedBox(height: 20),
+                    AnimatedCrossFade(
+                      duration: Duration(milliseconds: 300),
+                      crossFadeState: _gatewayPagamento == 'efipay'
+                          ? CrossFadeState.showFirst
+                          : CrossFadeState.showSecond,
+                      firstChild: Column(
+                        children: [
+                          TextFormField(
+                            controller: _efipayClientIdCtrl,
+                            decoration: InputDecoration(
+                              labelText: "Client ID",
+                              prefixIcon: Icon(Icons.key),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          SizedBox(height: 15),
+                          TextFormField(
+                            controller: _efipayClientSecretCtrl,
+                            decoration: InputDecoration(
+                              labelText: "Client Secret",
+                              prefixIcon: Icon(Icons.lock),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      secondChild: TextFormField(
+                        controller: _mpAccessTokenCtrl,
+                        decoration: InputDecoration(
+                          labelText: "Access Token (Production)",
+                          prefixIcon: Icon(Icons.vpn_key),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              SizedBox(height: 40),
-              SizedBox(
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: _salvarConfiguracoes,
-                  icon: Icon(Icons.save),
-                  label: Text("SALVAR ALTERAÇÕES"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+            SizedBox(height: 40),
+            SizedBox(
+              height: 55,
+              child: ElevatedButton.icon(
+                onPressed: _salvarConfiguracoes,
+                icon: Icon(Icons.save),
+                label: Text(
+                  "SALVAR ALTERAÇÕES",
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            SizedBox(height: 50),
+          ],
         ),
       ),
     );
@@ -388,6 +445,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             decoration: InputDecoration(
               labelText: label,
               prefixIcon: Icon(icon),
+              border: OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),
           ),
