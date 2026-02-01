@@ -8,9 +8,7 @@ import 'package:agenpet/admin_web/widgets/professional_editor_dialog.dart';
 
 class TenantTeamManager extends StatefulWidget {
   final String tenantId;
-
   const TenantTeamManager({super.key, required this.tenantId});
-
   @override
   _TenantTeamManagerState createState() => _TenantTeamManagerState();
 }
@@ -20,16 +18,11 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
-
   final _functions = FirebaseFunctions.instanceFor(
     region: 'southamerica-east1',
   );
 
-  // --- PALETA DE CORES ---
-  final Color _corAcai = Color(0xFF4A148C);
-  final Color _corLilas = Color(0xFFF3E5F5);
-  final Color _corFundo = Color(0xFFF5F7FA);
-
+  // Controllers e Forms
   final _nomeController = TextEditingController();
   final _cpfController = TextEditingController();
   final _senhaController = TextEditingController();
@@ -38,94 +31,111 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     mask: '###.###.###-##',
     filter: {"#": RegExp(r'[0-9]')},
   );
-
-  var maskCnpj = MaskTextInputFormatter(
-    mask: '##.###.###/####-##',
-    filter: {"#": RegExp(r'[0-9]')},
-  );
-
-  bool _isCnpj = false;
   bool _isLoading = false;
-
   String _filtroEquipe = "";
 
-  // --- FUNÇÕES (CHECKBOXES) ---
-  bool fazBanho = true;
-  bool fazTosa = false;
-  bool fazVendas = false;
+  // Funções / Roles
+  Set<String> _rolesSelecionadas = {};
 
-  // NOVAS FUNÇÕES SEPARADAS
-  bool fazCaixa = false; // Operador de Caixa
-  bool fazMaster = false; // Gerente / Admin
+  // Permissões
+  final Map<String, String> _availablePages = {
+    'dashboard': 'Dashboard',
+    'loja_pdv': 'PDV / Vendas',
+    'banhos_tosa': 'Agenda Banho/Tosa',
+    'hotel': 'Agenda Hotel',
+    'creche': 'Agenda Creche',
+    'equipe': 'Gestão Equipe',
+    'configuracoes': 'Configs',
+  };
+  Map<String, bool> _selectedAccess = {};
 
-  void _cadastrarFuncionario() async {
+  @override
+  void initState() {
+    super.initState();
+    _availablePages.forEach((k, v) => _selectedAccess[k] = false);
+  }
+
+  void _toggleRole(String role) {
+    setState(() {
+      if (_rolesSelecionadas.contains(role)) {
+        _rolesSelecionadas.remove(role);
+        // Se remover Master, limpa acessos automáticos
+        if (role == 'master')
+          _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+      } else {
+        _rolesSelecionadas.add(role);
+        // Se adicionar Master, seleciona tudo
+        if (role == 'master') {
+          _availablePages.keys.forEach((k) => _selectedAccess[k] = true);
+          _rolesSelecionadas.add('caixa'); // Master geralmente opera caixa
+        }
+      }
+    });
+  }
+
+  Future<void> _cadastrar() async {
     if (_nomeController.text.isEmpty ||
         _cpfController.text.isEmpty ||
-        _senhaController.text.isEmpty) {
-      _showSnack("Preencha Nome, CPF e Senha Inicial.", Colors.orange);
+        _senhaController.text.length < 6) {
+      _showSnack(
+        "Preencha todos os campos corretamente (senha min 6).",
+        Colors.orange,
+      );
       return;
     }
-
-    if (_senhaController.text.length < 6) {
-      _showSnack("A senha deve ter no mínimo 6 caracteres.", Colors.orange);
+    if (_rolesSelecionadas.isEmpty) {
+      _showSnack("Selecione ao menos uma função.", Colors.orange);
       return;
     }
 
     setState(() => _isLoading = true);
-
-    // 1. Define Habilidades (Tags visuais e filtros)
-    List<String> habs = [];
-    if (fazBanho) habs.add('banho');
-    if (fazTosa) habs.add('tosa');
-    if (fazVendas) habs.add('vendedor');
-    if (fazCaixa) habs.add('caixa');
-    if (fazMaster) habs.add('master');
-
-    if (habs.isEmpty) {
-      _showSnack("Selecione ao menos uma função.", Colors.orange);
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    // 2. Define Perfil de Segurança (Isso que define o acesso no Login)
-    // Se marcou Master, o perfil é 'master' (Acesso total).
-    // Senão, é 'padrao' (Acesso restrito às suas funções).
-    String perfilEnvio = fazMaster ? 'master' : 'padrao';
-
     try {
+      List<String> acessos = _selectedAccess.entries
+          .where((e) => e.value)
+          .map((e) => e.key)
+          .toList();
+      String perfil = _rolesSelecionadas.contains('master')
+          ? 'master'
+          : 'padrao';
+
       await _functions.httpsCallable('criarContaProfissional').call({
         'nome': _nomeController.text.trim(),
         'documento': _cpfController.text,
-        'cpf': _cpfController.text, // Manda também para garantir
+        'cpf': _cpfController.text,
         'senha': _senhaController.text.trim(),
-        'habilidades': habs,
-        'perfil': perfilEnvio,
-        'tenantId': widget.tenantId, // USANDO O TENANT ID PASSADO
+        'habilidades': _rolesSelecionadas.toList(),
+        'perfil': perfil,
+        'tenantId': widget.tenantId,
       });
 
-      // Sucesso
-      _nomeController.clear();
-      _cpfController.clear();
-      _senhaController.clear();
-      setState(() {
-        fazBanho = true;
-        fazTosa = false;
-        fazVendas = false;
-        fazCaixa = false;
-        fazMaster = false;
-      });
+      // Atualiza permissões manuais se não for master (ou reforça se for)
+      final q = await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('profissionais')
+          .where('documento', isEqualTo: _cpfController.text)
+          .limit(1)
+          .get();
+      if (q.docs.isNotEmpty)
+        await q.docs.first.reference.update({'acessos': acessos});
 
-      _showSnack("Profissional criado com sucesso!", Colors.green);
+      _clearForm();
+      _showSnack("Colaborador adicionado!", Colors.green);
     } catch (e) {
-      String msg = "Erro ao cadastrar.";
-      if (e is FirebaseFunctionsException) {
-        msg = e.message ?? e.code;
-        if (e.code == 'already-exists') msg = "Este CPF já está cadastrado.";
-      }
-      _showSnack(msg, Colors.red);
+      _showSnack("Erro: ${e.toString()}", Colors.red);
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _clearForm() {
+    _nomeController.clear();
+    _cpfController.clear();
+    _senhaController.clear();
+    setState(() {
+      _rolesSelecionadas.clear();
+      _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+    });
   }
 
   void _showSnack(String msg, Color color) {
@@ -136,654 +146,308 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // HEADER
-        Container(
-          padding: EdgeInsets.symmetric(vertical: 25, horizontal: 40),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _corLilas,
-                  borderRadius: BorderRadius.circular(12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isWide = constraints.maxWidth > 900;
+        return Padding(
+          padding: EdgeInsets.all(isWide ? 30 : 15),
+          child: isWide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: _buildFormCard()),
+                    SizedBox(width: 30),
+                    Expanded(flex: 3, child: _buildListCard()),
+                  ],
+                )
+              : Column(
+                  children: [
+                    _buildFormCard(),
+                    SizedBox(height: 30),
+                    _buildListCard(),
+                  ],
                 ),
-                child: Icon(
-                  Icons.people_alt_rounded,
-                  color: _corAcai,
-                  size: 28,
-                ),
-              ),
-              SizedBox(width: 15),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Gestão de Equipe",
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: _corAcai,
-                    ),
-                  ),
-                  Text(
-                    "Cadastre e gerencie seus profissionais",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        );
+      },
+    );
+  }
 
-        // CONTEÚDO
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(30),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildFormCard() {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(25),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Novo Colaborador",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 20),
+            TextFormField(
+              controller: _nomeController,
+              decoration: InputDecoration(
+                labelText: "Nome Completo",
+                prefixIcon: Icon(Icons.person),
+              ),
+            ),
+            SizedBox(height: 15),
+            TextFormField(
+              controller: _cpfController,
+              inputFormatters: [maskCpf],
+              decoration: InputDecoration(
+                labelText: "CPF (Login)",
+                prefixIcon: Icon(Icons.badge),
+              ),
+            ),
+            SizedBox(height: 15),
+            TextFormField(
+              controller: _senhaController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: "Senha Inicial",
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+
+            SizedBox(height: 25),
+            Text(
+              "Funções & Permissões",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+            SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                // --- COLUNA FORMULÁRIO ---
-                Expanded(
-                  flex: 2,
-                  child: SingleChildScrollView(
-                    child: Container(
-                      padding: EdgeInsets.all(30),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 20,
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Novo Colaborador",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          SizedBox(height: 20),
-
-                          _buildTextField(
-                            _nomeController,
-                            "Nome Completo",
-                            Icons.person,
-                          ),
-                          SizedBox(height: 15),
-                          // Toggle CPF/CNPJ
-                          Row(
-                            children: [
-                              Text(
-                                "Tipo de Documento: ",
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              SizedBox(width: 10),
-                              ChoiceChip(
-                                label: Text("CPF"),
-                                selected: !_isCnpj,
-                                onSelected: (v) {
-                                  if (v) {
-                                    setState(() {
-                                      _isCnpj = false;
-                                      _cpfController.clear();
-                                    });
-                                  }
-                                },
-                              ),
-                              SizedBox(width: 10),
-                              ChoiceChip(
-                                label: Text("CNPJ"),
-                                selected: _isCnpj,
-                                onSelected: (v) {
-                                  if (v) {
-                                    setState(() {
-                                      _isCnpj = true;
-                                      _cpfController.clear();
-                                    });
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 10),
-
-                          _buildTextField(
-                            _cpfController,
-                            _isCnpj ? "CNPJ (Login)" : "CPF (Login)",
-                            Icons.badge,
-                            formatter: _isCnpj ? maskCnpj : maskCpf,
-                          ),
-                          SizedBox(height: 15),
-
-                          TextField(
-                            controller: _senhaController,
-                            obscureText: true,
-                            decoration: InputDecoration(
-                              labelText: "Senha Inicial",
-                              prefixIcon: Icon(
-                                Icons.lock,
-                                color: _corAcai,
-                                size: 20,
-                              ),
-                              filled: true,
-                              fillColor: _corFundo,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              helperText: "Mínimo 6 caracteres",
-                            ),
-                          ),
-
-                          SizedBox(height: 25),
-                          Text(
-                            "Funções Operacionais",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-
-                          _buildRoleSelector(
-                            "Banhista",
-                            FontAwesomeIcons.shower,
-                            fazBanho,
-                            (v) => setState(() => fazBanho = v),
-                          ),
-                          SizedBox(height: 10),
-                          _buildRoleSelector(
-                            "Tosador",
-                            FontAwesomeIcons.scissors,
-                            fazTosa,
-                            (v) => setState(() => fazTosa = v),
-                          ),
-                          SizedBox(height: 10),
-                          _buildRoleSelector(
-                            "Vendedor",
-                            FontAwesomeIcons.basketShopping,
-                            fazVendas,
-                            (v) => setState(() => fazVendas = v),
-                          ),
-                          SizedBox(height: 10),
-                          // SEPARADO: CAIXA
-                          _buildRoleSelector(
-                            "Caixa (Operador)",
-                            FontAwesomeIcons.cashRegister,
-                            fazCaixa,
-                            (v) => setState(() => fazCaixa = v),
-                          ),
-
-                          SizedBox(height: 20),
-                          Divider(),
-                          Text(
-                            "Permissões Administrativas",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-
-                          // SEPARADO: MASTER
-                          _buildRoleSelector(
-                            "Master (Gerente/Admin)",
-                            FontAwesomeIcons.userShield,
-                            fazMaster,
-                            (v) {
-                              setState(() {
-                                fazMaster = v;
-                                if (v) {
-                                  fazCaixa =
-                                      true; // Master geralmente também opera caixa se quiser
-                                }
-                              });
-                            },
-                            isAlert: true,
-                          ),
-
-                          SizedBox(height: 30),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 55,
-                            child: ElevatedButton.icon(
-                              icon: _isLoading
-                                  ? SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Icon(Icons.add_circle),
-                              label: Text(
-                                _isLoading ? "CRIANDO..." : "CRIAR CONTA",
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _corAcai,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                              ),
-                              onPressed: _isLoading
-                                  ? null
-                                  : _cadastrarFuncionario,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                _buildRoleChip("Banhista", "banho", FontAwesomeIcons.shower),
+                _buildRoleChip("Tosador", "tosa", FontAwesomeIcons.scissors),
+                _buildRoleChip(
+                  "Vendedor",
+                  "vendedor",
+                  FontAwesomeIcons.bagShopping,
                 ),
-                SizedBox(width: 30),
-
-                // --- COLUNA LISTA (Visualização) ---
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    padding: EdgeInsets.all(30),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 20,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Equipe Ativa",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
-                              ),
-                            ),
-                            SizedBox(
-                              width: 200,
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  hintText: "Buscar nome...",
-                                  prefixIcon: Icon(Icons.search, size: 20),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 0,
-                                    horizontal: 10,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                onChanged: (v) => setState(
-                                  () => _filtroEquipe = v.toLowerCase(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 20),
-                        Expanded(
-                          child: StreamBuilder<QuerySnapshot>(
-                            stream: _db
-                                .collection('tenants')
-                                .doc(widget.tenantId) // USANDO O TENANT ID
-                                .collection('profissionais')
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) {
-                                return Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
-
-                              final docs = snapshot.data!.docs.where((doc) {
-                                final data = doc.data() as Map<String, dynamic>;
-                                final nome = (data['nome'] ?? '')
-                                    .toString()
-                                    .toLowerCase();
-                                final docNum = (data['documento'] ?? '')
-                                    .toString()
-                                    .toLowerCase();
-                                return nome.contains(_filtroEquipe) ||
-                                    docNum.contains(_filtroEquipe);
-                              }).toList();
-
-                              if (docs.isEmpty) {
-                                return Center(
-                                  child: Text("Nenhum profissional ativo."),
-                                );
-                              }
-
-                              return ListView.separated(
-                                itemCount: docs.length,
-                                separatorBuilder: (_, __) => Divider(
-                                  height: 30,
-                                  color: Colors.grey[100],
-                                ),
-                                itemBuilder: (ctx, index) {
-                                  final doc = docs[index];
-                                  final data = doc.data() as Map;
-                                  final List<dynamic> skills =
-                                      data['habilidades'] ?? [];
-                                  final String perfil =
-                                      data['perfil'] ?? 'padrao';
-
-                                  // Destaque visual para Master
-                                  bool isMaster = perfil == 'master';
-                                  bool isAtivo = data['ativo'] ?? true;
-
-                                  return Opacity(
-                                    opacity: isAtivo ? 1.0 : 0.6,
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 50,
-                                          height: 50,
-                                          decoration: BoxDecoration(
-                                            color: isMaster
-                                                ? Colors.amber[100]
-                                                : _corLilas,
-                                            borderRadius: BorderRadius.circular(
-                                              15,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: isMaster
-                                                ? Icon(
-                                                    FontAwesomeIcons.crown,
-                                                    color: Colors.amber[800],
-                                                    size: 22,
-                                                  )
-                                                : Text(
-                                                    (data['nome'] as String)
-                                                            .isNotEmpty
-                                                        ? data['nome'][0]
-                                                              .toUpperCase()
-                                                        : "?",
-                                                    style: TextStyle(
-                                                      color: _corAcai,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 20,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
-                                        SizedBox(width: 15),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    data['nome'],
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: Colors.grey[800],
-                                                      decoration: isAtivo
-                                                          ? null
-                                                          : TextDecoration
-                                                                .lineThrough,
-                                                    ),
-                                                  ),
-                                                  if (!isAtivo)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            left: 8.0,
-                                                          ),
-                                                      child: Container(
-                                                        margin: EdgeInsets.only(
-                                                          left: 8,
-                                                        ),
-                                                        padding:
-                                                            EdgeInsets.symmetric(
-                                                              horizontal: 6,
-                                                              vertical: 2,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.red,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                4,
-                                                              ),
-                                                        ),
-                                                        child: Text(
-                                                          "INATIVO",
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              SizedBox(height: 5),
-                                              Text(
-                                                "Doc: ${data['documento'] ?? data['cpf']}",
-                                                style: TextStyle(
-                                                  color: Colors.grey[500],
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              SizedBox(height: 8),
-                                              Wrap(
-                                                spacing: 5,
-                                                children: skills
-                                                    .map(
-                                                      (skill) =>
-                                                          _buildSkillBadge(
-                                                            skill.toString(),
-                                                          ),
-                                                    )
-                                                    .toList(),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: "Editar Profissional",
-                                          icon: Icon(
-                                            Icons.edit,
-                                            color: Colors.blue[300],
-                                          ),
-                                          onPressed: () => _editar(doc),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _buildRoleChip("Caixa", "caixa", FontAwesomeIcons.cashRegister),
+                _buildRoleChip(
+                  "Gerente/Master",
+                  "master",
+                  FontAwesomeIcons.userShield,
+                  isDestructive: true,
                 ),
               ],
             ),
-          ),
-        ),
-      ],
-    );
-  }
 
-  // --- WIDGETS AUXILIARES ---
-  Widget _buildTextField(
-    TextEditingController ctrl,
-    String label,
-    IconData icon, {
-    MaskTextInputFormatter? formatter,
-  }) {
-    return TextField(
-      controller: ctrl,
-      inputFormatters: formatter != null ? [formatter] : [],
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: _corAcai, size: 20),
-        filled: true,
-        fillColor: _corFundo,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
+            if (!_rolesSelecionadas.contains('master')) ...[
+              SizedBox(height: 20),
+              Divider(),
+              Text(
+                "Acesso a Páginas",
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              ..._availablePages.entries
+                  .map(
+                    (e) => CheckboxListTile(
+                      dense: true,
+                      title: Text(e.value),
+                      value: _selectedAccess[e.key],
+                      onChanged: (v) =>
+                          setState(() => _selectedAccess[e.key] = v!),
+                    ),
+                  )
+                  .toList(),
+            ],
 
-  Widget _buildRoleSelector(
-    String label,
-    IconData icon,
-    bool isSelected,
-    Function(bool) onChanged, {
-    bool isAlert = false,
-  }) {
-    Color activeColor = isAlert ? Colors.red : _corAcai;
-    Color bgActive = isAlert
-        ? Colors.red.withOpacity(0.1)
-        : _corAcai.withOpacity(0.1);
-
-    return InkWell(
-      onTap: () => onChanged(!isSelected),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? bgActive : Colors.white,
-          border: Border.all(
-            color: isSelected ? activeColor : Colors.grey[300]!,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: isSelected ? activeColor : Colors.grey),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? activeColor : Colors.grey[700],
-                ),
+            SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _cadastrar,
+                child: _isLoading
+                    ? CircularProgressIndicator(color: Colors.white)
+                    : Text("CADASTRAR EQUIPE"),
               ),
             ),
-            if (isSelected)
-              Icon(Icons.check_circle, color: activeColor, size: 18),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSkillBadge(String skill) {
-    Color bg;
-    Color text;
-    String label;
-    IconData icon;
-    switch (skill) {
-      case 'banho':
-        bg = Colors.blue[50]!;
-        text = Colors.blue[800]!;
-        label = "Banhista";
-        icon = FontAwesomeIcons.shower;
-        break;
-      case 'tosa':
-        bg = Colors.orange[50]!;
-        text = Colors.orange[800]!;
-        label = "Tosador";
-        icon = FontAwesomeIcons.scissors;
-        break;
-      case 'vendedor':
-        bg = Colors.green[50]!;
-        text = Colors.green[800]!;
-        label = "Vendas";
-        icon = FontAwesomeIcons.basketShopping;
-        break;
-      case 'caixa':
-        bg = Colors.purple[50]!;
-        text = Colors.purple[800]!;
-        label = "Caixa";
-        icon = FontAwesomeIcons.cashRegister;
-        break;
-      case 'master':
-        bg = Colors.red[50]!;
-        text = Colors.red[800]!;
-        label = "MASTER";
-        icon = FontAwesomeIcons.userShield;
-        break;
-      default:
-        bg = Colors.grey[200]!;
-        text = Colors.grey[800]!;
-        label = skill;
-        icon = Icons.circle;
-    }
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: text),
-          SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: text,
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
+  Widget _buildListCard() {
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(25),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(
+                  "Equipe Ativa",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Spacer(),
+                SizedBox(
+                  width: 200,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: "Buscar...",
+                      prefixIcon: Icon(Icons.search),
+                      contentPadding: EdgeInsets.all(10),
+                    ),
+                    onChanged: (v) =>
+                        setState(() => _filtroEquipe = v.toLowerCase()),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
+            SizedBox(height: 20),
+            StreamBuilder<QuerySnapshot>(
+              stream: _db
+                  .collection('tenants')
+                  .doc(widget.tenantId)
+                  .collection('profissionais')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData)
+                  return Center(child: CircularProgressIndicator());
+
+                final docs = snapshot.data!.docs.where((d) {
+                  final data = d.data() as Map;
+                  return (data['nome'] ?? '').toString().toLowerCase().contains(
+                    _filtroEquipe,
+                  );
+                }).toList();
+
+                if (docs.isEmpty)
+                  return Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text("Nenhum colaborador encontrado."),
+                  );
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final data = docs[i].data() as Map;
+                    final skills = List<String>.from(data['habilidades'] ?? []);
+                    final bool isMaster =
+                        skills.contains('master') || data['perfil'] == 'master';
+                    final bool ativo = data['ativo'] ?? true;
+
+                    return ListTile(
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 0,
+                      ),
+                      leading: CircleAvatar(
+                        backgroundColor: isMaster
+                            ? Colors.amber[100]
+                            : Colors.purple[50],
+                        child: Icon(
+                          isMaster ? FontAwesomeIcons.crown : Icons.person,
+                          color: isMaster
+                              ? Colors.amber[800]
+                              : Colors.purple[800],
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        data['nome'],
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          decoration: ativo ? null : TextDecoration.lineThrough,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "CPF: ${data['documento']}",
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          SizedBox(height: 4),
+                          Wrap(
+                            spacing: 4,
+                            children: skills
+                                .map((s) => _buildSkillBadge(s))
+                                .toList(),
+                          ),
+                        ],
+                      ),
+                      trailing: IconButton(
+                        icon: Icon(Icons.edit_outlined, color: Colors.blue),
+                        onPressed: () => showDialog(
+                          context: context,
+                          builder: (_) =>
+                              ProfessionalEditorDialog(profissional: docs[i]),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _editar(DocumentSnapshot doc) {
-    showDialog(
-      context: context,
-      builder: (ctx) => ProfessionalEditorDialog(profissional: doc),
+  Widget _buildRoleChip(
+    String label,
+    String value,
+    IconData icon, {
+    bool isDestructive = false,
+  }) {
+    bool selected = _rolesSelecionadas.contains(value);
+    Color color = isDestructive
+        ? Colors.amber[800]!
+        : Theme.of(context).primaryColor;
+
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: selected ? Colors.white : color),
+          SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
+      selected: selected,
+      onSelected: (_) => _toggleRole(value),
+      backgroundColor: Colors.white,
+      selectedColor: color,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : color,
+        fontWeight: FontWeight.bold,
+      ),
+      side: BorderSide(color: color.withOpacity(0.3)),
+      checkmarkColor: Colors.white,
+    );
+  }
+
+  Widget _buildSkillBadge(String skill) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Text(
+        skill.toUpperCase(),
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[700],
+        ),
+      ),
     );
   }
 }

@@ -11,8 +11,11 @@
         "agenpets": [
           "agenpets"
         ],
-        "tenantsagenpets": [
+        "superadminagenpets": [
           "tenants"
+        ],
+        "tenants": [
+          "superadminagenpets"
         ]
       }
     }

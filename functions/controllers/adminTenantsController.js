@@ -3,6 +3,7 @@ const { db, admin } = require("../config/firebase");
 
 // --- 1. Testar Credenciais do Gateway (Simulação) ---
 exports.testarCredenciaisGateway = onCall(async (request) => {
+  // Aqui você pode adicionar lógica real de teste com as APIs do Efi/MP futuramente
   return {
     success: true,
     message: "Conexão com Gateway verificada com sucesso (Simulação via Admin Tenants).",
@@ -13,14 +14,15 @@ exports.testarCredenciaisGateway = onCall(async (request) => {
 exports.criarTenant = onCall(async (request) => {
   const { nome, cidade, slug, emailAdmin } = request.data;
 
+  // Validação básica
   if (!nome) {
     throw new HttpsError("invalid-argument", "O nome da loja é obrigatório.");
   }
 
-  // Gera ID: slug ou sanitiza o nome
+  // Gera ID: usa o slug fornecido ou sanitiza o nome
   const tenantId = slug || nome.toLowerCase().replace(/[^a-z0-9]/g, "-");
 
-  // Verifica se já existe
+  // Verifica duplicidade
   const docRef = db.collection("tenants").doc(tenantId);
   const docSnap = await docRef.get();
   if (docSnap.exists) {
@@ -29,7 +31,7 @@ exports.criarTenant = onCall(async (request) => {
 
   const batch = db.batch();
 
-  // 1. Cria Documento Principal
+  // A. Cria Documento Principal
   batch.set(docRef, {
     nome: nome,
     cidade: cidade || "Não informada",
@@ -38,7 +40,8 @@ exports.criarTenant = onCall(async (request) => {
     created_at: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // 2. Cria Configuração Inicial (Parametros)
+  // B. Cria Configuração Pública Inicial (Parametros)
+  // Nota: Não salvamos segredos aqui, apenas flags e configs públicas
   const configRef = docRef.collection("config").doc("parametros");
   batch.set(configRef, {
     tem_banho: true,
@@ -50,6 +53,12 @@ exports.criarTenant = onCall(async (request) => {
     logo_admin_url: "",
   });
 
+  // C. (Opcional) Cria o documento de segredos vazio para garantir a estrutura
+  const segredosRef = docRef.collection("config").doc("segredos");
+  batch.set(segredosRef, {
+    criado_em: admin.firestore.FieldValue.serverTimestamp()
+  });
+
   await batch.commit();
 
   return {
@@ -59,7 +68,7 @@ exports.criarTenant = onCall(async (request) => {
   };
 });
 
-// --- 3. Atualizar Dados do Tenant ---
+// --- 3. Atualizar Dados Básicos do Tenant ---
 exports.atualizarTenant = onCall(async (request) => {
   const { tenantId, nome, cidade, emailAdmin } = request.data;
 
@@ -94,5 +103,60 @@ exports.alternarStatusTenant = onCall(async (request) => {
   return {
     success: true,
     message: ativo ? "Loja ativada com sucesso." : "Loja inativada com sucesso.",
+  };
+});
+
+// --- 5. [NOVO] Salvar Credenciais de Pagamento (Segurança) ---
+// Separa o que é público (parametros) do que é privado (segredos)
+exports.salvarCredenciaisGateway = onCall(async (request) => {
+  // Verifica autenticação (Recomendado)
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Usuário não autenticado.');
+  }
+
+  const {
+    tenantId,
+    gateway_pagamento,
+    efipay_client_id,
+    efipay_client_secret,
+    mercadopago_access_token
+  } = request.data;
+
+  if (!tenantId) {
+    throw new HttpsError("invalid-argument", "ID do Tenant obrigatório.");
+  }
+
+  const batch = db.batch();
+
+  // A. Atualiza configs públicas (saber qual gateway está ativo)
+  if (gateway_pagamento) {
+    const publicConfigRef = db.collection("tenants").doc(tenantId).collection("config").doc("parametros");
+    batch.set(publicConfigRef, {
+      gateway_pagamento: gateway_pagamento
+    }, { merge: true });
+  }
+
+  // B. Atualiza credenciais no cofre seguro (config/segredos)
+  // Regras do Firestore devem bloquear leitura pública deste documento
+  const dadosSeguros = {
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    atualizado_por: request.auth.uid // Audit trail: quem alterou
+  };
+
+  // Só salva se o dado foi enviado (evita sobrescrever com null)
+  if (efipay_client_id !== undefined) dadosSeguros.efipay_client_id = efipay_client_id;
+  if (efipay_client_secret !== undefined) dadosSeguros.efipay_client_secret = efipay_client_secret;
+  if (mercadopago_access_token !== undefined) dadosSeguros.mercadopago_access_token = mercadopago_access_token;
+  // Se o gateway mudou, salvamos também nos segredos para redundância/backend saber a preferência segura
+  if (gateway_pagamento !== undefined) dadosSeguros.gateway_selecionado = gateway_pagamento;
+
+  const secureConfigRef = db.collection("tenants").doc(tenantId).collection("config").doc("segredos");
+  batch.set(secureConfigRef, dadosSeguros, { merge: true });
+
+  await batch.commit();
+
+  return {
+    success: true,
+    message: "Credenciais e configurações de pagamento salvas com segurança."
   };
 });
