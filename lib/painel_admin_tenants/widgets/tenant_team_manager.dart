@@ -34,21 +34,49 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   Set<String> _rolesSelecionadas = {};
 
   // Permissões
-  final Map<String, String> _availablePages = {
-    'dashboard': 'Dashboard',
-    'loja_pdv': 'PDV / Vendas',
-    'banhos_tosa': 'Agenda Banho/Tosa',
-    'hotel': 'Agenda Hotel',
-    'creche': 'Agenda Creche',
-    'equipe': 'Gestão Equipe',
-    'configuracoes': 'Configs',
-  };
+  Map<String, String> _availablePages = {};
   Map<String, bool> _selectedAccess = {};
 
   @override
   void initState() {
     super.initState();
-    _availablePages.forEach((k, v) => _selectedAccess[k] = false);
+    _loadTenantConfig();
+  }
+
+  Future<void> _loadTenantConfig() async {
+    try {
+      final doc = await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
+
+      Map<String, String> pages = {
+        'dashboard': 'Dashboard',
+      };
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        if (data['tem_pdv'] == true) pages['loja_pdv'] = 'PDV / Vendas';
+        if (data['tem_banho_tosa'] == true)
+          pages['banhos_tosa'] = 'Agenda Banho/Tosa';
+        if (data['tem_hotel'] == true) pages['hotel'] = 'Agenda Hotel';
+        if (data['tem_creche'] == true) pages['creche'] = 'Agenda Creche';
+      }
+
+      pages['equipe'] = 'Gestão Equipe';
+      pages['configuracoes'] = 'Configs';
+
+      if (mounted) {
+        setState(() {
+          _availablePages = pages;
+          _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+        });
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar config: $e");
+    }
   }
 
   void _toggleRole(String role) {
@@ -369,14 +397,23 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                         "CPF: ${data['documento']} • ${skills.join(', ').toUpperCase()}",
                         style: TextStyle(fontSize: 12),
                       ),
-                      trailing: IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Colors.red[300],
-                        ),
-                        onPressed: () {
-                          /* Implementar Delete */
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _showEditDialog(docs[i].id, data),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: Colors.red[300],
+                            ),
+                            onPressed: () {
+                              /* Implementar Delete */
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -387,6 +424,165 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         ),
       ),
     );
+  }
+
+  void _showEditDialog(String docId, Map<String, dynamic> data) {
+    final _editNomeCtrl = TextEditingController(text: data['nome']);
+    Set<String> _editRoles = Set<String>.from(data['habilidades'] ?? []);
+    List<String> currentAccess = List<String>.from(data['acessos'] ?? []);
+    Map<String, bool> _editAccess = {};
+    _availablePages.keys.forEach((k) {
+      _editAccess[k] = currentAccess.contains(k);
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            void _toggleEditRole(String role) {
+              setStateDialog(() {
+                if (_editRoles.contains(role)) {
+                  _editRoles.remove(role);
+                  if (role == 'master')
+                    _availablePages.keys.forEach((k) => _editAccess[k] = false);
+                } else {
+                  _editRoles.add(role);
+                  if (role == 'master') {
+                    _availablePages.keys.forEach((k) => _editAccess[k] = true);
+                    _editRoles.add('caixa');
+                  }
+                }
+              });
+            }
+
+            Widget _buildEditChip(String label, String val, {Color? color}) {
+              bool selected = _editRoles.contains(val);
+              Color c = color ?? Theme.of(context).primaryColor;
+              return ChoiceChip(
+                label: Text(label),
+                selected: selected,
+                onSelected: (_) => _toggleEditRole(val),
+                selectedColor: c.withOpacity(0.2),
+                labelStyle: TextStyle(
+                  color: selected ? c : Colors.black87,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
+                side: BorderSide(color: selected ? c : Colors.grey[300]!),
+                backgroundColor: Colors.white,
+              );
+            }
+
+            return AlertDialog(
+              title: Text("Editar Colaborador"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _editNomeCtrl,
+                      decoration: InputDecoration(labelText: "Nome"),
+                    ),
+                    SizedBox(height: 15),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildEditChip("Banhista", "banho"),
+                        _buildEditChip("Tosador", "tosa"),
+                        _buildEditChip("Vendedor", "vendedor"),
+                        _buildEditChip("Caixa", "caixa"),
+                        _buildEditChip(
+                          "Gerente",
+                          "master",
+                          color: Colors.amber[800],
+                        ),
+                      ],
+                    ),
+                    if (!_editRoles.contains('master')) ...[
+                      Divider(height: 20),
+                      Text(
+                        "Permissões Extras",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      ..._availablePages.entries
+                          .map(
+                            (e) => CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              activeColor: Theme.of(context).primaryColor,
+                              title:
+                                  Text(e.value, style: TextStyle(fontSize: 13)),
+                              value: _editAccess[e.key] ?? false,
+                              onChanged: (v) => setStateDialog(
+                                  () => _editAccess[e.key] = v!),
+                            ),
+                          )
+                          .toList(),
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancelar"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    _salvarEdicao(
+                        docId, _editNomeCtrl.text, _editRoles, _editAccess);
+                    Navigator.pop(context);
+                  },
+                  child: Text("Salvar"),
+                )
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _salvarEdicao(String docId, String nome, Set<String> roles,
+      Map<String, bool> accessMap) async {
+    if (nome.isEmpty) {
+      _showSnack("Nome inválido.", Colors.orange);
+      return;
+    }
+    if (roles.isEmpty) {
+      _showSnack("Selecione ao menos uma função.", Colors.orange);
+      return;
+    }
+
+    // Indicate loading (optional, but since dialog closes, maybe show global loading or just process in bg)
+    // Here we just await firestore
+
+    try {
+      List<String> acessos = accessMap.entries
+          .where((e) => e.value)
+          .map((e) => e.key)
+          .toList();
+      String perfil = roles.contains('master') ? 'master' : 'padrao';
+
+      await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('profissionais')
+          .doc(docId)
+          .update({
+        'nome': nome.trim(),
+        'habilidades': roles.toList(),
+        'acessos': acessos,
+        'perfil': perfil,
+      });
+
+      _showSnack("Colaborador atualizado!", Colors.green);
+    } catch (e) {
+      debugPrint("Erro update: $e");
+      _showSnack("Erro ao atualizar: $e", Colors.red);
+    }
   }
 
   Widget _buildInput(
