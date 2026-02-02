@@ -97,12 +97,8 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
             'tempo_banho_min': int.tryParse(_tempoBanhoController.text) ?? 60,
             'tempo_tosa_min': int.tryParse(_tempoTosaController.text) ?? 90,
             'dias_funcionamento': _diasFuncionamento,
-            'tem_banho_tosa': _temBanhoTosa,
-            'tem_hotel': _temHotel,
-            'tem_creche': _temCreche,
-            'tem_loja': _temLoja,
-            'tem_veterinario': _temVeterinario,
-            'tem_taxi': _temTaxi,
+            // Módulos são gerenciados apenas pelo Super Admin (Admin Tenants)
+            // Não salvamos 'tem_*' aqui para evitar sobrescrita acidental
             'updated_at': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
@@ -264,76 +260,7 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
                   flex: 3,
                   child: Column(
                     children: [
-                      // 1. MÓDULOS DE SERVIÇO
-                      _buildSectionTitle("Módulos Ativos"),
-                      Container(
-                        padding: EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            _buildSwitchTile(
-                              "Banho & Tosa",
-                              FontAwesomeIcons.scissors,
-                              Colors.blue,
-                              _temBanhoTosa,
-                              (v) => setState(() => _temBanhoTosa = v),
-                            ),
-                            Divider(),
-                            _buildSwitchTile(
-                              "Hotelzinho",
-                              FontAwesomeIcons.hotel,
-                              Colors.orange,
-                              _temHotel,
-                              (v) => setState(() => _temHotel = v),
-                            ),
-                            Divider(),
-                            _buildSwitchTile(
-                              "Creche",
-                              FontAwesomeIcons.dog,
-                              Colors.teal,
-                              _temCreche,
-                              (v) => setState(() => _temCreche = v),
-                            ),
-                            Divider(),
-                            _buildSwitchTile(
-                              "Loja / Produtos",
-                              FontAwesomeIcons.shop,
-                              Colors.pink,
-                              _temLoja,
-                              (v) => setState(() => _temLoja = v),
-                            ),
-                            Divider(),
-                            _buildSwitchTile(
-                              "Veterinário",
-                              FontAwesomeIcons.userDoctor,
-                              Colors.green,
-                              _temVeterinario,
-                              (v) => setState(() => _temVeterinario = v),
-                            ),
-                            Divider(),
-                            _buildSwitchTile(
-                              "Táxi Dog",
-                              FontAwesomeIcons.car,
-                              Colors.purple,
-                              _temTaxi,
-                              (v) => setState(() => _temTaxi = v),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      SizedBox(height: 30),
-
-                      // 2. HORÁRIOS DE FUNCIONAMENTO
+                      // 1. HORÁRIOS DE FUNCIONAMENTO
                       _buildSectionTitle("Horário de Atendimento"),
                       Container(
                         padding: EdgeInsets.all(25),

@@ -33,7 +33,14 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   final _logoAppCtrl = TextEditingController();
   final _logoAdminCtrl = TextEditingController();
 
-  bool _temCreche = false, _temHotel = false, _temBanho = true, _temTosa = true;
+  // Módulos (Unified Flags)
+  bool _temBanhoTosa = true;
+  bool _temHotel = false;
+  bool _temCreche = false;
+  bool _temLoja = false;
+  bool _temVeterinario = false;
+  bool _temTaxi = false;
+
   String _gatewayPagamento = 'efipay';
   bool _isLoading = true, _isSaving = false;
 
@@ -60,10 +67,15 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           _mpAccessTokenCtrl.text = data['mercadopago_access_token'] ?? '';
           _logoAppCtrl.text = data['logo_app_url'] ?? '';
           _logoAdminCtrl.text = data['logo_admin_url'] ?? '';
-          _temCreche = data['tem_creche'] ?? false;
+
+          // Carrega módulos (com fallback para legacy se necessário)
+          _temBanhoTosa = data['tem_banho_tosa'] ?? (data['tem_banho'] ?? true);
           _temHotel = data['tem_hotel'] ?? false;
-          _temBanho = data['tem_banho'] ?? true;
-          _temTosa = data['tem_tosa'] ?? true;
+          _temCreche = data['tem_creche'] ?? false;
+          _temLoja = data['tem_loja'] ?? false;
+          _temVeterinario = data['tem_veterinario'] ?? false;
+          _temTaxi = data['tem_taxi'] ?? false;
+
           _gatewayPagamento = data['gateway_pagamento'] ?? 'efipay';
         });
       }
@@ -85,10 +97,15 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           .set({
             'logo_app_url': _logoAppCtrl.text.trim(),
             'logo_admin_url': _logoAdminCtrl.text.trim(),
-            'tem_creche': _temCreche,
+            'tem_banho_tosa': _temBanhoTosa,
             'tem_hotel': _temHotel,
-            'tem_banho': _temBanho,
-            'tem_tosa': _temTosa,
+            'tem_creche': _temCreche,
+            'tem_loja': _temLoja,
+            'tem_veterinario': _temVeterinario,
+            'tem_taxi': _temTaxi,
+            // Mantém compatibilidade reversa se necessário, ou removemos fields antigos
+            'tem_banho': _temBanhoTosa,
+            'tem_tosa': _temBanhoTosa,
           }, SetOptions(merge: true));
 
       final functions = FirebaseFunctions.instanceFor(
@@ -276,28 +293,40 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
       child: Column(
         children: [
           _buildSwitch(
-            "Banho & Higiene",
-            "Agendamento e controle",
-            _temBanho,
-            (v) => setState(() => _temBanho = v),
+            "Banho & Tosa",
+            "Agendamento e Gestão",
+            _temBanhoTosa,
+            (v) => setState(() => _temBanhoTosa = v),
           ),
           _buildSwitch(
-            "Tosa & Estética",
-            "Gestão de tosadores",
-            _temTosa,
-            (v) => setState(() => _temTosa = v),
+            "Hotelzinho",
+            "Gestão de Hospedagem",
+            _temHotel,
+            (v) => setState(() => _temHotel = v),
           ),
           _buildSwitch(
-            "Creche",
-            "Check-in/out diário",
+            "Creche (DayCare)",
+            "Controle diário",
             _temCreche,
             (v) => setState(() => _temCreche = v),
           ),
           _buildSwitch(
-            "Hotel",
-            "Hospedagem e baias",
-            _temHotel,
-            (v) => setState(() => _temHotel = v),
+            "Loja / PDV",
+            "Vendas de Produtos",
+            _temLoja,
+            (v) => setState(() => _temLoja = v),
+          ),
+          _buildSwitch(
+            "Veterinário",
+            "Agenda Médica",
+            _temVeterinario,
+            (v) => setState(() => _temVeterinario = v),
+          ),
+          _buildSwitch(
+            "Táxi Dog",
+            "Gestão de Transporte",
+            _temTaxi,
+            (v) => setState(() => _temTaxi = v),
           ),
         ],
       ),

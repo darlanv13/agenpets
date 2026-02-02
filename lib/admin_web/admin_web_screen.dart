@@ -84,17 +84,39 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         }
       }
 
-      _buildMenu();
+      // Buscar Configurações da Loja (Módulos Ativos)
+      final configDoc = await FirebaseFirestore.instance
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
+
+      Map<String, dynamic> config = {};
+      if (configDoc.exists) {
+        config = configDoc.data()!;
+      }
+
+      _buildMenu(config);
     } catch (e) {
       print("Erro ao carregar permissões: $e");
       // Fallback: build menu based on basic args
-      _buildMenu();
+      _buildMenu({});
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  void _buildMenu() {
+  void _buildMenu(Map<String, dynamic> config) {
+    // Flags dos Módulos (Defaults)
+    bool temLoja = config['tem_loja'] ?? false;
+    bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
+    bool temHotel = config['tem_hotel'] ?? false;
+    bool temCreche = config['tem_creche'] ?? false;
+    // Veterianario e Taxi ainda não têm telas no Admin, mas já podemos filtrar
+    // bool temVeterinario = config['tem_veterinario'] ?? false;
+    // bool temTaxi = config['tem_taxi'] ?? false;
+
     // Definition of ALL available pages
     final allPages = [
       PageDefinition(
@@ -104,30 +126,34 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         section: "PRINCIPAL",
         widget: DashboardView(),
       ),
-      PageDefinition(
-        id: 'loja_pdv',
-        title: "Loja / PDV",
-        icon: FontAwesomeIcons.cashRegister,
-        widget: LojaView(isMaster: _isMaster),
-      ),
-      PageDefinition(
-        id: 'banhos_tosa',
-        title: "Banhos & Tosa",
-        icon: FontAwesomeIcons.scissors,
-        widget: BanhosTosaView(),
-      ),
-      PageDefinition(
-        id: 'hotel',
-        title: "Hotel & Estadia",
-        icon: FontAwesomeIcons.hotel,
-        widget: HotelView(),
-      ),
-      PageDefinition(
-        id: 'creche',
-        title: "Creche",
-        icon: FontAwesomeIcons.dog,
-        widget: CrecheView(),
-      ),
+      if (temLoja)
+        PageDefinition(
+          id: 'loja_pdv',
+          title: "Loja / PDV",
+          icon: FontAwesomeIcons.cashRegister,
+          widget: LojaView(isMaster: _isMaster),
+        ),
+      if (temBanhoTosa)
+        PageDefinition(
+          id: 'banhos_tosa',
+          title: "Banhos & Tosa",
+          icon: FontAwesomeIcons.scissors,
+          widget: BanhosTosaView(),
+        ),
+      if (temHotel)
+        PageDefinition(
+          id: 'hotel',
+          title: "Hotel & Estadia",
+          icon: FontAwesomeIcons.hotel,
+          widget: HotelView(),
+        ),
+      if (temCreche)
+        PageDefinition(
+          id: 'creche',
+          title: "Creche",
+          icon: FontAwesomeIcons.dog,
+          widget: CrecheView(),
+        ),
       PageDefinition(
         id: 'venda_planos',
         title: "Venda de Planos",
