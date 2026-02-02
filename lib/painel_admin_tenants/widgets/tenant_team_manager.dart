@@ -72,6 +72,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         setState(() {
           _availablePages = pages;
           _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+          // Dashboard sempre ativa por padrão
+          if (_availablePages.containsKey('dashboard')) {
+            _selectedAccess['dashboard'] = true;
+          }
         });
       }
     } catch (e) {
@@ -123,20 +127,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         'cpf': _cpfController.text,
         'senha': _senhaController.text.trim(),
         'habilidades': _rolesSelecionadas.toList(),
+        'acessos': acessos,
         'perfil': perfil,
         'tenantId': widget.tenantId,
       });
-
-      // Atualiza acessos extras
-      final q = await _db
-          .collection('tenants')
-          .doc(widget.tenantId)
-          .collection('profissionais')
-          .where('documento', isEqualTo: _cpfController.text)
-          .limit(1)
-          .get();
-      if (q.docs.isNotEmpty)
-        await q.docs.first.reference.update({'acessos': acessos});
 
       _clearForm();
       if (mounted) _showSnack("Adicionado!", Colors.green);

@@ -16,7 +16,7 @@ exports.criarContaProfissional = onCall({
 
     // Agora aceita 'documento' que pode ser CPF ou CNPJ.
     // Mantemos 'cpf' para compatibilidade se vier, mas preferimos 'documento'.
-    const { nome, cpf, documento, senha, habilidades, perfil, tenantId } = request.data;
+    const { nome, cpf, documento, senha, habilidades, acessos, perfil, tenantId } = request.data;
 
     const docFinal = documento || cpf;
 
@@ -122,6 +122,7 @@ exports.criarContaProfissional = onCall({
             cpf_busca: docLimpo, // Legado
             tipo_documento: tipoDocumento,
             habilidades: habilidades || [],
+            acessos: acessos || [], // Salva as permissões de páginas
             perfil: perfil || 'padrao', // 'master' ou 'padrao'
             ativo: true,
             criado_em: admin.firestore.FieldValue.serverTimestamp(),
