@@ -33,7 +33,8 @@ exports.criarContaProfissional = onCall({
 
   // 3. E-mail Fantasma (Shadow Email)
   const docLimpo = docFinal.replace(/\D/g, "");
-  const emailFantasma = `${docLimpo}@agenpets.pro`;
+  // Agora o e-mail é específico por tenant para evitar conflitos
+  const emailFantasma = `${docLimpo}@agenpets.${tenantId}`;
   const tipoDocumento = docLimpo.length > 11 ? "cnpj" : "cpf";
 
   // Lógica do Código de Vendedor (Apenas CPF)
@@ -70,50 +71,23 @@ exports.criarContaProfissional = onCall({
         password: senha,
         displayName: nome,
       });
-
-      // Define Permissões (Claims)
-      const claims = {
-        profissional: true,
-        tenantId: tenantId,
-        acessos: acessos || [], // Persiste acessos no token
-      };
-      if (perfil === "master") {
-        claims.admin = true;
-        claims.master = true;
-      }
-      await getAuth().setCustomUserClaims(userRecord.uid, claims);
     } else {
-      // --- CENÁRIO: USUÁRIO JÁ EXISTE (Vínculo com nova Tenant) ---
-
-      // Verifica se já está nesta tenant
-      const docRef = db.collection("tenants")
-          .doc(tenantId)
-          .collection("profissionais")
-          .doc(userRecord.uid);
-
-      const docSnap = await docRef.get();
-      if (docSnap.exists) {
-        throw new HttpsError("already-exists", "Este profissional já está cadastrado nesta unidade.");
-      }
-
-      // Atualiza claims para incluir novos acessos e garantir tenantId
-      // Nota: Em multi-tenant real, acessos nos claims podem ser problemáticos se conflitarem entre tenants.
-      // Assumindo que o profissional atua principalmente neste tenant ou que a sobrescrita é intencional.
-      const currentClaims = userRecord.customClaims || {};
-      const newClaims = {
-        ...currentClaims,
-        profissional: true,
-        tenantId: tenantId, // Atualiza para o tenant atual
-        acessos: acessos || [],
-      };
-
-      if (perfil === "master") {
-        newClaims.admin = true;
-        newClaims.master = true;
-      }
-
-      await getAuth().setCustomUserClaims(userRecord.uid, newClaims);
+      // Se não for novo usuário, significa que já existe NAQUELE TENANT
+      // pois o email é único por tenant. Então lançamos erro.
+      throw new HttpsError("already-exists", "Este profissional já possui cadastro nesta unidade.");
     }
+
+    // Define Permissões (Claims) - Sempre define do zero pois é usuário novo/isolado
+    const claims = {
+      profissional: true,
+      tenantId: tenantId,
+      acessos: acessos || [],
+    };
+    if (perfil === "master") {
+      claims.admin = true;
+      claims.master = true;
+    }
+    await getAuth().setCustomUserClaims(userRecord.uid, claims);
 
     // 6. Salva Perfil no Firestore (SEM A SENHA) na coleção do Tenant
     const dadosProfissional = {

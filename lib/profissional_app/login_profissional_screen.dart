@@ -109,7 +109,8 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
 
     setState(() => _isLoading = true);
 
-    final emailLogin = "$docLimpo@agenpets.pro";
+    // Uso de tenantId para login isolado
+    final emailLogin = "$docLimpo@agenpets.${AppConfig.tenantId}";
 
     try {
       UserCredential userCred = await _auth.signInWithEmailAndPassword(
