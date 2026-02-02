@@ -509,7 +509,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => Divider(height: 1),
                   itemBuilder: (ctx, i) {
-                    final data = docs[i].data() as Map;
+                    // Safe cast for Firestore data
+                    final rawData = docs[i].data() as Map;
+                    final data = rawData.map((k, v) => MapEntry(k.toString(), v));
+
                     final skills = List<String>.from(data['habilidades'] ?? []);
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
