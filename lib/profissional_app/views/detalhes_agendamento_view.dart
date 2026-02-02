@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:agenpet/admin_web/widgets/servicos_select_dialog.dart';
+import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart';
 
 class DetalhesAgendamentoView extends StatefulWidget {
   final String agendamentoId;

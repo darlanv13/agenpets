@@ -1,4 +1,4 @@
-import 'package:agenpet/admin_tenants/views/gestao_tenant_detalhe_view.dart';
+import 'package:agenpet/painel_admin_tenants/views/gestao_tenant_detalhe_view.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';

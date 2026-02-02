@@ -49,23 +49,69 @@ exports.criarContaProfissional = onCall({
     }
 
     try {
-        // 4. Cria Login no Firebase Auth
-        const userRecord = await getAuth().createUser({
-            email: emailFantasma,
-            password: senha,
-            displayName: nome,
-        });
+        let userRecord;
+        let isNewUser = false;
 
-        // 5. Define Permissões (Claims)
-        const claims = {
-            profissional: true,
-            tenantId: tenantId // <--- Vincula ao Tenant
-        };
-        if (perfil === 'master') {
-            claims.admin = true;
-            claims.master = true;
+        // 4. Tenta buscar usuário existente
+        try {
+            userRecord = await getAuth().getUserByEmail(emailFantasma);
+        } catch (e) {
+            if (e.code === 'auth/user-not-found') {
+                isNewUser = true;
+            } else {
+                throw e; // Relança outros erros
+            }
         }
-        await getAuth().setCustomUserClaims(userRecord.uid, claims);
+
+        if (isNewUser) {
+            // --- CENÁRIO: NOVO USUÁRIO ---
+            userRecord = await getAuth().createUser({
+                email: emailFantasma,
+                password: senha,
+                displayName: nome,
+            });
+
+            // Define Permissões (Claims)
+            const claims = {
+                profissional: true,
+                tenantId: tenantId
+            };
+            if (perfil === 'master') {
+                claims.admin = true;
+                claims.master = true;
+            }
+            await getAuth().setCustomUserClaims(userRecord.uid, claims);
+
+        } else {
+            // --- CENÁRIO: USUÁRIO JÁ EXISTE (Vínculo com nova Tenant) ---
+
+            // Verifica se já está nesta tenant
+            const docRef = db.collection('tenants')
+                .doc(tenantId)
+                .collection('profissionais')
+                .doc(userRecord.uid);
+
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+                throw new HttpsError('already-exists', 'Este profissional já está cadastrado nesta unidade.');
+            }
+
+            // Atualiza claims se necessário (apenas garante que é profissional)
+            const currentClaims = userRecord.customClaims || {};
+            let needsUpdate = false;
+            let newClaims = { ...currentClaims };
+
+            if (!newClaims.profissional) {
+                newClaims.profissional = true;
+                needsUpdate = true;
+            }
+            // Não sobrescrevemos tenantId para não quebrar acesso à loja anterior.
+            // O frontend usa a coleção 'profissionais' da tenant para validar acesso.
+
+            if (needsUpdate) {
+                await getAuth().setCustomUserClaims(userRecord.uid, newClaims);
+            }
+        }
 
         // 6. Salva Perfil no Firestore (SEM A SENHA) na coleção do Tenant
         const dadosProfissional = {
@@ -93,12 +139,16 @@ exports.criarContaProfissional = onCall({
             .doc(userRecord.uid)
             .set(dadosProfissional);
 
-        return { success: true, message: `Profissional ${nome} criado!` };
+        return { success: true, message: `Profissional ${nome} ${isNewUser ? 'criado' : 'vinculado'}!` };
 
     } catch (error) {
         console.error("Erro ao criar conta:", error);
         if (error.code === 'auth/email-already-exists') {
+            // Fallback caso ocorra condição de corrida
             throw new HttpsError('already-exists', 'Este CPF já possui cadastro.');
+        }
+        if (error.code === 'already-exists') {
+            throw error; // Re-throw do erro manual
         }
         throw new HttpsError('internal', error.message);
     }

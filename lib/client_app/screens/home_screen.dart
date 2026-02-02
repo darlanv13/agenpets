@@ -1,4 +1,5 @@
 import 'package:agenpet/client_app/screens/minhas_agendas.dart';
+import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -27,10 +28,46 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _dadosUsuario;
   String _primeiroNome = "";
 
+  // Configuração da Loja (Módulos)
+  bool _temBanhoTosa = true;
+  bool _temHotel = false;
+  bool _temCreche = false;
+  bool _temLoja = false;
+  bool _temVeterinario = false;
+  bool _temTaxi = false;
+
   @override
   void initState() {
     super.initState();
     _salvarTokenNotificacao();
+    _carregarConfiguracoes();
+  }
+
+  Future<void> _carregarConfiguracoes() async {
+    try {
+      final doc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        if (mounted) {
+          setState(() {
+            _temBanhoTosa = data['tem_banho_tosa'] ?? true;
+            _temHotel = data['tem_hotel'] ?? false;
+            _temCreche = data['tem_creche'] ?? false;
+            _temLoja = data['tem_loja'] ?? false;
+            _temVeterinario = data['tem_veterinario'] ?? false;
+            _temTaxi = data['tem_taxi'] ?? false;
+          });
+        }
+      }
+    } catch (e) {
+      print("Erro ao carregar configs da loja: $e");
+    }
   }
 
   Future<void> _salvarTokenNotificacao() async {
@@ -81,6 +118,17 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => MinhasAgendas(userCpf: _dadosUsuario!['cpf']),
+        ),
+      );
+      return;
+    }
+
+    // Funcionalidades ainda não implementadas
+    if (rota == '/em_breve') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Esta funcionalidade estará disponível em breve! 🚀"),
+          backgroundColor: Colors.orange,
         ),
       );
       return;
@@ -154,27 +202,56 @@ class _HomeScreenState extends State<HomeScreen> {
                 childAspectRatio: 1.1,
                 physics: BouncingScrollPhysics(),
                 children: [
-                  _buildMenuCard(
-                    "Agendar Banho/Tosa",
-                    FontAwesomeIcons.shower,
-                    _corAcai,
-                    Colors.white,
-                    () => _navegar('/agendamento'),
-                  ),
-                  _buildMenuCard(
-                    "Hotelzinho",
-                    FontAwesomeIcons.hotel,
-                    Colors.orange,
-                    Colors.white,
-                    () => _navegar('/hotel'),
-                  ),
-                  _buildMenuCard(
-                    "Creche",
-                    FontAwesomeIcons.school,
-                    Colors.teal,
-                    Colors.white,
-                    () => _navegar('/creche'),
-                  ),
+                  if (_temBanhoTosa)
+                    _buildMenuCard(
+                      "Agendar Banho/Tosa",
+                      FontAwesomeIcons.shower,
+                      _corAcai,
+                      Colors.white,
+                      () => _navegar('/agendamento'),
+                    ),
+                  if (_temHotel)
+                    _buildMenuCard(
+                      "Hotelzinho",
+                      FontAwesomeIcons.hotel,
+                      Colors.orange,
+                      Colors.white,
+                      () => _navegar('/hotel'),
+                    ),
+                  if (_temCreche)
+                    _buildMenuCard(
+                      "Creche",
+                      FontAwesomeIcons.school,
+                      Colors.teal,
+                      Colors.white,
+                      () => _navegar('/creche'),
+                    ),
+                  if (_temLoja)
+                    _buildMenuCard(
+                      "Loja / Pet Shop",
+                      FontAwesomeIcons.shop,
+                      Colors.pink,
+                      Colors.white,
+                      () => _navegar('/em_breve'),
+                    ),
+                  if (_temVeterinario)
+                    _buildMenuCard(
+                      "Veterinário",
+                      FontAwesomeIcons.userDoctor,
+                      Colors.green,
+                      Colors.white,
+                      () => _navegar('/em_breve'),
+                    ),
+                  if (_temTaxi)
+                    _buildMenuCard(
+                      "Táxi Dog",
+                      FontAwesomeIcons.car,
+                      Colors.purple,
+                      Colors.white,
+                      () => _navegar('/em_breve'),
+                    ),
+
+                  // Itens Fixos do Usuário
                   _buildMenuCard(
                     "Meus Agendamentos",
                     FontAwesomeIcons.calendarCheck,

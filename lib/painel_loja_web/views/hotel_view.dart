@@ -1,6 +1,6 @@
-import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
-import 'package:agenpet/admin_web/views/components/nova_reserva_creche_dialog.dart';
-import 'package:agenpet/admin_web/views/components/registrar_pagamento_creche_dialog.dart';
+import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/components/nova_reserva_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/components/registrar_pagamento_dialog.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,14 +9,14 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class CrecheView extends StatefulWidget {
-  const CrecheView({super.key});
+class HotelView extends StatefulWidget {
+  const HotelView({super.key});
 
   @override
-  _CrecheViewState createState() => _CrecheViewState();
+  _HotelViewState createState() => _HotelViewState();
 }
 
-class _CrecheViewState extends State<CrecheView> {
+class _HotelViewState extends State<HotelView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
@@ -53,7 +53,7 @@ class _CrecheViewState extends State<CrecheView> {
         .get();
     if (doc.exists) {
       setState(() {
-        _precoDiariaCache = (doc.data()?['preco_creche'] ?? 0).toDouble();
+        _precoDiariaCache = (doc.data()?['preco_hotel_diaria'] ?? 0).toDouble();
       });
     }
   }
@@ -64,7 +64,7 @@ class _CrecheViewState extends State<CrecheView> {
     String soNumeros = telefone.replaceAll(RegExp(r'[^0-9]'), '');
     if (!soNumeros.startsWith('55')) soNumeros = '55$soNumeros';
     final String mensagem = Uri.encodeComponent(
-      "Olá $nomeCliente, tudo bem? Estamos entrando em contato sobre a Creche AgenPet.",
+      "Olá $nomeCliente, tudo bem? Estamos entrando em contato sobre a hospedagem no Hotel AgenPet.",
     );
     final Uri url = Uri.parse("https://wa.me/$soNumeros?text=$mensagem");
     if (await canLaunchUrl(url)) {
@@ -80,22 +80,21 @@ class _CrecheViewState extends State<CrecheView> {
     await _db
         .collection('tenants')
         .doc(AppConfig.tenantId)
-        .collection('reservas_creche')
+        .collection('reservas_hotel')
         .doc(docId)
         .update({
-          'status':
-              'na creche', // Mantemos 'na creche' ou usamos 'presente' - para consistência com Hotel, manterei 'na creche'
+          'status': 'hospedado',
           'check_in_real': FieldValue.serverTimestamp(),
         });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text("Check-in realizado! 🎒"),
+        content: Text("Check-in realizado! 🐶"),
         backgroundColor: _corSucesso,
       ),
     );
   }
 
-  void _abrirCheckoutCreche(String docId, Map<String, dynamic> data) async {
+  void _abrirCheckoutHotel(String docId, Map<String, dynamic> data) async {
     // 1. Calculate Base Price
     final checkIn = data['check_in_real'] != null
         ? (data['check_in_real'] as Timestamp).toDate()
@@ -105,7 +104,7 @@ class _CrecheViewState extends State<CrecheView> {
     if (dias < 1) dias = 1;
     double totalEstadia = dias * _precoDiariaCache;
 
-    // 2. Fetch User Data
+    // 2. Fetch User Data (for Vouchers/Info)
     Map<String, dynamic> clientData = {};
     if (data['cpf_user'] != null) {
       final userDoc = await _db.collection('users').doc(data['cpf_user']).get();
@@ -135,17 +134,17 @@ class _CrecheViewState extends State<CrecheView> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => UnifiedCheckoutDialog(
-        contextType: CheckoutContext.creche,
+        contextType: CheckoutContext.hotel,
         referenceId: docId,
         userId: data['cpf_user'],
         clientData: clientData,
-        baseItem: {'nome': "Creche ($dias dias)", 'preco': totalEstadia},
+        baseItem: {'nome': "Estadia Hotel ($dias dias)", 'preco': totalEstadia},
         availableServices: listaExtras,
         totalAlreadyPaid: (data['valor_pago'] ?? 0).toDouble(),
         themeColor: _corAcai,
         onSuccess: () => ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Diária finalizada! 🏠"),
+            content: Text("Estadia finalizada! 🏨"),
             backgroundColor: _corSucesso,
           ),
         ),
@@ -157,7 +156,7 @@ class _CrecheViewState extends State<CrecheView> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => NovaReservaCrecheDialog(),
+      builder: (ctx) => NovaReservaDialog(),
     );
   }
 
@@ -165,7 +164,7 @@ class _CrecheViewState extends State<CrecheView> {
     await showDialog(
       context: context,
       builder: (c) =>
-          RegistrarPagamentoCrecheDialog(reservaId: docId, nomePet: "Aluno"),
+          RegistrarPagamentoDialog(reservaId: docId, nomePet: "Hóspede"),
     );
   }
 
@@ -188,21 +187,21 @@ class _CrecheViewState extends State<CrecheView> {
               children: [
                 Row(
                   children: [
-                    Icon(FontAwesomeIcons.school, color: _corAcai, size: 24),
+                    Icon(FontAwesomeIcons.hotel, color: _corAcai, size: 24),
                     SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "Gestão de Creche",
+                          "Gestão de Hotel",
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          "Check-ins e Diárias",
+                          "Check-ins e Estadias",
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey,
@@ -276,7 +275,7 @@ class _CrecheViewState extends State<CrecheView> {
                             stream: _db
                                 .collection('tenants')
                                 .doc(AppConfig.tenantId)
-                                .collection('reservas_creche')
+                                .collection('reservas_hotel')
                                 .orderBy('check_in', descending: true)
                                 .snapshots(),
                             builder: (context, snapshot) {
@@ -344,7 +343,7 @@ class _CrecheViewState extends State<CrecheView> {
                           stream: _db
                               .collection('tenants')
                               .doc(AppConfig.tenantId)
-                              .collection('reservas_creche')
+                              .collection('reservas_hotel')
                               .doc(_selectedReservaId)
                               .snapshots(),
                           builder: (context, snapshot) {
@@ -372,7 +371,7 @@ class _CrecheViewState extends State<CrecheView> {
 
     Color corStatus = Colors.grey;
     if (status == 'reservado') corStatus = Colors.blue;
-    if (status == 'na creche') corStatus = _corAcai;
+    if (status == 'hospedado') corStatus = _corAcai;
     if (status == 'concluido') corStatus = _corSucesso;
 
     // FutureBuilder Interno para filtrar visualmente
@@ -457,8 +456,8 @@ class _CrecheViewState extends State<CrecheView> {
                       ),
                     ),
                     Icon(
-                      status == 'na creche'
-                          ? FontAwesomeIcons.dog
+                      status == 'hospedado'
+                          ? FontAwesomeIcons.bed
                           : Icons.calendar_today,
                       size: 14,
                       color: corStatus,
@@ -506,14 +505,14 @@ class _CrecheViewState extends State<CrecheView> {
     String textoStatus = "Reserva Confirmada";
     IconData iconeStatus = Icons.calendar_today;
 
-    if (status == 'na creche') {
+    if (status == 'hospedado') {
       corStatus = _corAcai;
-      textoStatus = "Presente na Creche";
-      iconeStatus = FontAwesomeIcons.dog;
+      textoStatus = "Hóspede no Hotel";
+      iconeStatus = FontAwesomeIcons.bed;
     }
     if (status == 'concluido') {
       corStatus = _corSucesso;
-      textoStatus = "Diária Finalizada";
+      textoStatus = "Estadia Finalizada";
       iconeStatus = Icons.check_circle;
     }
 
@@ -527,7 +526,7 @@ class _CrecheViewState extends State<CrecheView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. TIMELINE
-          SizedBox(height: 40, child: _buildTimelineCreche(status)),
+          SizedBox(height: 40, child: _buildTimelineHotel(status)),
           SizedBox(height: 15),
 
           // 2. DASHBOARD
@@ -535,7 +534,7 @@ class _CrecheViewState extends State<CrecheView> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // CARD 1: ALUNO
+                // CARD 1: HÓSPEDE
                 Expanded(
                   flex: 5,
                   child: Container(
@@ -592,7 +591,7 @@ class _CrecheViewState extends State<CrecheView> {
                         return Column(
                           children: [
                             Text(
-                              "ALUNO & TUTOR",
+                              "HÓSPEDE & TUTOR",
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -698,7 +697,7 @@ class _CrecheViewState extends State<CrecheView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "RESUMO DA CRECHE",
+                          "RESUMO DA ESTADIA",
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -816,7 +815,7 @@ class _CrecheViewState extends State<CrecheView> {
                     ),
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
-                if (status == 'na creche')
+                if (status == 'hospedado')
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
                     label: Text("CHECK-OUT E PAGAR"),
@@ -828,7 +827,7 @@ class _CrecheViewState extends State<CrecheView> {
                         vertical: 12,
                       ),
                     ),
-                    onPressed: () => _abrirCheckoutCreche(doc.id, data),
+                    onPressed: () => _abrirCheckoutHotel(doc.id, data),
                   ),
                 if (status == 'concluido')
                   Container(
@@ -860,16 +859,16 @@ class _CrecheViewState extends State<CrecheView> {
   }
 
   // --- WIDGETS AUXILIARES ---
-  Widget _buildTimelineCreche(String status) {
+  Widget _buildTimelineHotel(String status) {
     int step = 1;
-    if (status == 'na creche') step = 2;
+    if (status == 'hospedado') step = 2;
     if (status == 'concluido') step = 3;
 
     return Row(
       children: [
         _stepWidget(1, "Reserva", step, Icons.calendar_today),
         _lineWidget(step > 1),
-        _stepWidget(2, "Na Creche", step, FontAwesomeIcons.dog),
+        _stepWidget(2, "Hospedado", step, FontAwesomeIcons.bed),
         _lineWidget(step > 2),
         _stepWidget(3, "Finalizado", step, Icons.check_circle),
       ],

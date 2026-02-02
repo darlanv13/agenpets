@@ -34,6 +34,14 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
   // Dias da Semana (1 = Seg, 7 = Dom)
   List<int> _diasFuncionamento = [1, 2, 3, 4, 5, 6];
 
+  // Módulos Ativos
+  bool _temBanhoTosa = true;
+  bool _temHotel = false;
+  bool _temCreche = false;
+  bool _temLoja = false;
+  bool _temVeterinario = false;
+  bool _temTaxi = false;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +67,13 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
           if (data['dias_funcionamento'] != null) {
             _diasFuncionamento = List<int>.from(data['dias_funcionamento']);
           }
+          // Carrega os módulos
+          _temBanhoTosa = data['tem_banho_tosa'] ?? true;
+          _temHotel = data['tem_hotel'] ?? false;
+          _temCreche = data['tem_creche'] ?? false;
+          _temLoja = data['tem_loja'] ?? false;
+          _temVeterinario = data['tem_veterinario'] ?? false;
+          _temTaxi = data['tem_taxi'] ?? false;
         });
       }
     } catch (e) {
@@ -82,6 +97,8 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
             'tempo_banho_min': int.tryParse(_tempoBanhoController.text) ?? 60,
             'tempo_tosa_min': int.tryParse(_tempoTosaController.text) ?? 90,
             'dias_funcionamento': _diasFuncionamento,
+            // Módulos são gerenciados apenas pelo Super Admin (Admin Tenants)
+            // Não salvamos 'tem_*' aqui para evitar sobrescrita acidental
             'updated_at': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
@@ -277,7 +294,7 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
 
                       SizedBox(height: 30),
 
-                      // 2. DIAS DA SEMANA
+                      // 3. DIAS DA SEMANA
                       _buildSectionTitle("Dias de Funcionamento"),
                       Container(
                         width: double.infinity,
@@ -308,29 +325,31 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
 
                       SizedBox(height: 30),
 
-                      // 3. DURAÇÃO DOS SERVIÇOS
-                      _buildSectionTitle("Duração dos Serviços"),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildDurationCard(
-                              "Banho",
-                              FontAwesomeIcons.shower,
-                              Colors.blue,
-                              _tempoBanhoController,
+                      // 4. DURAÇÃO DOS SERVIÇOS
+                      if (_temBanhoTosa) ...[
+                        _buildSectionTitle("Duração dos Serviços"),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDurationCard(
+                                "Banho",
+                                FontAwesomeIcons.shower,
+                                Colors.blue,
+                                _tempoBanhoController,
+                              ),
                             ),
-                          ),
-                          SizedBox(width: 20),
-                          Expanded(
-                            child: _buildDurationCard(
-                              "Tosa",
-                              FontAwesomeIcons.scissors,
-                              Colors.orange,
-                              _tempoTosaController,
+                            SizedBox(width: 20),
+                            Expanded(
+                              child: _buildDurationCard(
+                                "Tosa",
+                                FontAwesomeIcons.scissors,
+                                Colors.orange,
+                                _tempoTosaController,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -623,6 +642,37 @@ class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, size: 18, color: Colors.grey[700]),
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile(
+    String title,
+    IconData icon,
+    Color color,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      activeColor: _corAcai,
+      title: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: FaIcon(icon, color: color, size: 16),
+          ),
+          SizedBox(width: 15),
+          Text(
+            title,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

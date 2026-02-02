@@ -1,6 +1,6 @@
-import 'package:agenpet/admin_web/widgets/unified_checkout_dialog.dart';
-import 'package:agenpet/admin_web/views/components/nova_reserva_dialog.dart';
-import 'package:agenpet/admin_web/views/components/registrar_pagamento_dialog.dart';
+import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
+import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/components/novo_agendamento_dialog.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,20 +9,28 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class HotelView extends StatefulWidget {
-  const HotelView({super.key});
+class BanhosTosaView extends StatefulWidget {
+  const BanhosTosaView({super.key});
 
   @override
-  _HotelViewState createState() => _HotelViewState();
+  _BanhosTosaViewState createState() => _BanhosTosaViewState();
 }
 
-class _HotelViewState extends State<HotelView> {
+class _BanhosTosaViewState extends State<BanhosTosaView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
 
-  // Cores
+  DateTime _dataFiltro = DateTime.now();
+  String? _selectedAgendamentoId;
+  String _termoBusca = "";
+  final TextEditingController _searchController = TextEditingController();
+
+  // Stream cacheado para evitar recargas desnecessárias
+  late Stream<QuerySnapshot> _agendamentosStream;
+
+  // --- PALETA DE CORES PREMIUM ---
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corLilas = Color(0xFFF3E5F5);
   final Color _corFundo = Color(0xFFF5F7FA);
@@ -30,88 +38,116 @@ class _HotelViewState extends State<HotelView> {
   final Color _corAtencao = Color(0xFFFF6D00);
   final Color _corProcesso = Color(0xFF2962FF);
 
-  // Controle
-  String? _selectedReservaId;
-  double _precoDiariaCache = 0.0;
-
-  // Busca
-  final TextEditingController _searchController = TextEditingController();
-  String _termoBusca = "";
-
   @override
   void initState() {
     super.initState();
-    _carregarPrecoDiaria();
+    _atualizarStream();
   }
 
-  void _carregarPrecoDiaria() async {
-    final doc = await _db
+  void _atualizarStream() {
+    final inicio = DateTime(
+      _dataFiltro.year,
+      _dataFiltro.month,
+      _dataFiltro.day,
+    );
+    final fim = DateTime(
+      _dataFiltro.year,
+      _dataFiltro.month,
+      _dataFiltro.day,
+      23,
+      59,
+      59,
+    );
+
+    _agendamentosStream = _db
         .collection('tenants')
         .doc(AppConfig.tenantId)
-        .collection('config')
-        .doc('parametros')
-        .get();
-    if (doc.exists) {
-      setState(() {
-        _precoDiariaCache = (doc.data()?['preco_hotel_diaria'] ?? 0).toDouble();
-      });
-    }
+        .collection('agendamentos')
+        .where(
+          'data_inicio',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(inicio),
+        )
+        .where('data_inicio', isLessThanOrEqualTo: Timestamp.fromDate(fim))
+        .orderBy('data_inicio')
+        .snapshots();
   }
 
   // --- AÇÕES ---
 
   void _abrirWhatsApp(String telefone, String nomeCliente) async {
     String soNumeros = telefone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (!soNumeros.startsWith('55')) soNumeros = '55$soNumeros';
+    if (!soNumeros.startsWith('55')) {
+      soNumeros = '55$soNumeros';
+    }
+
     final String mensagem = Uri.encodeComponent(
-      "Olá $nomeCliente, tudo bem? Estamos entrando em contato sobre a hospedagem no Hotel AgenPet.",
+      "Olá $nomeCliente, tudo bem? Estamos entrando em contato sobre o agendamento na AgenPet.",
     );
     final Uri url = Uri.parse("https://wa.me/$soNumeros?text=$mensagem");
+
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao abrir WhatsApp")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Não foi possível abrir o WhatsApp.")),
+      );
     }
   }
 
-  void _fazerCheckIn(String docId) async {
-    await _db
-        .collection('tenants')
-        .doc(AppConfig.tenantId)
-        .collection('reservas_hotel')
-        .doc(docId)
-        .update({
-          'status': 'hospedado',
-          'check_in_real': FieldValue.serverTimestamp(),
-        });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Check-in realizado! 🐶"),
-        backgroundColor: _corSucesso,
-      ),
+  void _receberPet(DocumentSnapshot agendamentoDoc) async {
+    final data = agendamentoDoc.data() as Map<String, dynamic>;
+    final existingExtras = data['servicos_extras'] != null
+        ? List<Map<String, dynamic>>.from(data['servicos_extras'])
+        : <Map<String, dynamic>>[];
+
+    final List<Map<String, dynamic>>? result = await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ServicosSelectDialog(initialSelected: existingExtras),
+    );
+
+    if (result != null) {
+      await agendamentoDoc.reference.update({
+        'status': 'aguardando_execucao',
+        'servicos_extras': result,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Pet recebido! Enviado para execução. 🚀"),
+          backgroundColor: _corSucesso,
+        ),
+      );
+    }
+  }
+
+  // --- HELPERS ---
+  String _capitalize(String? s) {
+    if (s == null || s.isEmpty) return "";
+    return s[0].toUpperCase() + s.substring(1).toLowerCase();
+  }
+
+  void _abrirAgendamentoBalcao() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => NovoAgendamentoDialog(),
     );
   }
 
-  void _abrirCheckoutHotel(String docId, Map<String, dynamic> data) async {
-    // 1. Calculate Base Price
-    final checkIn = data['check_in_real'] != null
-        ? (data['check_in_real'] as Timestamp).toDate()
-        : (data['check_in'] as Timestamp).toDate();
-    final checkOut = DateTime.now();
-    int dias = checkOut.difference(checkIn).inDays;
-    if (dias < 1) dias = 1;
-    double totalEstadia = dias * _precoDiariaCache;
+  void _abrirCheckout(DocumentSnapshot agendamentoDoc) async {
+    final dataAgendamento = agendamentoDoc.data() as Map<String, dynamic>;
+    final String userId = dataAgendamento['userId'];
+    final bool isConcluido = dataAgendamento['status'] == 'concluido';
+    final double valorBase = isConcluido
+        ? (dataAgendamento['valor_final_cobrado'] ?? 0).toDouble()
+        : (dataAgendamento['valor'] ?? 0).toDouble();
 
-    // 2. Fetch User Data (for Vouchers/Info)
-    Map<String, dynamic> clientData = {};
-    if (data['cpf_user'] != null) {
-      final userDoc = await _db.collection('users').doc(data['cpf_user']).get();
-      if (userDoc.exists) clientData = userDoc.data()!;
-    }
+    final String servicoNome = _capitalize(
+      dataAgendamento['servicoNorm'] ?? dataAgendamento['servico'] ?? '',
+    );
+    final userDoc = await _db.collection('users').doc(userId).get();
+    final userData = userDoc.data() ?? {};
 
-    // 3. Fetch Extras
     final extrasSnap = await _db
         .collection('tenants')
         .doc(AppConfig.tenantId)
@@ -134,37 +170,30 @@ class _HotelViewState extends State<HotelView> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => UnifiedCheckoutDialog(
-        contextType: CheckoutContext.hotel,
-        referenceId: docId,
-        userId: data['cpf_user'],
-        clientData: clientData,
-        baseItem: {'nome': "Estadia Hotel ($dias dias)", 'preco': totalEstadia},
+        contextType: CheckoutContext.agenda,
+        referenceId: agendamentoDoc.id,
+        userId: userId,
+        clientData: userData,
+        baseItem: {
+          'nome': servicoNome,
+          'preco': valorBase,
+          'servicos_extras': dataAgendamento['servicos_extras'],
+        },
         availableServices: listaExtras,
-        totalAlreadyPaid: (data['valor_pago'] ?? 0).toDouble(),
+        totalAlreadyPaid: 0, // Agenda typically pays at checkout
+        vouchersConsumedHistory: dataAgendamento['vouchers_consumidos'],
         themeColor: _corAcai,
-        onSuccess: () => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Estadia finalizada! 🏨"),
-            backgroundColor: _corSucesso,
-          ),
-        ),
+        onSuccess: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Caixa Atualizado com Sucesso! 💰"),
+              backgroundColor: _corSucesso,
+              behavior: SnackBarBehavior.floating,
+              width: 300,
+            ),
+          );
+        },
       ),
-    );
-  }
-
-  void _novaHospedagemManual() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => NovaReservaDialog(),
-    );
-  }
-
-  void _registrarPagamentoParcial(String docId) async {
-    await showDialog(
-      context: context,
-      builder: (c) =>
-          RegistrarPagamentoDialog(reservaId: docId, nomePet: "Hóspede"),
     );
   }
 
@@ -187,21 +216,28 @@ class _HotelViewState extends State<HotelView> {
               children: [
                 Row(
                   children: [
-                    Icon(FontAwesomeIcons.hotel, color: _corAcai, size: 24),
+                    Icon(
+                      Icons.calendar_view_week_rounded,
+                      color: _corAcai,
+                      size: 24,
+                    ),
                     SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "Gestão de Hotel",
+                          "Agenda Diária",
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
-                          "Check-ins e Estadias",
+                          DateFormat(
+                            "EEEE, d MMM",
+                            'pt_BR',
+                          ).format(_dataFiltro).toUpperCase(),
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.grey,
@@ -212,18 +248,39 @@ class _HotelViewState extends State<HotelView> {
                     ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.add, size: 16),
-                  label: Text("Nova Reserva"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _corAcai,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                Row(
+                  children: [
+                    _buildHeaderButton(
+                      Icons.add,
+                      "Novo",
+                      _corAcai,
+                      Colors.white,
+                      _abrirAgendamentoBalcao,
                     ),
-                  ),
-                  onPressed: _novaHospedagemManual,
+                    SizedBox(width: 5),
+                    IconButton(
+                      icon: Icon(
+                        Icons.calendar_month,
+                        color: Colors.grey[600],
+                        size: 20,
+                      ),
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: context,
+                          initialDate: _dataFiltro,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (d != null) {
+                          setState(() {
+                            _dataFiltro = d;
+                            _selectedAgendamentoId = null;
+                            _atualizarStream();
+                          });
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -233,7 +290,7 @@ class _HotelViewState extends State<HotelView> {
           Expanded(
             child: Row(
               children: [
-                // LISTA LATERAL
+                // COLUNA DA ESQUERDA (BUSCA + LISTA)
                 Expanded(
                   flex: 30,
                   child: Container(
@@ -245,14 +302,18 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     child: Column(
                       children: [
+                        // --- CAMPO DE BUSCA ---
                         Padding(
                           padding: const EdgeInsets.all(12.0),
                           child: TextField(
                             controller: _searchController,
-                            onChanged: (val) =>
-                                setState(() => _termoBusca = val.toLowerCase()),
+                            onChanged: (val) {
+                              setState(() {
+                                _termoBusca = val.toLowerCase();
+                              });
+                            },
                             decoration: InputDecoration(
-                              hintText: "Buscar por Nome, Pet ou CPF...",
+                              hintText: "Buscar cliente ou pet...",
                               prefixIcon: Icon(
                                 Icons.search,
                                 color: Colors.grey[400],
@@ -270,14 +331,11 @@ class _HotelViewState extends State<HotelView> {
                             ),
                           ),
                         ),
+
+                        // --- LISTA DE AGENDAMENTOS ---
                         Expanded(
                           child: StreamBuilder<QuerySnapshot>(
-                            stream: _db
-                                .collection('tenants')
-                                .doc(AppConfig.tenantId)
-                                .collection('reservas_hotel')
-                                .orderBy('check_in', descending: true)
-                                .snapshots(),
+                            stream: _agendamentosStream,
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) {
                                 return Center(
@@ -289,36 +347,33 @@ class _HotelViewState extends State<HotelView> {
 
                               List<DocumentSnapshot> docs = snapshot.data!.docs;
 
-                              if (docs.isEmpty) {
-                                return Center(
-                                  child: Text(
-                                    "Nenhuma reserva encontrada",
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                );
+                              if (docs.isEmpty) return _buildEmptyState();
+
+                              // Seleção Automática Inteligente
+                              if (_selectedAgendamentoId == null ||
+                                  !docs.any(
+                                    (d) => d.id == _selectedAgendamentoId,
+                                  )) {
+                                if (docs.isNotEmpty) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted &&
+                                        _selectedAgendamentoId == null) {
+                                      setState(() {
+                                        _selectedAgendamentoId = docs.first.id;
+                                      });
+                                    }
+                                  });
+                                }
                               }
 
-                              // Seleção Automática (apenas se nenhum estiver selecionado e a lista não for vazia)
-                              if (_selectedReservaId == null &&
-                                  docs.isNotEmpty) {
-                                // Pequeno delay para evitar erro de build
-                                WidgetsBinding.instance.addPostFrameCallback((
-                                  _,
-                                ) {
-                                  if (mounted && _selectedReservaId == null) {
-                                    setState(
-                                      () => _selectedReservaId = docs.first.id,
-                                    );
-                                  }
-                                });
-                              }
-
-                              // Mudei para ListView.builder para gerenciar melhor os itens escondidos
+                              // ListView.builder para suportar itens ocultos na busca
                               return ListView.builder(
                                 padding: EdgeInsets.symmetric(horizontal: 10),
                                 itemCount: docs.length,
                                 itemBuilder: (context, index) =>
-                                    _buildReservaItem(docs[index]),
+                                    _buildAgendamentoItem(docs[index]),
                               );
                             },
                           ),
@@ -328,23 +383,18 @@ class _HotelViewState extends State<HotelView> {
                   ),
                 ),
 
-                // PAINEL DE DETALHES
+                // PAINEL DE DETALHES (DASHBOARD)
                 Expanded(
                   flex: 70,
-                  child: _selectedReservaId == null
-                      ? Center(
-                          child: Text(
-                            "Selecione uma reserva",
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
+                  child: _selectedAgendamentoId == null
+                      ? _buildPlaceholder()
                       : StreamBuilder<DocumentSnapshot>(
-                          key: ValueKey(_selectedReservaId),
+                          key: ValueKey(_selectedAgendamentoId),
                           stream: _db
                               .collection('tenants')
                               .doc(AppConfig.tenantId)
-                              .collection('reservas_hotel')
-                              .doc(_selectedReservaId)
+                              .collection('agendamentos')
+                              .doc(_selectedAgendamentoId)
                               .snapshots(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -362,60 +412,62 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  // --- ITEM DA LISTA LATERAL COM FILTRO DE BUSCA ---
-  Widget _buildReservaItem(DocumentSnapshot doc) {
+  // --- ITEM DA LISTA LATERAL (COM BUSCA FETCHED) ---
+  Widget _buildAgendamentoItem(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    final isSelected = _selectedReservaId == doc.id;
-    final status = data['status'] ?? 'reservado';
-    final cpfUser = data['cpf_user'] ?? '';
+    final isSelected = _selectedAgendamentoId == doc.id;
+    final hora = (data['data_inicio'] as Timestamp).toDate();
+    final status = data['status'] ?? 'agendado';
 
     Color corStatus = Colors.grey;
-    if (status == 'reservado') corStatus = Colors.blue;
-    if (status == 'hospedado') corStatus = _corAcai;
+    if (status == 'banhando' || status == 'tosando') corStatus = _corProcesso;
+    if (status == 'pronto') corStatus = _corAtencao;
     if (status == 'concluido') corStatus = _corSucesso;
 
-    // FutureBuilder Interno para filtrar visualmente
+    // FutureBuilder para buscar nomes e aplicar filtro visual
     return FutureBuilder<List<DocumentSnapshot>>(
       future: Future.wait([
-        _db.collection('users').doc(cpfUser).get(),
+        _db.collection('users').doc(data['userId']).get(),
         _db
             .collection('users')
-            .doc(cpfUser)
+            .doc(data['userId'])
             .collection('pets')
             .doc(data['pet_id'])
             .get(),
       ]),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return SizedBox(); // Carregando (invisível para não piscar)
-        }
+        if (!snap.hasData) return SizedBox(); // Placeholder silencioso
 
         String tutor = snap.data![0].exists
-            ? (snap.data![0]['nome'] ?? 'Tutor')
+            ? (snap.data![0]['nome'] ?? 'Tutor').split(' ')[0]
             : 'Tutor';
         String pet = snap.data![1].exists
             ? snap.data![1]['nome'] ?? 'Pet'
             : 'Pet';
 
-        // LÓGICA DE FILTRO: Se tem busca e não bate com nada, retorna Container vazio (tamanho 0)
+        // LÓGICA DE FILTRO: Se tem busca e não bate com nada, esconde
         if (_termoBusca.isNotEmpty) {
           bool matchNome = tutor.toLowerCase().contains(_termoBusca);
           bool matchPet = pet.toLowerCase().contains(_termoBusca);
-          bool matchCpf = cpfUser.toString().contains(_termoBusca);
+          bool matchServico = (data['servico'] ?? '')
+              .toString()
+              .toLowerCase()
+              .contains(_termoBusca);
 
-          if (!matchNome && !matchPet && !matchCpf) {
-            return SizedBox.shrink(); // Some da lista visualmente
+          if (!matchNome && !matchPet && !matchServico) {
+            return SizedBox.shrink(); // Oculta visualmente
           }
         }
 
-        // Se passou no filtro, desenha o item
         return GestureDetector(
-          onTap: () => setState(() => _selectedReservaId = doc.id),
+          onTap: () {
+            if (_selectedAgendamentoId != doc.id) {
+              setState(() => _selectedAgendamentoId = doc.id);
+            }
+          },
           child: AnimatedContainer(
             duration: Duration(milliseconds: 200),
-            margin: EdgeInsets.only(
-              bottom: 8,
-            ), // Margem aqui pois não usamos mais separator
+            margin: EdgeInsets.only(bottom: 8),
             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: isSelected ? _corLilas : Colors.white,
@@ -447,21 +499,20 @@ class _HotelViewState extends State<HotelView> {
                 Column(
                   children: [
                     Text(
-                      DateFormat(
-                        'dd/MM',
-                      ).format((data['check_in'] as Timestamp).toDate()),
+                      DateFormat('HH:mm').format(hora),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
-                    Icon(
-                      status == 'hospedado'
-                          ? FontAwesomeIcons.bed
-                          : Icons.calendar_today,
-                      size: 14,
-                      color: corStatus,
-                    ),
+                    if (status == 'pronto')
+                      Icon(
+                        Icons.notifications_active,
+                        size: 14,
+                        color: _corAtencao,
+                      ),
+                    if (status == 'concluido')
+                      Icon(Icons.check_circle, size: 14, color: _corSucesso),
                   ],
                 ),
                 SizedBox(width: 10),
@@ -470,20 +521,16 @@ class _HotelViewState extends State<HotelView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "$pet ($tutor)",
+                        _capitalize(data['servicoNorm'] ?? data['servico']),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        status.toUpperCase(),
-                        style: TextStyle(
-                          color: corStatus,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        "$pet ($tutor)",
+                        style: TextStyle(color: Colors.grey[700], fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -496,29 +543,47 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  // --- PAINEL DIREITO ---
-  Widget _buildPainelDetalhesCompacto(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final status = data['status'] ?? 'reservado';
+  // --- PAINEL DIREITO (COM WHATSAPP) ---
+  Widget _buildPainelDetalhesCompacto(DocumentSnapshot agendamentoDoc) {
+    final data = agendamentoDoc.data() as Map<String, dynamic>;
+    final status = data['status'] ?? 'agendado';
+    final bool isPronto = status == 'pronto';
+    final bool isConcluido = status == 'concluido';
 
-    Color corStatus = Colors.blue;
-    String textoStatus = "Reserva Confirmada";
-    IconData iconeStatus = Icons.calendar_today;
+    Color corStatus = Colors.grey;
+    String textoStatus = "Aguardando";
+    IconData iconeStatus = Icons.schedule;
 
-    if (status == 'hospedado') {
-      corStatus = _corAcai;
-      textoStatus = "Hóspede no Hotel";
-      iconeStatus = FontAwesomeIcons.bed;
+    if (status == 'aguardando_execucao') {
+      corStatus = Colors.blue;
+      textoStatus = "Aguardando Execução";
+      iconeStatus = Icons.hourglass_top;
+    }
+    if (status == 'checklist_pendente') {
+      corStatus = Colors.orange;
+      textoStatus = "Em Checklist";
+      iconeStatus = Icons.playlist_add_check;
+    }
+    if (status == 'banhando') {
+      corStatus = _corProcesso;
+      textoStatus = "Em Banho";
+      iconeStatus = FontAwesomeIcons.shower;
+    }
+    if (status == 'tosando') {
+      corStatus = Colors.orange;
+      textoStatus = "Em Tosa";
+      iconeStatus = FontAwesomeIcons.scissors;
+    }
+    if (status == 'pronto') {
+      corStatus = _corAtencao;
+      textoStatus = "Pronto / Aguardando Dono";
+      iconeStatus = Icons.notifications_active;
     }
     if (status == 'concluido') {
       corStatus = _corSucesso;
-      textoStatus = "Estadia Finalizada";
+      textoStatus = "Finalizado";
       iconeStatus = Icons.check_circle;
     }
-
-    final checkIn = (data['check_in'] as Timestamp).toDate();
-    final checkOut = (data['check_out'] as Timestamp).toDate();
-    final dias = checkOut.difference(checkIn).inDays;
 
     return Padding(
       padding: EdgeInsets.all(20),
@@ -526,15 +591,16 @@ class _HotelViewState extends State<HotelView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 1. TIMELINE
-          SizedBox(height: 40, child: _buildTimelineHotel(status)),
+          SizedBox(height: 40, child: _buildTimelineCompleta(status)),
+
           SizedBox(height: 15),
 
-          // 2. DASHBOARD
+          // 2. DASHBOARD (LADO A LADO)
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // CARD 1: HÓSPEDE
+                // CARD CLIENTE
                 Expanded(
                   flex: 5,
                   child: Container(
@@ -553,45 +619,35 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     child: FutureBuilder<List<DocumentSnapshot>>(
                       future: Future.wait([
-                        _db.collection('users').doc(data['cpf_user']).get(),
+                        _db.collection('users').doc(data['userId']).get(),
                         _db
                             .collection('users')
-                            .doc(data['cpf_user'])
+                            .doc(data['userId'])
                             .collection('pets')
                             .doc(data['pet_id'])
                             .get(),
                       ]),
                       builder: (context, snap) {
-                        String tutor = "Carregando...";
+                        String cliente = "Carregando...";
                         String pet = "...";
-                        String raca = "-";
                         String celular = "";
-                        IconData iconPet = FontAwesomeIcons.paw;
 
                         if (snap.hasData) {
                           if (snap.data![0].exists) {
                             var uData = snap.data![0].data() as Map;
-                            tutor = uData['nome'] ?? 'Tutor';
+                            cliente = uData['nome'] ?? 'Cliente';
                             celular =
                                 uData['celular'] ?? uData['telefone'] ?? '';
                           }
-                          if (snap.data![1].exists) {
-                            var pData = snap.data![1].data() as Map;
-                            pet = pData['nome'];
-                            raca = pData['raca'] ?? '';
-                            if (pData['tipo'] == 'gato') {
-                              iconPet = FontAwesomeIcons.cat;
-                            }
-                            if (pData['tipo'] == 'cao') {
-                              iconPet = FontAwesomeIcons.dog;
-                            }
-                          }
+                          pet = snap.data![1].exists
+                              ? snap.data![1]['nome']
+                              : "Pet Removido";
                         }
 
                         return Column(
                           children: [
                             Text(
-                              "HÓSPEDE & TUTOR",
+                              "CLIENTE & PET",
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -600,32 +656,41 @@ class _HotelViewState extends State<HotelView> {
                               ),
                             ),
                             Spacer(),
-                            CircleAvatar(
-                              radius: 35,
-                              backgroundColor: _corLilas,
-                              child: Icon(iconPet, size: 30, color: _corAcai),
+                            Center(
+                              child: CircleAvatar(
+                                radius: 35,
+                                backgroundColor: _corLilas,
+                                child: Icon(
+                                  FontAwesomeIcons.dog,
+                                  size: 30,
+                                  color: _corAcai,
+                                ),
+                              ),
                             ),
                             SizedBox(height: 10),
                             Text(
                               pet,
+                              textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
+                                color: Colors.black87,
                               ),
                             ),
                             Text(
-                              "$raca • $tutor",
+                              cliente,
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 color: Colors.grey[600],
                               ),
-                              textAlign: TextAlign.center,
                             ),
                             Spacer(),
 
+                            // BOTÃO WHATSAPP
                             if (celular.isNotEmpty)
                               InkWell(
-                                onTap: () => _abrirWhatsApp(celular, tutor),
+                                onTap: () => _abrirWhatsApp(celular, cliente),
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
                                   padding: EdgeInsets.symmetric(
@@ -681,9 +746,10 @@ class _HotelViewState extends State<HotelView> {
                     ),
                   ),
                 ),
+
                 SizedBox(width: 15),
 
-                // CARD 2: ESTADIA
+                // CARD FINANCEIRO
                 Expanded(
                   flex: 6,
                   child: Container(
@@ -697,7 +763,7 @@ class _HotelViewState extends State<HotelView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "RESUMO DA ESTADIA",
+                          "RESUMO FINANCEIRO",
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -705,56 +771,80 @@ class _HotelViewState extends State<HotelView> {
                             letterSpacing: 1,
                           ),
                         ),
-                        SizedBox(height: 15),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _dateBox("Check-in", checkIn),
-                            Icon(
-                              Icons.arrow_forward,
-                              size: 16,
-                              color: Colors.grey[300],
-                            ),
-                            _dateBox("Check-out", checkOut),
-                          ],
-                        ),
                         SizedBox(height: 10),
-                        Center(
-                          child: Text(
-                            "$dias Diárias",
-                            style: TextStyle(
-                              color: _corAcai,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                        _row(
+                          "Serviço Base",
+                          _capitalize(data['servico']),
+                          isBold: true,
+                        ),
+                        _row(
+                          "Profissional",
+                          data['profissional_nome'] ?? '-',
+                          fontSize: 11,
+                        ),
+                        Divider(),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                if (data['extras'] != null)
+                                  ...(data['extras'] as List).map(
+                                    (e) => _row(
+                                      "+ ${e['nome']}",
+                                      "R\$ ${e['preco']}",
+                                      color: _corAtencao,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                if (data['servicos_extras'] != null)
+                                  ...(data['servicos_extras'] as List).map(
+                                    (e) => _row(
+                                      "+ ${e['nome']}",
+                                      "R\$ ${e['preco']}",
+                                      color: _corAtencao,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                if ((data['extras'] == null ||
+                                        (data['extras'] as List).isEmpty) &&
+                                    (data['servicos_extras'] == null ||
+                                        (data['servicos_extras'] as List)
+                                            .isEmpty))
+                                  Padding(
+                                    padding: EdgeInsets.only(top: 10),
+                                    child: Text(
+                                      "- Sem extras -",
+                                      style: TextStyle(
+                                        color: Colors.grey[300],
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
                         Divider(),
-                        _row(
-                          "Valor Diária",
-                          "R\$ ${_precoDiariaCache.toStringAsFixed(2)}",
-                        ),
-                        _row(
-                          "Total Pago",
-                          "R\$ ${(data['valor_pago'] ?? 0).toStringAsFixed(2)}",
-                          color: Colors.green,
-                        ),
-                        Spacer(),
-                        if (status != 'concluido')
-                          SizedBox(
-                            width: double.infinity,
-                            height: 35,
-                            child: OutlinedButton.icon(
-                              icon: Icon(Icons.attach_money, size: 16),
-                              label: Text("Registrar Pagamento"),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.green,
-                                side: BorderSide(color: Colors.green),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "TOTAL",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                              onPressed: () =>
-                                  _registrarPagamentoParcial(doc.id),
                             ),
-                          ),
+                            Text(
+                              "R\$ ${(isConcluido ? data['valor_final_cobrado'] : data['valor'])?.toStringAsFixed(2) ?? '0.00'}",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 22,
+                                color: _corAcai,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -762,9 +852,10 @@ class _HotelViewState extends State<HotelView> {
               ],
             ),
           ),
+
           SizedBox(height: 15),
 
-          // 3. STATUS E AÇÃO
+          // 3. BARRA DE STATUS
           Container(
             height: 60,
             decoration: BoxDecoration(
@@ -801,35 +892,42 @@ class _HotelViewState extends State<HotelView> {
                     ],
                   ),
                 ),
-                if (status == 'reservado')
+                if (isPronto)
                   ElevatedButton.icon(
-                    icon: Icon(Icons.login, size: 18),
-                    label: Text("REALIZAR CHECK-IN"),
+                    icon: Icon(Icons.point_of_sale, size: 18),
+                    label: Text(
+                      "CHECKOUT",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: _corSucesso,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 12,
                       ),
                     ),
-                    onPressed: () => _fazerCheckIn(doc.id),
-                  ),
-                if (status == 'hospedado')
+                    onPressed: () => _abrirCheckout(agendamentoDoc),
+                  )
+                else if (status == 'agendado' ||
+                    status == 'aguardando_pagamento')
                   ElevatedButton.icon(
-                    icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
-                    label: Text("CHECK-OUT E PAGAR"),
+                    icon: Icon(FontAwesomeIcons.dog, size: 18),
+                    label: Text(
+                      "RECEBER PET",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
+                      backgroundColor: Colors.blue[700],
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 12,
                       ),
                     ),
-                    onPressed: () => _abrirCheckoutHotel(doc.id, data),
-                  ),
-                if (status == 'concluido')
+                    onPressed: () => _receberPet(agendamentoDoc),
+                  )
+                else if (isConcluido)
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                     decoration: BoxDecoration(
@@ -838,10 +936,10 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle, size: 16, color: _corSucesso),
+                        Icon(Icons.check, size: 16, color: _corSucesso),
                         SizedBox(width: 5),
                         Text(
-                          "Finalizado",
+                          "Pago",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: _corSucesso,
@@ -858,29 +956,35 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  // --- WIDGETS AUXILIARES ---
-  Widget _buildTimelineHotel(String status) {
+  // --- WIDGETS AUXILIARES (TIMELINE, ETC) ---
+  Widget _buildTimelineCompleta(String status) {
     int step = 1;
-    if (status == 'hospedado') step = 2;
-    if (status == 'concluido') step = 3;
+    if (status == 'banhando') step = 2;
+    if (status == 'tosando') step = 3;
+    if (status == 'pronto') step = 4;
+    if (status == 'concluido') step = 5;
 
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _stepWidget(1, "Reserva", step, Icons.calendar_today),
+        _stepWidget(1, "Agend.", step, Icons.calendar_today),
         _lineWidget(step > 1),
-        _stepWidget(2, "Hospedado", step, FontAwesomeIcons.bed),
+        _stepWidget(2, "Banho", step, FontAwesomeIcons.shower),
         _lineWidget(step > 2),
-        _stepWidget(3, "Finalizado", step, Icons.check_circle),
+        _stepWidget(3, "Tosa", step, FontAwesomeIcons.scissors),
+        _lineWidget(step > 3),
+        _stepWidget(4, "Pronto", step, FontAwesomeIcons.dog),
+        _lineWidget(step > 4),
+        _stepWidget(5, "Fim", step, Icons.check_circle),
       ],
     );
   }
 
   Widget _stepWidget(int index, String label, int currentStep, IconData icon) {
     bool isActive = index == currentStep;
-    bool isPast = index < currentStep;
     Color color = isActive
         ? _corAtencao
-        : (isPast ? _corSucesso : Colors.grey[300]!);
+        : (index < currentStep ? _corSucesso : Colors.grey[300]!);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -902,45 +1006,79 @@ class _HotelViewState extends State<HotelView> {
     );
   }
 
-  Widget _lineWidget(bool isActive) => Expanded(
-    child: Container(
-      height: 2,
-      color: isActive ? _corSucesso : Colors.grey[200],
-    ),
-  );
-
-  Widget _dateBox(String label, DateTime date) {
-    return Column(
-      children: [
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey)),
-        Text(
-          DateFormat('dd/MM').format(date),
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        Text(
-          DateFormat('HH:mm').format(date),
-          style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-        ),
-      ],
+  Widget _lineWidget(bool isActive) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        color: isActive ? _corSucesso : Colors.grey[200],
+      ),
     );
   }
 
-  Widget _row(String k, String v, {Color? color}) {
+  Widget _row(
+    String k,
+    String v, {
+    bool isBold = false,
+    Color? color,
+    double fontSize = 12,
+  }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(k, style: TextStyle(color: Colors.grey[700], fontSize: 12)),
+          Text(
+            k,
+            style: TextStyle(color: Colors.grey[700], fontSize: fontSize),
+          ),
           Text(
             v,
             style: TextStyle(
-              fontWeight: FontWeight.bold,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
               color: color ?? Colors.black87,
-              fontSize: 12,
+              fontSize: fontSize,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderButton(
+    IconData icon,
+    String label,
+    Color bg,
+    Color fg,
+    VoidCallback onTap,
+  ) {
+    return ElevatedButton.icon(
+      icon: Icon(icon, size: 14),
+      label: Text(label, style: TextStyle(fontSize: 12)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        minimumSize: Size(0, 30),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      onPressed: onTap,
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Center(
+      child: Text(
+        "Carregando...",
+        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Text(
+        "Nenhum agendamento",
+        style: TextStyle(color: Colors.grey[400], fontSize: 12),
       ),
     );
   }

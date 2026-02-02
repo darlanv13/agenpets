@@ -4,7 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:agenpet/firebase_options.dart';
 import 'package:agenpet/profissional_app/login_profissional_screen.dart';
 import 'package:agenpet/profissional_app/profissional_screen.dart';
-import 'package:agenpet/admin_web/admin_web_screen.dart';
+import 'package:agenpet/painel_loja_web/admin_web_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

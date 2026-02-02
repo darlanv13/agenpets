@@ -1,4 +1,4 @@
-import 'package:agenpet/admin_web/admin_web_screen.dart';
+import 'package:agenpet/painel_loja_web/admin_web_screen.dart';
 import 'package:agenpet/client_app/screens/assinatura_screen.dart';
 import 'package:agenpet/client_app/screens/minhas_agendas.dart'; // Ensure this file contains MinhasAgendasScreen
 import 'package:agenpet/client_app/screens/hotel_screen.dart';

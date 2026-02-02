@@ -1,4 +1,4 @@
-import 'package:agenpet/admin_web/views/components/cadastro_rapido_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/components/cadastro_rapido_dialog.dart';
 import 'package:agenpet/utils/formatters.dart';
 import 'package:agenpet/utils/validators.dart';
 import 'package:flutter/material.dart';
