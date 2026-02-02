@@ -34,21 +34,80 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   Set<String> _rolesSelecionadas = {};
 
   // Permissões
-  final Map<String, String> _availablePages = {
+  final Map<String, String> _allPossiblePages = {
     'dashboard': 'Dashboard',
     'loja_pdv': 'PDV / Vendas',
     'banhos_tosa': 'Agenda Banho/Tosa',
     'hotel': 'Agenda Hotel',
     'creche': 'Agenda Creche',
+    'venda_planos': 'Venda de Planos',
+    'gestao_precos': 'Tabela de Preços',
+    'banners_app': 'Banners do App',
+    'gestao_estoque': 'Gestão de Estoque',
     'equipe': 'Gestão Equipe',
     'configuracoes': 'Configs',
   };
+
+  Map<String, String> _filteredAvailablePages = {};
   Map<String, bool> _selectedAccess = {};
 
   @override
   void initState() {
     super.initState();
-    _availablePages.forEach((k, v) => _selectedAccess[k] = false);
+    _loadTenantConfig();
+  }
+
+  Future<void> _loadTenantConfig() async {
+    try {
+      final doc = await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('config')
+          .doc('parametros')
+          .get();
+
+      Map<String, dynamic> config = {};
+      if (doc.exists) config = doc.data()!;
+
+      bool temPdv = config['tem_pdv'] ?? false;
+      bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
+      bool temHotel = config['tem_hotel'] ?? false;
+      bool temCreche = config['tem_creche'] ?? false;
+
+      Map<String, String> filtered = {};
+      _allPossiblePages.forEach((key, value) {
+        if (key == 'loja_pdv' && !temPdv) return;
+        if (key == 'banhos_tosa' && !temBanhoTosa) return;
+        if (key == 'hotel' && !temHotel) return;
+        if (key == 'creche' && !temCreche) return;
+        filtered[key] = value;
+      });
+
+      if (mounted) {
+        setState(() {
+          _filteredAvailablePages = filtered;
+          // Inicializa dashboard como true
+          filtered.keys.forEach((k) {
+            if (!_selectedAccess.containsKey(k)) {
+              _selectedAccess[k] = (k == 'dashboard');
+            }
+          });
+          // Garante dashboard ativo
+          _selectedAccess['dashboard'] = true;
+        });
+      }
+    } catch (e) {
+      print("Erro ao carregar config do tenant: $e");
+      // Fallback
+      if (mounted) {
+        setState(() {
+          _filteredAvailablePages = _allPossiblePages;
+          _allPossiblePages.keys.forEach(
+            (k) => _selectedAccess[k] = (k == 'dashboard'),
+          );
+        });
+      }
+    }
   }
 
   void _toggleRole(String role) {
@@ -56,11 +115,15 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       if (_rolesSelecionadas.contains(role)) {
         _rolesSelecionadas.remove(role);
         if (role == 'master')
-          _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+          _filteredAvailablePages.keys.forEach(
+            (k) => _selectedAccess[k] = false,
+          );
       } else {
         _rolesSelecionadas.add(role);
         if (role == 'master') {
-          _availablePages.keys.forEach((k) => _selectedAccess[k] = true);
+          _filteredAvailablePages.keys.forEach(
+            (k) => _selectedAccess[k] = true,
+          );
           _rolesSelecionadas.add('caixa');
         }
       }
@@ -95,20 +158,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         'cpf': _cpfController.text,
         'senha': _senhaController.text.trim(),
         'habilidades': _rolesSelecionadas.toList(),
+        'acessos': acessos,
         'perfil': perfil,
         'tenantId': widget.tenantId,
       });
-
-      // Atualiza acessos extras
-      final q = await _db
-          .collection('tenants')
-          .doc(widget.tenantId)
-          .collection('profissionais')
-          .where('documento', isEqualTo: _cpfController.text)
-          .limit(1)
-          .get();
-      if (q.docs.isNotEmpty)
-        await q.docs.first.reference.update({'acessos': acessos});
 
       _clearForm();
       if (mounted) _showSnack("Adicionado!", Colors.green);
@@ -125,7 +178,9 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     _senhaController.clear();
     setState(() {
       _rolesSelecionadas.clear();
-      _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
+      _filteredAvailablePages.keys.forEach(
+        (k) => _selectedAccess[k] = (k == 'dashboard'),
+      );
     });
   }
 
@@ -236,14 +291,14 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 "Permissões Extras",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
-              ..._availablePages.entries
+              ..._filteredAvailablePages.entries
                   .map(
                     (e) => CheckboxListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       activeColor: Theme.of(context).primaryColor,
                       title: Text(e.value, style: TextStyle(fontSize: 13)),
-                      value: _selectedAccess[e.key],
+                      value: _selectedAccess[e.key] ?? false,
                       onChanged: (v) =>
                           setState(() => _selectedAccess[e.key] = v!),
                     ),
