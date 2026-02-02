@@ -1,10 +1,10 @@
 // 1. IMPORTAÇÕES
-const { setGlobalOptions } = require("firebase-functions/v2");
-const { onRequest } = require("firebase-functions/v2/https");
+const {setGlobalOptions} = require("firebase-functions/v2");
+const {onRequest} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 
 // 2. CONFIGURAÇÃO GLOBAL (Sul do Brasil)
-setGlobalOptions({ region: "southamerica-east1" });
+setGlobalOptions({region: "southamerica-east1"});
 
 // 3. IMPORTAÇÕES DOS CONTROLLERS
 const agendamentoController = require("./controllers/agendamentoController");

@@ -40,6 +40,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     'banhos_tosa': 'Agenda Banho/Tosa',
     'hotel': 'Agenda Hotel',
     'creche': 'Agenda Creche',
+    'venda_planos': 'Venda de Planos',
+    'gestao_precos': 'Tabela de Preços',
+    'banners_app': 'Banners do App',
+    'gestao_estoque': 'Gestão de Estoque',
     'equipe': 'Gestão Equipe',
     'configuracoes': 'Configs',
   };
@@ -95,20 +99,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         'cpf': _cpfController.text,
         'senha': _senhaController.text.trim(),
         'habilidades': _rolesSelecionadas.toList(),
+        'acessos': acessos,
         'perfil': perfil,
         'tenantId': widget.tenantId,
       });
-
-      // Atualiza acessos extras
-      final q = await _db
-          .collection('tenants')
-          .doc(widget.tenantId)
-          .collection('profissionais')
-          .where('documento', isEqualTo: _cpfController.text)
-          .limit(1)
-          .get();
-      if (q.docs.isNotEmpty)
-        await q.docs.first.reference.update({'acessos': acessos});
 
       _clearForm();
       if (mounted) _showSnack("Adicionado!", Colors.green);
