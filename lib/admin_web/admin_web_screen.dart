@@ -16,7 +16,7 @@ import 'views/gestao_precos_view.dart';
 import 'views/configuracao_agenda_view.dart';
 import 'views/venda_assinatura_view.dart';
 import 'views/gestao_banners_view.dart';
-import 'views/loja_view.dart';
+import 'views/pdv_view.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -109,7 +109,8 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
 
   void _buildMenu(Map<String, dynamic> config) {
     // Flags dos Módulos (Defaults)
-    bool temLoja = config['tem_loja'] ?? false;
+    // bool temLoja = config['tem_loja'] ?? false; // Loja no App
+    bool temPdv = config['tem_pdv'] ?? false; // PDV no Admin
     bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
     bool temHotel = config['tem_hotel'] ?? false;
     bool temCreche = config['tem_creche'] ?? false;
@@ -126,12 +127,12 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         section: "PRINCIPAL",
         widget: DashboardView(),
       ),
-      if (temLoja)
+      if (temPdv)
         PageDefinition(
-          id: 'loja_pdv',
-          title: "Loja / PDV",
+          id: 'loja_pdv', // Mantemos o ID antigo para não quebrar permissões existentes
+          title: "PDV / Caixa",
           icon: FontAwesomeIcons.cashRegister,
-          widget: LojaView(isMaster: _isMaster),
+          widget: PdvView(isMaster: _isMaster),
         ),
       if (temBanhoTosa)
         PageDefinition(

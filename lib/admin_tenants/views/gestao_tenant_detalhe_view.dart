@@ -37,7 +37,8 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   bool _temBanhoTosa = true;
   bool _temHotel = false;
   bool _temCreche = false;
-  bool _temLoja = false;
+  bool _temLoja = false; // "Loja (App)"
+  bool _temPdv = false;  // "PDV (Caixa)"
   bool _temVeterinario = false;
   bool _temTaxi = false;
 
@@ -73,6 +74,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           _temHotel = data['tem_hotel'] ?? false;
           _temCreche = data['tem_creche'] ?? false;
           _temLoja = data['tem_loja'] ?? false;
+          _temPdv = data['tem_pdv'] ?? false; // Novo
           _temVeterinario = data['tem_veterinario'] ?? false;
           _temTaxi = data['tem_taxi'] ?? false;
 
@@ -101,6 +103,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             'tem_hotel': _temHotel,
             'tem_creche': _temCreche,
             'tem_loja': _temLoja,
+            'tem_pdv': _temPdv, // Novo
             'tem_veterinario': _temVeterinario,
             'tem_taxi': _temTaxi,
             // Mantém compatibilidade reversa se necessário, ou removemos fields antigos
@@ -311,10 +314,16 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             (v) => setState(() => _temCreche = v),
           ),
           _buildSwitch(
-            "Loja / PDV",
-            "Vendas de Produtos",
+            "Loja (App)",
+            "Vendas no App do Cliente",
             _temLoja,
             (v) => setState(() => _temLoja = v),
+          ),
+          _buildSwitch(
+            "PDV (Caixa)",
+            "Ponto de Venda no Painel Admin",
+            _temPdv,
+            (v) => setState(() => _temPdv = v),
           ),
           _buildSwitch(
             "Veterinário",

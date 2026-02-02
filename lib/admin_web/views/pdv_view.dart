@@ -4,16 +4,16 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 
-class LojaView extends StatefulWidget {
+class PdvView extends StatefulWidget {
   final bool isMaster;
 
-  const LojaView({super.key, this.isMaster = false});
+  const PdvView({super.key, this.isMaster = false});
 
   @override
-  _LojaViewState createState() => _LojaViewState();
+  _PdvViewState createState() => _PdvViewState();
 }
 
-class _LojaViewState extends State<LojaView> {
+class _PdvViewState extends State<PdvView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
