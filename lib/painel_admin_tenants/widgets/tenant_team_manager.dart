@@ -31,6 +31,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   );
   bool _isLoading = false;
   String _filtroEquipe = "";
+  String? _editingUid; // ID do usuário sendo editado (null = criando novo)
   Set<String> _rolesSelecionadas = {};
 
   // Permissões
@@ -152,13 +153,20 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     }
   }
 
-  Future<void> _cadastrar() async {
+  Future<void> _salvar() async {
     if (_nomeController.text.isEmpty ||
-        _cpfController.text.length < 14 ||
-        _senhaController.text.length < 6) {
-      _showSnack("Preencha os campos corretamente.", Colors.orange);
+        _cpfController.text.length < 14) {
+      _showSnack("Preencha nome e CPF.", Colors.orange);
       return;
     }
+
+    // Senha só é obrigatória ao CRIAR. Na edição é opcional (mas backend atual não suporta troca de senha ainda,
+    // então ignoramos se vier vazio na edição, ou alertamos que não muda senha)
+    if (_editingUid == null && _senhaController.text.length < 6) {
+      _showSnack("Senha deve ter no mínimo 6 dígitos.", Colors.orange);
+      return;
+    }
+
     if (_rolesSelecionadas.isEmpty) {
       _showSnack("Selecione uma função.", Colors.orange);
       return;
@@ -174,19 +182,33 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
           ? 'master'
           : 'padrao';
 
-      await _functions.httpsCallable('criarContaProfissional').call({
-        'nome': _nomeController.text.trim(),
-        'documento': _cpfController.text,
-        'cpf': _cpfController.text,
-        'senha': _senhaController.text.trim(),
-        'habilidades': _rolesSelecionadas.toList(),
-        'acessos': acessos,
-        'perfil': perfil,
-        'tenantId': widget.tenantId,
-      });
+      if (_editingUid == null) {
+        // --- CRIAR ---
+        await _functions.httpsCallable('criarContaProfissional').call({
+          'nome': _nomeController.text.trim(),
+          'documento': _cpfController.text,
+          'cpf': _cpfController.text,
+          'senha': _senhaController.text.trim(),
+          'habilidades': _rolesSelecionadas.toList(),
+          'acessos': acessos,
+          'perfil': perfil,
+          'tenantId': widget.tenantId,
+        });
+        if (mounted) _showSnack("Adicionado!", Colors.green);
+      } else {
+        // --- EDITAR ---
+        await _functions.httpsCallable('atualizarContaProfissional').call({
+          'uid': _editingUid,
+          'nome': _nomeController.text.trim(),
+          'habilidades': _rolesSelecionadas.toList(),
+          'acessos': acessos,
+          'perfil': perfil,
+          'tenantId': widget.tenantId,
+        });
+        if (mounted) _showSnack("Atualizado!", Colors.green);
+      }
 
       _clearForm();
-      if (mounted) _showSnack("Adicionado!", Colors.green);
     } catch (e) {
       if (mounted) _showSnack("Erro: $e", Colors.red);
     } finally {
@@ -194,7 +216,61 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     }
   }
 
+  Future<void> _deletar(String uid) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Excluir Profissional?"),
+        content: Text(
+          "Esta ação removerá o acesso e os dados deste profissional permanentemente.",
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text("Cancelar")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text("Excluir", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await _functions.httpsCallable('deletarContaProfissional').call({
+        'uid': uid,
+        'tenantId': widget.tenantId,
+      });
+      if (mounted) _showSnack("Removido com sucesso.", Colors.green);
+    } catch (e) {
+      if (mounted) _showSnack("Erro ao excluir: $e", Colors.red);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _iniciarEdicao(Map<String, dynamic> data, String uid) {
+    setState(() {
+      _editingUid = uid;
+      _nomeController.text = data['nome'] ?? '';
+      _cpfController.text = data['documento'] ?? (data['cpf'] ?? '');
+      _senhaController.clear(); // Não exibimos senha
+
+      // Habilidades
+      _rolesSelecionadas = Set<String>.from(data['habilidades'] ?? []);
+
+      // Acessos
+      final acessosSalvos = List<String>.from(data['acessos'] ?? []);
+      _filteredAvailablePages.keys.forEach((k) {
+        _selectedAccess[k] = acessosSalvos.contains(k);
+      });
+      _selectedAccess['dashboard'] = true; // Garante dashboard
+    });
+  }
+
   void _clearForm() {
+    _editingUid = null;
     _nomeController.clear();
     _cpfController.clear();
     _senhaController.clear();
@@ -327,11 +403,21 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                   .toList(),
             ],
             SizedBox(height: 20),
+            if (_editingUid != null) ...[
+              SizedBox(height: 10),
+              Center(
+                child: TextButton(
+                  onPressed: _clearForm,
+                  child: Text("Cancelar Edição", style: TextStyle(color: Colors.grey)),
+                ),
+              ),
+            ],
+            SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _cadastrar,
+                onPressed: _isLoading ? null : _salvar,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).primaryColor,
                   foregroundColor: Colors.white,
@@ -342,7 +428,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 child: _isLoading
                     ? CircularProgressIndicator(color: Colors.white)
                     : Text(
-                        "CADASTRAR",
+                        _editingUid == null ? "CADASTRAR" : "ATUALIZAR",
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
               ),
@@ -445,14 +531,21 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                         "CPF: ${data['documento']} • ${skills.join(', ').toUpperCase()}",
                         style: TextStyle(fontSize: 12),
                       ),
-                      trailing: IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: Colors.red[300],
-                        ),
-                        onPressed: () {
-                          /* Implementar Delete */
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.edit, color: Colors.blue[300]),
+                            onPressed: () => _iniciarEdicao(data, docs[i].id),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: Colors.red[300],
+                            ),
+                            onPressed: () => _deletar(docs[i].id),
+                          ),
+                        ],
                       ),
                     );
                   },

@@ -61,3 +61,5 @@ exports.salvarChecklistPet = agendamentoController.salvarChecklistPet;
 
 // --- Módulo Admin ---
 exports.criarContaProfissional = adminController.criarContaProfissional;
+exports.atualizarContaProfissional = adminController.atualizarContaProfissional;
+exports.deletarContaProfissional = adminController.deletarContaProfissional;

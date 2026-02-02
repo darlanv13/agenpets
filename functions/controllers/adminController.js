@@ -129,3 +129,94 @@ exports.criarContaProfissional = onCall({
     throw new HttpsError("internal", error.message);
   }
 });
+
+// --- NOVO: Atualizar Conta Profissional ---
+exports.atualizarContaProfissional = onCall({
+  region: "southamerica-east1",
+  maxInstances: 10,
+  cors: true,
+}, async (request) => {
+  const {uid, nome, habilidades, acessos, perfil, tenantId} = request.data;
+
+  if (!uid || !tenantId) {
+    throw new HttpsError("invalid-argument", "UID e TenantId são obrigatórios.");
+  }
+
+  try {
+    // 1. Atualizar no Auth (Display Name e Claims)
+    await admin.auth().updateUser(uid, {displayName: nome});
+
+    const claims = {
+      profissional: true,
+      tenantId: tenantId,
+      acessos: acessos || [],
+    };
+    if (perfil === "master") {
+      claims.admin = true;
+      claims.master = true;
+    }
+    await admin.auth().setCustomUserClaims(uid, claims);
+
+    // 2. Atualizar no Firestore
+    const updateData = {
+      nome: nome,
+      habilidades: habilidades || [],
+      acessos: acessos || [],
+      perfil: perfil || "padrao",
+      atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Remove campos undefined/null para não apagar dados véios sem querer
+    Object.keys(updateData).forEach((key) => updateData[key] === undefined && delete updateData[key]);
+
+    await db.collection("tenants")
+        .doc(tenantId)
+        .collection("profissionais")
+        .doc(uid)
+        .update(updateData);
+
+    return {success: true, message: "Profissional atualizado com sucesso!"};
+  } catch (error) {
+    console.error("Erro ao atualizar conta:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
+// --- NOVO: Deletar Conta Profissional ---
+exports.deletarContaProfissional = onCall({
+  region: "southamerica-east1",
+  maxInstances: 10,
+  cors: true,
+}, async (request) => {
+  const {uid, tenantId} = request.data;
+
+  if (!uid || !tenantId) {
+    throw new HttpsError("invalid-argument", "UID e TenantId são obrigatórios.");
+  }
+
+  try {
+    // 1. Deletar do Auth
+    await admin.auth().deleteUser(uid);
+
+    // 2. Deletar do Firestore
+    await db.collection("tenants")
+        .doc(tenantId)
+        .collection("profissionais")
+        .doc(uid)
+        .delete();
+
+    return {success: true, message: "Profissional excluído com sucesso!"};
+  } catch (error) {
+    console.error("Erro ao deletar conta:", error);
+    // Se o usuário não existe no Auth (já deletado manualmente), prossegue para limpar o Firestore
+    if (error.code === "auth/user-not-found") {
+      await db.collection("tenants")
+          .doc(tenantId)
+          .collection("profissionais")
+          .doc(uid)
+          .delete();
+      return {success: true, message: "Registro limpo (usuário Auth não existia)."};
+    }
+    throw new HttpsError("internal", error.message);
+  }
+});
