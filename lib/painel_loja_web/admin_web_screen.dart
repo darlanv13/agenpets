@@ -84,6 +84,17 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
         }
       }
 
+      // Se não tiver nenhum acesso explícito mas for perfil master, garante acesso total
+      if (_isMaster) {
+        // Master não precisa de lista de acessos, mas por segurança limpamos ou definimos tudo
+        // A lógica abaixo em _buildMenu já trata _isMaster separadamente
+      } else {
+        // Se for usuario padrao e não tiver acessos, tenta inferir dashboard
+        if (_acessos.isEmpty) {
+          _acessos.add('dashboard');
+        }
+      }
+
       // Buscar Configurações da Loja (Módulos Ativos)
       final configDoc = await FirebaseFirestore.instance
           .collection('tenants')
