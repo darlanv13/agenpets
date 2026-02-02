@@ -409,9 +409,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                               Icons.delete_outline,
                               color: Colors.red[300],
                             ),
-                            onPressed: () {
-                              /* Implementar Delete */
-                            },
+                            onPressed: () =>
+                                _confirmarExclusao(docs[i].id, data['nome']),
                           ),
                         ],
                       ),
@@ -543,6 +542,44 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         );
       },
     );
+  }
+
+  Future<void> _confirmarExclusao(String docId, String nome) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Remover Colaborador"),
+        content: Text("Tem certeza que deseja remover '$nome' desta unidade?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancelar"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _deletarProfissional(docId);
+            },
+            child: Text("Remover", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deletarProfissional(String docId) async {
+    try {
+      await _db
+          .collection('tenants')
+          .doc(widget.tenantId)
+          .collection('profissionais')
+          .doc(docId)
+          .delete();
+      _showSnack("Colaborador removido.", Colors.green);
+    } catch (e) {
+      _showSnack("Erro ao remover: $e", Colors.red);
+    }
   }
 
   Future<void> _salvarEdicao(String docId, String nome, Set<String> roles,
