@@ -111,6 +111,14 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       _buildMenu(config);
     } catch (e) {
       print("Erro ao carregar permissões: $e");
+
+      // Fallback de Segurança:
+      // Se deu erro (ex: offline, permissão negada), garantimos acesso ao Dashboard
+      // para que o usuário não fique preso na tela de "Acesso Restrito".
+      if (_acessos.isEmpty) {
+        _acessos.add('dashboard');
+      }
+
       // Fallback: build menu based on basic args
       _buildMenu({});
     } finally {
