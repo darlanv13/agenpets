@@ -4,7 +4,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:agenpet/admin_web/widgets/professional_editor_dialog.dart';
 
 class TenantTeamManager extends StatefulWidget {
   final String tenantId;
@@ -22,7 +21,6 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     region: 'southamerica-east1',
   );
 
-  // Controllers e Forms
   final _nomeController = TextEditingController();
   final _cpfController = TextEditingController();
   final _senhaController = TextEditingController();
@@ -33,8 +31,6 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   );
   bool _isLoading = false;
   String _filtroEquipe = "";
-
-  // Funções / Roles
   Set<String> _rolesSelecionadas = {};
 
   // Permissões
@@ -59,15 +55,13 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     setState(() {
       if (_rolesSelecionadas.contains(role)) {
         _rolesSelecionadas.remove(role);
-        // Se remover Master, limpa acessos automáticos
         if (role == 'master')
           _availablePages.keys.forEach((k) => _selectedAccess[k] = false);
       } else {
         _rolesSelecionadas.add(role);
-        // Se adicionar Master, seleciona tudo
         if (role == 'master') {
           _availablePages.keys.forEach((k) => _selectedAccess[k] = true);
-          _rolesSelecionadas.add('caixa'); // Master geralmente opera caixa
+          _rolesSelecionadas.add('caixa');
         }
       }
     });
@@ -75,16 +69,13 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
 
   Future<void> _cadastrar() async {
     if (_nomeController.text.isEmpty ||
-        _cpfController.text.isEmpty ||
+        _cpfController.text.length < 14 ||
         _senhaController.text.length < 6) {
-      _showSnack(
-        "Preencha todos os campos corretamente (senha min 6).",
-        Colors.orange,
-      );
+      _showSnack("Preencha os campos corretamente.", Colors.orange);
       return;
     }
     if (_rolesSelecionadas.isEmpty) {
-      _showSnack("Selecione ao menos uma função.", Colors.orange);
+      _showSnack("Selecione uma função.", Colors.orange);
       return;
     }
 
@@ -108,7 +99,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         'tenantId': widget.tenantId,
       });
 
-      // Atualiza permissões manuais se não for master (ou reforça se for)
+      // Atualiza acessos extras
       final q = await _db
           .collection('tenants')
           .doc(widget.tenantId)
@@ -120,11 +111,11 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         await q.docs.first.reference.update({'acessos': acessos});
 
       _clearForm();
-      _showSnack("Colaborador adicionado!", Colors.green);
+      if (mounted) _showSnack("Adicionado!", Colors.green);
     } catch (e) {
-      _showSnack("Erro: ${e.toString()}", Colors.red);
+      if (mounted) _showSnack("Erro: $e", Colors.red);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -139,9 +130,13 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   }
 
   void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -149,109 +144,105 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     return LayoutBuilder(
       builder: (context, constraints) {
         bool isWide = constraints.maxWidth > 900;
-        return Padding(
-          padding: EdgeInsets.all(isWide ? 30 : 15),
-          child: isWide
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 2, child: _buildFormCard()),
-                    SizedBox(width: 30),
-                    Expanded(flex: 3, child: _buildListCard()),
-                  ],
-                )
-              : Column(
-                  children: [
-                    _buildFormCard(),
-                    SizedBox(height: 30),
-                    _buildListCard(),
-                  ],
-                ),
-        );
+
+        // Form Widget isolado
+        Widget formWidget = _buildFormCard();
+        // List Widget isolado
+        Widget listWidget = _buildListCard();
+
+        if (isWide) {
+          return Padding(
+            padding: EdgeInsets.all(30),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: SingleChildScrollView(child: formWidget),
+                ), // Scroll para prevenir overflow vertical em telas médias
+                SizedBox(width: 30),
+                Expanded(flex: 3, child: listWidget),
+              ],
+            ),
+          );
+        } else {
+          // Mobile: Coluna com Scroll Geral
+          return SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [formWidget, SizedBox(height: 30), listWidget],
+            ),
+          );
+        }
       },
     );
   }
 
   Widget _buildFormCard() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
       child: Padding(
-        padding: EdgeInsets.all(25),
+        padding: EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               "Novo Colaborador",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 20),
-            TextFormField(
-              controller: _nomeController,
-              decoration: InputDecoration(
-                labelText: "Nome Completo",
-                prefixIcon: Icon(Icons.person),
-              ),
+            _buildInput(_nomeController, "Nome Completo", Icons.person),
+            SizedBox(height: 15),
+            _buildInput(
+              _cpfController,
+              "CPF (Login)",
+              Icons.badge,
+              formatter: maskCpf,
             ),
             SizedBox(height: 15),
-            TextFormField(
-              controller: _cpfController,
-              inputFormatters: [maskCpf],
-              decoration: InputDecoration(
-                labelText: "CPF (Login)",
-                prefixIcon: Icon(Icons.badge),
-              ),
+            _buildInput(
+              _senhaController,
+              "Senha Inicial",
+              Icons.lock,
+              obscure: true,
             ),
-            SizedBox(height: 15),
-            TextFormField(
-              controller: _senhaController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: "Senha Inicial",
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
-
             SizedBox(height: 25),
             Text(
-              "Funções & Permissões",
+              "Função",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
+                color: Colors.grey[700],
               ),
             ),
             SizedBox(height: 10),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                _buildRoleChip("Banhista", "banho", FontAwesomeIcons.shower),
-                _buildRoleChip("Tosador", "tosa", FontAwesomeIcons.scissors),
-                _buildRoleChip(
-                  "Vendedor",
-                  "vendedor",
-                  FontAwesomeIcons.bagShopping,
-                ),
-                _buildRoleChip("Caixa", "caixa", FontAwesomeIcons.cashRegister),
-                _buildRoleChip(
-                  "Gerente/Master",
-                  "master",
-                  FontAwesomeIcons.userShield,
-                  isDestructive: true,
-                ),
+                _buildChip("Banhista", "banho"),
+                _buildChip("Tosador", "tosa"),
+                _buildChip("Vendedor", "vendedor"),
+                _buildChip("Caixa", "caixa"),
+                _buildChip("Gerente", "master", color: Colors.amber[800]),
               ],
             ),
-
             if (!_rolesSelecionadas.contains('master')) ...[
-              SizedBox(height: 20),
-              Divider(),
+              Divider(height: 30),
               Text(
-                "Acesso a Páginas",
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                "Permissões Extras",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               ..._availablePages.entries
                   .map(
                     (e) => CheckboxListTile(
                       dense: true,
-                      title: Text(e.value),
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: Theme.of(context).primaryColor,
+                      title: Text(e.value, style: TextStyle(fontSize: 13)),
                       value: _selectedAccess[e.key],
                       onChanged: (v) =>
                           setState(() => _selectedAccess[e.key] = v!),
@@ -259,16 +250,25 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                   )
                   .toList(),
             ],
-
-            SizedBox(height: 30),
+            SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _cadastrar,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: _isLoading
                     ? CircularProgressIndicator(color: Colors.white)
-                    : Text("CADASTRAR EQUIPE"),
+                    : Text(
+                        "CADASTRAR",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
               ),
             ),
           ],
@@ -279,24 +279,33 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
 
   Widget _buildListCard() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
       child: Padding(
-        padding: EdgeInsets.all(25),
+        padding: EdgeInsets.all(24),
         child: Column(
           children: [
             Row(
               children: [
                 Text(
-                  "Equipe Ativa",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  "Equipe",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Spacer(),
-                SizedBox(
-                  width: 200,
+                Container(
+                  width: 150,
+                  height: 40,
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: "Buscar...",
-                      prefixIcon: Icon(Icons.search),
-                      contentPadding: EdgeInsets.all(10),
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      contentPadding: EdgeInsets.zero,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     ),
                     onChanged: (v) =>
                         setState(() => _filtroEquipe = v.toLowerCase()),
@@ -304,7 +313,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 ),
               ],
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 15),
             StreamBuilder<QuerySnapshot>(
               stream: _db
                   .collection('tenants')
@@ -314,79 +323,60 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
               builder: (context, snapshot) {
                 if (!snapshot.hasData)
                   return Center(child: CircularProgressIndicator());
-
-                final docs = snapshot.data!.docs.where((d) {
-                  final data = d.data() as Map;
-                  return (data['nome'] ?? '').toString().toLowerCase().contains(
-                    _filtroEquipe,
-                  );
-                }).toList();
+                final docs = snapshot.data!.docs
+                    .where(
+                      (d) => (d['nome'] as String).toLowerCase().contains(
+                        _filtroEquipe,
+                      ),
+                    )
+                    .toList();
 
                 if (docs.isEmpty)
                   return Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text("Nenhum colaborador encontrado."),
+                    padding: EdgeInsets.all(30),
+                    child: Text(
+                      "Nenhum colaborador.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   );
 
                 return ListView.separated(
                   shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
+                  physics:
+                      NeverScrollableScrollPhysics(), // Scroll controlado pelo pai
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => Divider(height: 1),
                   itemBuilder: (ctx, i) {
                     final data = docs[i].data() as Map;
                     final skills = List<String>.from(data['habilidades'] ?? []);
-                    final bool isMaster =
-                        skills.contains('master') || data['perfil'] == 'master';
-                    final bool ativo = data['ativo'] ?? true;
-
                     return ListTile(
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 0,
-                      ),
+                      contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(
-                        backgroundColor: isMaster
-                            ? Colors.amber[100]
-                            : Colors.purple[50],
-                        child: Icon(
-                          isMaster ? FontAwesomeIcons.crown : Icons.person,
-                          color: isMaster
-                              ? Colors.amber[800]
-                              : Colors.purple[800],
-                          size: 20,
+                        backgroundColor: Colors.grey[200],
+                        child: Text(
+                          data['nome'][0],
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54,
+                          ),
                         ),
                       ),
                       title: Text(
                         data['nome'],
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          decoration: ativo ? null : TextDecoration.lineThrough,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "CPF: ${data['documento']}",
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          SizedBox(height: 4),
-                          Wrap(
-                            spacing: 4,
-                            children: skills
-                                .map((s) => _buildSkillBadge(s))
-                                .toList(),
-                          ),
-                        ],
+                      subtitle: Text(
+                        "CPF: ${data['documento']} • ${skills.join(', ').toUpperCase()}",
+                        style: TextStyle(fontSize: 12),
                       ),
                       trailing: IconButton(
-                        icon: Icon(Icons.edit_outlined, color: Colors.blue),
-                        onPressed: () => showDialog(
-                          context: context,
-                          builder: (_) =>
-                              ProfessionalEditorDialog(profissional: docs[i]),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Colors.red[300],
                         ),
+                        onPressed: () {
+                          /* Implementar Delete */
+                        },
                       ),
                     );
                   },
@@ -399,55 +389,40 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     );
   }
 
-  Widget _buildRoleChip(
+  Widget _buildInput(
+    TextEditingController ctrl,
     String label,
-    String value,
     IconData icon, {
-    bool isDestructive = false,
+    bool obscure = false,
+    MaskTextInputFormatter? formatter,
   }) {
-    bool selected = _rolesSelecionadas.contains(value);
-    Color color = isDestructive
-        ? Colors.amber[800]!
-        : Theme.of(context).primaryColor;
-
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: selected ? Colors.white : color),
-          SizedBox(width: 8),
-          Text(label),
-        ],
+    return TextFormField(
+      controller: ctrl,
+      obscureText: obscure,
+      inputFormatters: formatter != null ? [formatter] : [],
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: EdgeInsets.symmetric(horizontal: 15, vertical: 15),
       ),
-      selected: selected,
-      onSelected: (_) => _toggleRole(value),
-      backgroundColor: Colors.white,
-      selectedColor: color,
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : color,
-        fontWeight: FontWeight.bold,
-      ),
-      side: BorderSide(color: color.withOpacity(0.3)),
-      checkmarkColor: Colors.white,
     );
   }
 
-  Widget _buildSkillBadge(String skill) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.grey[300]!),
+  Widget _buildChip(String label, String val, {Color? color}) {
+    bool selected = _rolesSelecionadas.contains(val);
+    Color c = color ?? Theme.of(context).primaryColor;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => _toggleRole(val),
+      selectedColor: c.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color: selected ? c : Colors.black87,
+        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
       ),
-      child: Text(
-        skill.toUpperCase(),
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: Colors.grey[700],
-        ),
-      ),
+      side: BorderSide(color: selected ? c : Colors.grey[300]!),
+      backgroundColor: Colors.white,
     );
   }
 }

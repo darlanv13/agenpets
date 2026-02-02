@@ -27,20 +27,15 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
     databaseId: 'agenpets',
   );
 
-  // Controllers
   final _efipayClientIdCtrl = TextEditingController();
   final _efipayClientSecretCtrl = TextEditingController();
   final _mpAccessTokenCtrl = TextEditingController();
   final _logoAppCtrl = TextEditingController();
   final _logoAdminCtrl = TextEditingController();
 
-  // Estados
-  bool _temCreche = false;
-  bool _temHotel = false;
-  bool _temBanho = false;
-  bool _temTosa = false;
+  bool _temCreche = false, _temHotel = false, _temBanho = true, _temTosa = true;
   String _gatewayPagamento = 'efipay';
-  bool _isLoading = true;
+  bool _isLoading = true, _isSaving = false;
 
   @override
   void initState() {
@@ -73,18 +68,15 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Erro ao carregar: $e")));
+      debugPrint("Erro: $e");
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _salvarConfiguracoes() async {
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
     try {
-      // 1. Salvar Configurações Visuais/Públicas (Escrita direta no Firestore é OK aqui)
       await _db
           .collection('tenants')
           .doc(widget.tenantId)
@@ -97,11 +89,8 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             'tem_hotel': _temHotel,
             'tem_banho': _temBanho,
             'tem_tosa': _temTosa,
-            // Não salvamos as chaves aqui!
           }, SetOptions(merge: true));
 
-      // 2. Salvar Credenciais via Cloud Function (Túnel Seguro)
-      // Chama a função que criamos no passo anterior
       final functions = FirebaseFunctions.instanceFor(
         region: 'southamerica-east1',
       );
@@ -113,237 +102,266 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         'mercadopago_access_token': _mpAccessTokenCtrl.text.trim(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.shield, color: Colors.white),
-              SizedBox(width: 10),
-              Text("Configurações e Chaves salvas com segurança!"),
-            ],
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Salvo com sucesso!"),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green[700],
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erro ao salvar: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erro: $e"), backgroundColor: Colors.red),
+        );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: Color(0xFFF5F7FA),
       appBar: AppBar(
         title: Text(
-          widget.nomeLoja.toUpperCase(),
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+          widget.nomeLoja,
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 1,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 4,
-          labelStyle: TextStyle(fontWeight: FontWeight.bold),
+          labelColor: Theme.of(context).primaryColor,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Theme.of(context).primaryColor,
           tabs: [
-            Tab(
-              text: "CONFIGURAÇÕES DA LOJA",
-              icon: Icon(Icons.settings_suggest),
-            ),
-            Tab(text: "EQUIPE & ACESSOS", icon: Icon(Icons.people_alt)),
+            Tab(text: "CONFIGURAÇÕES", icon: Icon(Icons.settings_outlined)),
+            Tab(text: "EQUIPE & ACESSO", icon: Icon(Icons.people_outline)),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildConfigTab(theme),
-          TenantTeamManager(tenantId: widget.tenantId),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildConfigTab(),
+              TenantTeamManager(tenantId: widget.tenantId),
+            ],
+          ),
+          if (_isSaving)
+            Container(
+              color: Colors.black26,
+              child: Center(child: CircularProgressIndicator()),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildConfigTab(ThemeData theme) {
+  Widget _buildConfigTab() {
     if (_isLoading) return Center(child: CircularProgressIndicator());
 
-    return Center(
-      child: Container(
-        constraints: BoxConstraints(maxWidth: 900),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(30),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildSectionHeader(
-                "Módulos de Serviço",
-                FontAwesomeIcons.layerGroup,
-              ),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Column(
-                    children: [
-                      _buildSwitch(
-                        "Banho & Higiene",
-                        "Módulo de agendamento de banhos",
-                        _temBanho,
-                        (v) => setState(() => _temBanho = v),
-                        FontAwesomeIcons.shower,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Tosa & Estética",
-                        "Módulo de tosa",
-                        _temTosa,
-                        (v) => setState(() => _temTosa = v),
-                        FontAwesomeIcons.scissors,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Creche / Daycare",
-                        "Gestão de entrada e saída diária",
-                        _temCreche,
-                        (v) => setState(() => _temCreche = v),
-                        FontAwesomeIcons.dog,
-                      ),
-                      Divider(),
-                      _buildSwitch(
-                        "Hotel & Hospedagem",
-                        "Gestão de pernoites e baias",
-                        _temHotel,
-                        (v) => setState(() => _temHotel = v),
-                        FontAwesomeIcons.hotel,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 30),
-              _buildSectionHeader(
-                "Identidade Visual (White Label)",
-                Icons.palette,
-              ),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      _buildImageInput(
-                        _logoAppCtrl,
-                        "Logo App Cliente",
-                        Icons.phone_iphone,
-                      ),
-                      SizedBox(height: 20),
-                      _buildImageInput(
-                        _logoAdminCtrl,
-                        "Logo Painel Administrativo",
-                        Icons.monitor,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 30),
-              _buildSectionHeader("Gateway de Pagamento", Icons.credit_card),
-              Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      DropdownButtonFormField<String>(
-                        value: _gatewayPagamento,
-                        decoration: InputDecoration(
-                          labelText: "Provedor Principal",
-                          prefixIcon: Icon(Icons.hub),
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'efipay',
-                            child: Text("EfiPay (Gerencianet)"),
-                          ),
-                          DropdownMenuItem(
-                            value: 'mercadopago',
-                            child: Text("Mercado Pago"),
-                          ),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _gatewayPagamento = v!),
-                      ),
-                      SizedBox(height: 20),
-                      if (_gatewayPagamento == 'efipay') ...[
-                        TextFormField(
-                          controller: _efipayClientIdCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Client ID",
-                            prefixIcon: Icon(Icons.key),
-                          ),
-                        ),
-                        SizedBox(height: 15),
-                        TextFormField(
-                          controller: _efipayClientSecretCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Client Secret",
-                            prefixIcon: Icon(Icons.lock),
-                          ),
-                        ),
-                      ] else ...[
-                        TextFormField(
-                          controller: _mpAccessTokenCtrl,
-                          decoration: InputDecoration(
-                            labelText: "Access Token (Production)",
-                            prefixIcon: Icon(Icons.vpn_key),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isWide = constraints.maxWidth > 800;
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 1000),
+              child: Column(
+                children: [
+                  if (isWide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildServicesCard()),
+                        SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              _buildBrandingCard(),
+                              SizedBox(height: 20),
+                              _buildPaymentCard(),
+                            ],
                           ),
                         ),
                       ],
-                    ],
+                    )
+                  else ...[
+                    _buildServicesCard(),
+                    SizedBox(height: 20),
+                    _buildBrandingCard(),
+                    SizedBox(height: 20),
+                    _buildPaymentCard(),
+                  ],
+                  SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton.icon(
+                      onPressed: _salvarConfiguracoes,
+                      icon: Icon(Icons.save),
+                      label: Text(
+                        "SALVAR ALTERAÇÕES",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  SizedBox(height: 50),
+                ],
               ),
-
-              SizedBox(height: 40),
-              SizedBox(
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: _salvarConfiguracoes,
-                  icon: Icon(Icons.save),
-                  label: Text("SALVAR ALTERAÇÕES"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: Colors.grey[700]),
+                SizedBox(width: 10),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ],
+            ),
+            Divider(height: 30),
+            child,
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15, left: 5),
-      child: Row(
+  Widget _buildServicesCard() {
+    return _buildCard(
+      title: "Módulos de Serviço",
+      icon: FontAwesomeIcons.layerGroup,
+      child: Column(
         children: [
-          Icon(icon, color: Theme.of(context).primaryColor, size: 20),
-          SizedBox(width: 10),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
+          _buildSwitch(
+            "Banho & Higiene",
+            "Agendamento e controle",
+            _temBanho,
+            (v) => setState(() => _temBanho = v),
           ),
+          _buildSwitch(
+            "Tosa & Estética",
+            "Gestão de tosadores",
+            _temTosa,
+            (v) => setState(() => _temTosa = v),
+          ),
+          _buildSwitch(
+            "Creche",
+            "Check-in/out diário",
+            _temCreche,
+            (v) => setState(() => _temCreche = v),
+          ),
+          _buildSwitch(
+            "Hotel",
+            "Hospedagem e baias",
+            _temHotel,
+            (v) => setState(() => _temHotel = v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBrandingCard() {
+    return _buildCard(
+      title: "Identidade Visual",
+      icon: Icons.palette,
+      child: Column(
+        children: [
+          _buildInput(_logoAppCtrl, "URL Logo App", Icons.mobile_friendly),
+          SizedBox(height: 15),
+          _buildInput(_logoAdminCtrl, "URL Logo Painel", Icons.desktop_windows),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentCard() {
+    return _buildCard(
+      title: "Pagamentos",
+      icon: Icons.credit_card,
+      child: Column(
+        children: [
+          DropdownButtonFormField<String>(
+            value: _gatewayPagamento,
+            decoration: InputDecoration(
+              labelText: "Gateway",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 15),
+            ),
+            items: [
+              DropdownMenuItem(
+                value: 'efipay',
+                child: Text("EfiPay (Gerencianet)"),
+              ),
+              DropdownMenuItem(
+                value: 'mercadopago',
+                child: Text("Mercado Pago"),
+              ),
+            ],
+            onChanged: (v) => setState(() => _gatewayPagamento = v!),
+          ),
+          SizedBox(height: 20),
+          if (_gatewayPagamento == 'efipay') ...[
+            _buildInput(_efipayClientIdCtrl, "Client ID", Icons.key),
+            SizedBox(height: 10),
+            _buildInput(
+              _efipayClientSecretCtrl,
+              "Client Secret",
+              Icons.lock,
+              obscure: true,
+            ),
+          ] else
+            _buildInput(
+              _mpAccessTokenCtrl,
+              "Access Token",
+              Icons.vpn_key,
+              obscure: true,
+            ),
         ],
       ),
     );
@@ -351,67 +369,36 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
 
   Widget _buildSwitch(
     String title,
-    String subtitle,
+    String sub,
     bool val,
-    Function(bool) onChange,
-    IconData icon,
+    Function(bool) onChanged,
   ) {
     return SwitchListTile(
+      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(sub, style: TextStyle(fontSize: 12)),
       value: val,
-      onChanged: onChange,
       activeColor: Theme.of(context).primaryColor,
-      title: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey[600]),
-          SizedBox(width: 10),
-          Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(left: 28),
-        child: Text(subtitle, style: TextStyle(fontSize: 12)),
-      ),
+      onChanged: onChanged,
+      contentPadding: EdgeInsets.zero,
     );
   }
 
-  Widget _buildImageInput(
+  Widget _buildInput(
     TextEditingController ctrl,
     String label,
-    IconData icon,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: ctrl,
-            decoration: InputDecoration(
-              labelText: label,
-              prefixIcon: Icon(icon),
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-        ),
-        SizedBox(width: 20),
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ctrl.text.isNotEmpty
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    ctrl.text,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Icon(Icons.error),
-                  ),
-                )
-              : Icon(Icons.image, color: Colors.grey[300]),
-        ),
-      ],
+    IconData icon, {
+    bool obscure = false,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.grey),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        filled: true,
+        fillColor: Colors.grey[50],
+      ),
     );
   }
 }

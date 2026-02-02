@@ -17,7 +17,7 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     const configDoc = await db.collection("tenants")
         .doc(tenantId)
         .collection("config")
-        .doc("parametros")
+        .doc("segredos")
         .get();
     const config = configDoc.exists ? configDoc.data() : {};
 
