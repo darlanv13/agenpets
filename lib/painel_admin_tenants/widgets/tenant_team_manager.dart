@@ -369,7 +369,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                   itemCount: docs.length,
                   separatorBuilder: (_, __) => Divider(height: 1),
                   itemBuilder: (ctx, i) {
-                    final data = docs[i].data() as Map;
+                    final data = docs[i].data() as Map<String, dynamic>;
                     final skills = List<String>.from(data['habilidades'] ?? []);
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -420,9 +420,14 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   }
 
   void _showEditDialog(String docId, Map<String, dynamic> data) {
-    final _editNomeCtrl = TextEditingController(text: data['nome']);
-    Set<String> _editRoles = Set<String>.from(data['habilidades'] ?? []);
-    List<String> currentAccess = List<String>.from(data['acessos'] ?? []);
+    final _editNomeCtrl = TextEditingController(text: data['nome'] ?? '');
+    Set<String> _editRoles = (data['habilidades'] as List? ?? [])
+        .map((e) => e.toString())
+        .toSet();
+    List<String> currentAccess = (data['acessos'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
+
     Map<String, bool> _editAccess = {};
     _availablePages.keys.forEach((k) {
       _editAccess[k] = currentAccess.contains(k);
