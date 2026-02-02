@@ -75,6 +75,7 @@ exports.criarContaProfissional = onCall({
       const claims = {
         profissional: true,
         tenantId: tenantId,
+        acessos: acessos || [], // Persiste acessos no token
       };
       if (perfil === "master") {
         claims.admin = true;
@@ -95,21 +96,23 @@ exports.criarContaProfissional = onCall({
         throw new HttpsError("already-exists", "Este profissional já está cadastrado nesta unidade.");
       }
 
-      // Atualiza claims se necessário (apenas garante que é profissional)
+      // Atualiza claims para incluir novos acessos e garantir tenantId
+      // Nota: Em multi-tenant real, acessos nos claims podem ser problemáticos se conflitarem entre tenants.
+      // Assumindo que o profissional atua principalmente neste tenant ou que a sobrescrita é intencional.
       const currentClaims = userRecord.customClaims || {};
-      let needsUpdate = false;
-      const newClaims = {...currentClaims};
+      const newClaims = {
+        ...currentClaims,
+        profissional: true,
+        tenantId: tenantId, // Atualiza para o tenant atual
+        acessos: acessos || [],
+      };
 
-      if (!newClaims.profissional) {
-        newClaims.profissional = true;
-        needsUpdate = true;
+      if (perfil === "master") {
+        newClaims.admin = true;
+        newClaims.master = true;
       }
-      // Não sobrescrevemos tenantId para não quebrar acesso à loja anterior.
-      // O frontend usa a coleção 'profissionais' da tenant para validar acesso.
 
-      if (needsUpdate) {
-        await getAuth().setCustomUserClaims(userRecord.uid, newClaims);
-      }
+      await getAuth().setCustomUserClaims(userRecord.uid, newClaims);
     }
 
     // 6. Salva Perfil no Firestore (SEM A SENHA) na coleção do Tenant
