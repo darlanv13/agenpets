@@ -113,18 +113,43 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     setState(() {
       if (_rolesSelecionadas.contains(role)) {
         _rolesSelecionadas.remove(role);
-        if (role == 'master')
-          _filteredAvailablePages.keys
-              .forEach((k) => _selectedAccess[k] = false);
+        if (role == 'master') {
+          _filteredAvailablePages.keys.forEach((k) {
+            if (k != 'dashboard') _selectedAccess[k] = false;
+          });
+        }
       } else {
         _rolesSelecionadas.add(role);
         if (role == 'master') {
           _filteredAvailablePages.keys
               .forEach((k) => _selectedAccess[k] = true);
           _rolesSelecionadas.add('caixa');
+        } else {
+          _applyRolePermissions(role);
         }
       }
+      // Sempre garante dashboard
+      _selectedAccess['dashboard'] = true;
     });
+  }
+
+  void _applyRolePermissions(String role) {
+    // Mapeamento de Funções para Permissões
+    final map = {
+      'banho': ['banhos_tosa'],
+      'tosa': ['banhos_tosa'],
+      'vendedor': ['loja_pdv', 'venda_planos'],
+      'caixa': ['loja_pdv'],
+    };
+
+    if (map.containsKey(role)) {
+      for (var perm in map[role]!) {
+        // Só marca se a permissão estiver disponível (módulo ativo)
+        if (_filteredAvailablePages.containsKey(perm)) {
+          _selectedAccess[perm] = true;
+        }
+      }
+    }
   }
 
   Future<void> _cadastrar() async {
