@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LoginProfissionalScreen extends StatefulWidget {
@@ -17,10 +18,7 @@ class LoginProfissionalScreen extends StatefulWidget {
 
 class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
   // Instâncias do Firebase
-  final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final FirebaseFirestore _db = AppDatabase.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final _cpfController = TextEditingController();

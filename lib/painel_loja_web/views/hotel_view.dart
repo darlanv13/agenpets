@@ -2,6 +2,7 @@ import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/nova_reserva_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/registrar_pagamento_dialog.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -17,10 +18,7 @@ class HotelView extends StatefulWidget {
 }
 
 class _HotelViewState extends State<HotelView> {
-  final _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final _db = AppDatabase.instance;
 
   // Cores
   final Color _corAcai = Color(0xFF4A148C);

@@ -1,22 +1,8 @@
-import 'package:agenpet/config/app_config.dart';
-import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
-import 'package:agenpet/painel_loja_web/views/creche_view.dart';
-import 'package:agenpet/painel_loja_web/views/gestao_equipe_view.dart';
-import 'package:agenpet/painel_loja_web/views/gestao_estoque_view.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-// --- IMPORTS DAS VIEWS ---
-import 'views/dashboard_view.dart';
-import 'views/banho_tosa_view.dart';
-import 'views/hotel_view.dart';
-import 'views/gestao_precos_view.dart';
-import 'views/configuracao_agenda_view.dart';
-import 'views/venda_assinatura_view.dart';
-import 'views/gestao_banners_view.dart';
-import 'views/pdv_view.dart';
+import 'services/admin_access_manager.dart';
 
 class AdminWebScreen extends StatefulWidget {
   @override
@@ -27,13 +13,8 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   int _selectedIndex = 0;
   bool _isLoading = true;
 
-  // Dados do Usuário
-  bool _isMaster = false;
-  String _perfil = 'padrao';
-  List<String> _acessos = [];
-
   // Menu Dinâmico
-  List<PageDefinition> _visiblePages = [];
+  List<AdminModule> _visiblePages = [];
 
   // Cores da Identidade Visual
   final Color _corAcaiStart = Color(0xFF4A148C);
@@ -43,211 +24,28 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadUserPermissions();
+    _loadData();
   }
 
-  Future<void> _loadUserPermissions() async {
-    final args = ModalRoute.of(context)?.settings.arguments as Map?;
-    // Defaults from Login Screen
-    if (args != null) {
-      _isMaster = args['isMaster'] == true;
-      _perfil = args['perfil'] ?? 'padrao';
-    }
-
+  Future<void> _loadData() async {
     User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      // Should redirect to login, but let's just stop here
-      setState(() => _isLoading = false);
+      // Se não tiver usuário, para o loading (o wrapper de auth deve tratar redirecionamento)
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     try {
-      // 1. Tenta obter permissões via Custom Claims (Token)
-      // Isso evita erros de leitura no Firestore (unavailable/permission-denied)
-      final idTokenResult = await user.getIdTokenResult(true);
-      final claims = idTokenResult.claims;
-
-      if (claims != null && claims['acessos'] != null) {
-        _acessos = List<String>.from(claims['acessos']);
-        // Se tiver perfil nos claims, usa também
-        if (claims['master'] == true) _isMaster = true;
+      final modules = await AdminAccessManager().getAccessibleModules(user);
+      if (mounted) {
+        setState(() {
+          _visiblePages = modules;
+          _isLoading = false;
+        });
       }
-
-      // 2. Fallback / Complemento via Firestore
-      // Path: tenants/{tenantId}/profissionais/{uid}
-      final docRef = FirebaseFirestore.instance
-          .collection('tenants')
-          .doc(AppConfig.tenantId)
-          .collection('profissionais')
-          .doc(user.uid);
-
-      try {
-        final snapshot = await docRef.get();
-        if (snapshot.exists) {
-          final data = snapshot.data()!;
-          _perfil = data['perfil'] ?? _perfil;
-          if (_perfil == 'master') _isMaster = true;
-
-          // Se claims estava vazio mas banco tem, usa o banco
-          if (_acessos.isEmpty && data['acessos'] != null) {
-            _acessos = List<String>.from(data['acessos']);
-          }
-        }
-      } catch (e) {
-        print("Firestore indisponível, usando apenas Claims: $e");
-      }
-
-      // Se não tiver nenhum acesso explícito mas for perfil master, garante acesso total
-      if (_isMaster) {
-        // Master não precisa de lista de acessos, mas por segurança limpamos ou definimos tudo
-        // A lógica abaixo em _buildMenu já trata _isMaster separadamente
-      } else {
-        // Se for usuario padrao e não tiver acessos, tenta inferir dashboard
-        if (_acessos.isEmpty) {
-          _acessos.add('dashboard');
-        }
-      }
-
-      // Buscar Configurações da Loja (Módulos Ativos)
-      final configDoc = await FirebaseFirestore.instance
-          .collection('tenants')
-          .doc(AppConfig.tenantId)
-          .collection('config')
-          .doc('parametros')
-          .get();
-
-      Map<String, dynamic> config = {};
-      if (configDoc.exists) {
-        config = configDoc.data()!;
-      }
-
-      _buildMenu(config);
     } catch (e) {
-      print("Erro ao carregar permissões: $e");
-
-      // Fallback de Segurança:
-      // Se deu erro (ex: offline, permissão negada), garantimos acesso ao Dashboard
-      // para que o usuário não fique preso na tela de "Acesso Restrito".
-      if (_acessos.isEmpty) {
-        _acessos.add('dashboard');
-      }
-
-      // Fallback: build menu based on basic args
-      _buildMenu({});
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _buildMenu(Map<String, dynamic> config) {
-    // Flags dos Módulos (Defaults)
-    // bool temLoja = config['tem_loja'] ?? false; // Loja no App
-    bool temPdv = config['tem_pdv'] ?? false; // PDV no Admin
-    bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
-    bool temHotel = config['tem_hotel'] ?? false;
-    bool temCreche = config['tem_creche'] ?? false;
-    // Veterianario e Taxi ainda não têm telas no Admin, mas já podemos filtrar
-    // bool temVeterinario = config['tem_veterinario'] ?? false;
-    // bool temTaxi = config['tem_taxi'] ?? false;
-
-    // Definition of ALL available pages
-    final allPages = [
-      PageDefinition(
-        id: 'dashboard',
-        title: "Dashboard",
-        icon: Icons.space_dashboard_rounded,
-        section: "PRINCIPAL",
-        widget: DashboardView(),
-      ),
-      if (temPdv)
-        PageDefinition(
-          id: 'loja_pdv', // Mantemos o ID antigo para não quebrar permissões existentes
-          title: "PDV / Caixa",
-          icon: FontAwesomeIcons.cashRegister,
-          widget: PdvView(isMaster: _isMaster),
-        ),
-      if (temBanhoTosa)
-        PageDefinition(
-          id: 'banhos_tosa',
-          title: "Banhos & Tosa",
-          icon: FontAwesomeIcons.scissors,
-          widget: BanhosTosaView(),
-        ),
-      if (temHotel)
-        PageDefinition(
-          id: 'hotel',
-          title: "Hotel & Estadia",
-          icon: FontAwesomeIcons.hotel,
-          widget: HotelView(),
-        ),
-      if (temCreche)
-        PageDefinition(
-          id: 'creche',
-          title: "Creche",
-          icon: FontAwesomeIcons.dog,
-          widget: CrecheView(),
-        ),
-      PageDefinition(
-        id: 'venda_planos',
-        title: "Venda de Planos",
-        icon: FontAwesomeIcons.cartShopping,
-        section: "VENDAS & PRODUTOS",
-        widget: VendaAssinaturaView(),
-      ),
-      PageDefinition(
-        id: 'gestao_precos',
-        title: "Tabela de Preços",
-        icon: Icons.price_change_rounded,
-        widget: GestaoPrecosView(),
-      ),
-      PageDefinition(
-        id: 'banners_app',
-        title: "Banners do App",
-        icon: Icons.view_carousel_rounded,
-        widget: GestaoBannersView(),
-      ),
-      PageDefinition(
-        id: 'equipe',
-        title: "Equipe",
-        icon: Icons.people_alt_rounded,
-        section: "ADMINISTRAÇÃO",
-        widget: GestaoEquipeView(),
-      ),
-      PageDefinition(
-        id: 'configuracoes',
-        title: "Configurações",
-        icon: Icons.settings_rounded,
-        widget: ConfiguracaoAgendaView(),
-      ),
-      PageDefinition(
-        id: 'gestao_estoque',
-        title: "Gestão de Estoque",
-        icon: Icons.inventory_rounded,
-        widget: GestaoEstoqueView(),
-      ),
-      PageDefinition(
-        id: 'gestao_tenants',
-        title: "Gestão Multi-Tenants",
-        icon: FontAwesomeIcons.building,
-        section: "SUPER ADMIN",
-        widget: GestaoTenantsView(),
-      ),
-    ];
-
-    if (_isMaster) {
-      // Master gets EVERYTHING (except maybe tenants if logic dictates, but for now everything)
-      _visiblePages = allPages;
-    } else {
-      // Filter based on 'acessos'
-      _visiblePages = allPages.where((page) {
-        return _acessos.contains(page.id);
-      }).toList();
-
-      // Ensure Dashboard is always there? Or maybe not.
-      // If list is empty, maybe show a "No Access" page.
-      if (_visiblePages.isEmpty) {
-        // Fallback or "Contact Admin"
-      }
+      print("Erro no AdminWebScreen: $e");
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -481,7 +279,7 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     );
   }
 
-  Widget _buildMenuItem(int index, PageDefinition page) {
+  Widget _buildMenuItem(int index, AdminModule page) {
     bool isSelected = _selectedIndex == index;
 
     return Container(
@@ -537,20 +335,4 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       ),
     );
   }
-}
-
-class PageDefinition {
-  final String id;
-  final String title;
-  final IconData icon;
-  final String? section;
-  final Widget widget;
-
-  PageDefinition({
-    required this.id,
-    required this.title,
-    required this.icon,
-    this.section,
-    required this.widget,
-  });
 }

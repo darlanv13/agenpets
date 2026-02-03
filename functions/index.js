@@ -1,4 +1,4 @@
-// 1. IMPORTAÇÕES
+// 1. IMPORTAÇÕES GERAIS
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onRequest } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
@@ -7,7 +7,15 @@ const logger = require("firebase-functions/logger");
 setGlobalOptions({ region: "southamerica-east1" });
 
 // 3. IMPORTAÇÕES DOS CONTROLLERS
-const agendamentoController = require("./controllers/agendamentoController");
+
+// --- NOVOS MÓDULOS (Refatorados) ---
+// Certifique-se de que os arquivos agendamento.js, vendas.js e estoque.js
+// estão dentro da pasta 'controllers' conforme criamos anteriormente.
+const agendamento = require("./controllers/agendamento");
+const vendas = require("./controllers/vendas");
+const estoque = require("./controllers/estoque");
+
+// --- MÓDULOS EXISTENTES (Mantidos) ---
 const hotelController = require("./controllers/hotelController");
 const crecheController = require("./controllers/crecheController");
 const checkoutsAgenpets = require("./controllers/checkouts_agenpets");
@@ -17,49 +25,64 @@ const adminController = require("./controllers/adminController");
 const paymentController = require("./controllers/paymentController");
 const adminTenantsController = require("./controllers/adminTenantsController");
 
-// 4. EXPORTAÇÕES (O que o Firebase vai enxergar)
+// 4. EXPORTAÇÕES (API PUBLICADA)
 
-// --- Módulo de Agendamento ---
-exports.buscarHorarios = agendamentoController.buscarHorarios;
-exports.criarAgendamento = agendamentoController.criarAgendamento;
-// Atualizado para usar o novo controller de pagamentos
+// MÓDULO DE AGENDAMENTO E VENDAS (Refatorado)
+
+// Agenda
+exports.buscarHorarios = agendamento.buscarHorarios;
+exports.criarAgendamento = agendamento.criarAgendamento;
+exports.salvarChecklistPet = agendamento.salvarChecklistPet;
+
+// Vendas e Assinaturas
+// Nota: 'realizarVendaAssinatura' agora vem do módulo 'vendas'
+exports.realizarVendaAssinatura = vendas.realizarVendaAssinatura;
+
+// Pagamentos (Pix / Gateway) - Mantido do controller original de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
 exports.webhookPix = paymentController.webhookPix;
+exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 
-// --- Módulo Admin Tenants ---
+// MÓDULO DE ESTOQUE E KARDEX (NOVO - Triggers)
+
+// Estas funções rodam automaticamente quando o banco de dados muda
+exports.onVendaCriada = estoque.onVendaCriada;
+exports.onMovimentacaoCriada = estoque.onMovimentacaoCriada;
+
+// MÓDULO ADMIN TENANTS (Multi-lojas)
+
 exports.testarCredenciaisGateway = adminTenantsController.testarCredenciaisGateway;
 exports.criarTenant = adminTenantsController.criarTenant;
 exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
 
-exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
-exports.realizarVendaAssinatura = agendamentoController.realizarVendaAssinatura;
 
-// --- Módulo de Hotelzinho ---
+// MÓDULO DE HOTELZINHO
+
 exports.reservarHotel = hotelController.reservarHotel;
 exports.obterDiasLotados = hotelController.obterDiasLotados;
 exports.realizarCheckoutHotel = hotelController.realizarCheckoutHotel;
 exports.registrarPagamentoHotel = hotelController.registrarPagamentoHotel;
 
-// --- Módulo de Creche ---
+
+// MÓDULO DE CRECHE
+
 exports.reservarCreche = crecheController.reservarCreche;
 exports.obterDiasLotadosCreche = crecheController.obterDiasLotadosCreche;
 exports.obterPrecoCreche = crecheController.obterPrecoCreche;
 exports.realizarCheckoutCreche = crecheController.realizarCheckoutCreche;
 exports.registrarPagamentoCreche = crecheController.registrarPagamentoCreche;
 
-// --- Módulo de Notificações ---
-exports.notificarPetPronto = notificationsApp.notificarPetPronto;
+// MÓDULO DE NOTIFICAÇÕES (Push & WhatsApp)
 
-// --- Módulo de Notificações (WhatsApp) ---
+exports.notificarPetPronto = notificationsApp.notificarPetPronto;
 exports.whatsappConfirmacaoAgendamento = notificationsWhatsapp.whatsappConfirmacaoAgendamento;
 exports.whatsappPetPronto = notificationsWhatsapp.whatsappPetPronto;
 
-// --- Salvar CheckList ---
-exports.salvarChecklistPet = agendamentoController.salvarChecklistPet;
 
-// --- Módulo Admin ---
+// MÓDULO ADMIN (Profissionais)
+
 exports.criarContaProfissional = adminController.criarContaProfissional;
 exports.atualizarContaProfissional = adminController.atualizarContaProfissional;
 exports.deletarContaProfissional = adminController.deletarContaProfissional;

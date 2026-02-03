@@ -1,3 +1,4 @@
+import 'package:agenpet/services/app_database.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -12,10 +13,7 @@ class DashboardView extends StatefulWidget {
 }
 
 class _DashboardViewState extends State<DashboardView> {
-  final _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final _db = AppDatabase.instance;
 
   // Cores do Tema
   final Color _corAcai = Color(0xFF4A148C);

@@ -643,29 +643,39 @@ class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
                   onPressed: () async {
                     int qtd = int.tryParse(qtdCtrl.text) ?? 0;
                     if (qtd <= 0) return;
+                    try {
+                      await _db
+                          .collection('tenants')
+                          .doc(AppConfig.tenantId)
+                          .collection('movimentacoes_estoque')
+                          .add({
+                            'produto_id': docId,
+                            'produto_nome': nome,
+                            'tipo': isAdicionar ? 'ENTRADA' : 'SAIDA',
+                            'motivo':
+                                'AJUSTE_MANUAL', // Pode criar um dropdown para "Avaria", "Validade", etc.
+                            'qtd': qtd,
+                            'usuario_id':
+                                'admin', // Idealmente pegar do Auth Provider
+                            'data': FieldValue.serverTimestamp(),
+                            'obs': 'Ajuste via App Gestão',
+                          });
 
-                    int novoEstoque = isAdicionar ? atual + qtd : atual - qtd;
-                    if (novoEstoque < 0) novoEstoque = 0;
+                      if (!context.mounted) return;
+                      Navigator.pop(ctx);
 
-                    await _db
-                        .collection('tenants')
-                        .doc(AppConfig.tenantId)
-                        .collection('produtos')
-                        .doc(docId)
-                        .update({'qtd_estoque': novoEstoque});
-
-                    // Idealmente aqui salvaríamos no histórico 'movimentacoes_estoque'
-                    // Mas para manter simples e dentro do escopo do pedido, ficamos por aqui.
-
-                    if (!context.mounted) return;
-
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Estoque atualizado para $novoEstoque"),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            "Movimentação registrada! O estoque será atualizado em instantes.",
+                          ),
+                          backgroundColor: Colors.blueAccent,
+                        ),
+                      );
+                    } catch (e) {
+                      print(e);
+                      // Tratar erro
+                    }
                   },
                   child: Text("Confirmar"),
                 ),

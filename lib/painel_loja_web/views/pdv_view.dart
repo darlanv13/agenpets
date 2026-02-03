@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 
 class PdvView extends StatefulWidget {
   final bool isMaster;
@@ -14,13 +15,17 @@ class PdvView extends StatefulWidget {
 }
 
 class _PdvViewState extends State<PdvView> {
-  final _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final _db = AppDatabase.instance;
 
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF5F7FA);
+
+  // --- CONTROLE DE CAIXA ---
+  String? _caixaAbertoId; // Armazena o ID do caixa se estiver aberto
+  bool _verificandoCaixa = true; // Para mostrar um loading inicial
+  final TextEditingController _fundoTrocoCtrl = TextEditingController();
+  final TextEditingController _operadorAberturaCtrl =
+      TextEditingController(); // Quem está abrindo
 
   // Carrinho
   final List<Map<String, dynamic>> _carrinho = [];
@@ -45,9 +50,10 @@ class _PdvViewState extends State<PdvView> {
   @override
   void initState() {
     super.initState();
-    // Garante foco inicial no campo de busca
+    // Foco inicial
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocus.requestFocus();
+      _verificarStatusCaixa(); // <--- CHAMA A VERIFICAÇÃO AQUI
     });
   }
 
@@ -74,6 +80,63 @@ class _PdvViewState extends State<PdvView> {
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
+                  Row(
+                    children: [
+                      Container(
+                        margin: EdgeInsets.only(bottom: 10),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _caixaAbertoId != null
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: _caixaAbertoId != null
+                                ? Colors.green
+                                : Colors.red,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              size: 12,
+                              color: _caixaAbertoId != null
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              _caixaAbertoId != null
+                                  ? "CAIXA ABERTO"
+                                  : "CAIXA FECHADO",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            if (_caixaAbertoId != null)
+                              TextButton.icon(
+                                icon: Icon(Icons.lock_clock, color: Colors.red),
+                                label: Text(
+                                  "FECHAR CAIXA",
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onPressed: _iniciarFechamentoCaixa,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                   // CABEÇALHO BUSCA (SCANNER)
                   _buildHeader(),
                   SizedBox(height: 10),
@@ -268,6 +331,433 @@ class _PdvViewState extends State<PdvView> {
         ),
       ),
     );
+  }
+
+  Future<void> _verificarStatusCaixa() async {
+    setState(() => _verificandoCaixa = true);
+
+    try {
+      // Busca se existe algum caixa ABERTO neste Tenant
+      // OBS: Idealmente filtraríamos também pelo ID do Usuário ou ID do Terminal
+      // Aqui vamos pegar o último aberto que ainda não foi fechado.
+      var query = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('caixas_diarios')
+          .where('status', isEqualTo: 'ABERTO')
+          // .where('usuario_id', isEqualTo: 'user123') // Se tiver Auth, descomente
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        // Já existe caixa aberto!
+        setState(() {
+          _caixaAbertoId = query.docs.first.id;
+          _verificandoCaixa = false;
+
+          // Opcional: Pré-preencher o vendedor com quem abriu o caixa
+          var dados = query.docs.first.data();
+          if (dados['usuario_nome'] != null) {
+            _vendedorCodeCtrl.text = dados['usuario_nome'];
+          }
+        });
+      } else {
+        // Nenhum caixa aberto. Precisamos abrir!
+        setState(() => _verificandoCaixa = false);
+        if (mounted) _abrirDialogoCaixa();
+      }
+    } catch (e) {
+      print("Erro ao verificar caixa: $e");
+      setState(() => _verificandoCaixa = false);
+    }
+  }
+
+  void _abrirDialogoCaixa() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // OBRIGA a interagir (não fecha clicando fora)
+      builder: (ctx) {
+        return PopScope(
+          canPop: false, // Bloqueia o botão voltar do Android
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.point_of_sale, color: _corAcai),
+                SizedBox(width: 10),
+                Text("Abertura de Caixa"),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "O caixa está fechado. Informe os dados para iniciar as vendas.",
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _operadorAberturaCtrl,
+                  decoration: InputDecoration(
+                    labelText: "Nome/Código do Operador",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
+                ),
+                SizedBox(height: 15),
+                TextField(
+                  controller: _fundoTrocoCtrl,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: "Fundo de Troco (R\$)",
+                    hintText: "Valor inicial na gaveta",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.attach_money),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              // Botão Sair (caso a pessoa tenha entrado por engano)
+              TextButton(
+                onPressed: () => Navigator.of(
+                  ctx,
+                ).pop(), // Aqui poderia dar um pop na rota principal
+                child: Text(
+                  "Sair do PDV",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _corAcai,
+                  padding: EdgeInsets.symmetric(horizontal: 25, vertical: 12),
+                ),
+                onPressed: () {
+                  if (_operadorAberturaCtrl.text.isEmpty) return;
+                  _confirmarAberturaCaixa(ctx);
+                },
+                child: Text(
+                  "ABRIR CAIXA",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // --- LÓGICA DE FECHAMENTO DE CAIXA ---
+
+  void _iniciarFechamentoCaixa() async {
+    // 1. Mostrar loading enquanto calculamos
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 2. Buscar vendas deste caixa para somar
+      var vendasSnapshot = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('vendas')
+          .where('caixa_id', isEqualTo: _caixaAbertoId)
+          .get();
+
+      // 3. Calcular totais por método
+      double totalDinheiro = 0.0;
+      double totalPix = 0.0;
+      double totalCartao = 0.0;
+      double totalOutros = 0.0;
+      double totalTrocoDado = 0.0; // Importante subtrair do dinheiro
+
+      for (var doc in vendasSnapshot.docs) {
+        var dados = doc.data();
+        List pagamentos = dados['pagamentos'] ?? [];
+        double troco = (dados['troco'] ?? 0).toDouble();
+
+        totalTrocoDado += troco;
+
+        for (var pag in pagamentos) {
+          String metodo = pag['metodo'] ?? 'Outro';
+          double valor = (pag['valor'] ?? 0).toDouble();
+
+          if (metodo == 'Dinheiro')
+            totalDinheiro += valor;
+          else if (metodo == 'Pix')
+            totalPix += valor;
+          else if (metodo == 'Cartão')
+            totalCartao += valor;
+          else
+            totalOutros += valor;
+        }
+      }
+
+      // O dinheiro líquido esperado na gaveta é: (Vendas em Dinheiro - Troco Entregue)
+      // Se tiver Fundo de Troco (valor inicial), precisamos somar também (faremos isso no dialog)
+      double dinheiroLiquidoVendas = totalDinheiro - totalTrocoDado;
+
+      // Busca valor inicial do caixa para exibir
+      var caixaDoc = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('caixas_diarios')
+          .doc(_caixaAbertoId)
+          .get();
+
+      double valorInicial = (caixaDoc.data()?['valor_inicial'] ?? 0).toDouble();
+
+      Navigator.pop(context); // Fecha loading
+
+      // 4. Abrir Dialog de Conferência
+      if (mounted) {
+        _mostrarDialogoConferencia(
+          valorInicial: valorInicial,
+          dinheiroVendas: dinheiroLiquidoVendas,
+          pix: totalPix,
+          cartao: totalCartao,
+          outros: totalOutros,
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Fecha loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro ao calcular fechamento: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _mostrarDialogoConferencia({
+    required double valorInicial,
+    required double dinheiroVendas,
+    required double pix,
+    required double cartao,
+    required double outros,
+  }) {
+    final _dinheiroGavetaCtrl = TextEditingController();
+    double totalEsperadoEmDinheiro = valorInicial + dinheiroVendas;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text("Fechamento de Caixa"),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildResumoLinha("Fundo Inicial (+)", valorInicial),
+                _buildResumoLinha("Vendas Dinheiro (+)", dinheiroVendas),
+                Divider(),
+                _buildResumoLinha(
+                  "ESPERADO NA GAVETA (=)",
+                  totalEsperadoEmDinheiro,
+                  isBold: true,
+                ),
+                SizedBox(height: 20),
+
+                Text(
+                  "Outros Recebimentos (Info):",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                Text(
+                  "Pix: R\$ ${pix.toStringAsFixed(2)} | Cartão: R\$ ${cartao.toStringAsFixed(2)}",
+                ),
+
+                SizedBox(height: 20),
+                TextField(
+                  controller: _dinheiroGavetaCtrl,
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: "Valor Contado na Gaveta (R\$)",
+                    hintText: "Quanto dinheiro tem fisicamente?",
+                    border: OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.red, width: 2),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  "Dica: Conte as moedas e notas. Se o valor for menor que o esperado, será registrada uma 'Quebra'.",
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text("Cancelar"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {
+                double valorInformado =
+                    double.tryParse(
+                      _dinheiroGavetaCtrl.text.replaceAll(',', '.'),
+                    ) ??
+                    0.0;
+                _confirmarFechamentoFinal(
+                  valorInformado: valorInformado,
+                  esperado: totalEsperadoEmDinheiro,
+                  resumo: {
+                    'dinheiro_vendas': dinheiroVendas,
+                    'pix': pix,
+                    'cartao': cartao,
+                    'outros': outros,
+                  },
+                );
+                Navigator.pop(ctx);
+              },
+              child: Text(
+                "ENCERRAR CAIXA",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildResumoLinha(String label, double val, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            "R\$ ${val.toStringAsFixed(2)}",
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmarFechamentoFinal({
+    required double valorInformado,
+    required double esperado,
+    required Map<String, double> resumo,
+  }) async {
+    double diferenca =
+        valorInformado - esperado; // Negativo = Falta dinheiro (Quebra)
+
+    try {
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('caixas_diarios')
+          .doc(_caixaAbertoId)
+          .update({
+            'data_fechamento': FieldValue.serverTimestamp(),
+            'status': 'FECHADO',
+            'valor_fechamento_informado': valorInformado,
+            'valor_fechamento_esperado': esperado,
+            'diferenca_quebra': diferenca, // Importante para auditoria
+            'resumo_vendas': resumo,
+          });
+
+      setState(() {
+        _caixaAbertoId = null; // Bloqueia o PDV
+        _vendedorCodeCtrl.clear();
+      });
+
+      // Mostra resultado
+      String msg = diferenca == 0
+          ? "Caixa fechado com Sucesso! Valores batem."
+          : "Caixa fechado com Diferença de R\$ ${diferenca.toStringAsFixed(2)}";
+
+      Color cor = diferenca < -0.5
+          ? Colors.red
+          : (diferenca > 0.5 ? Colors.blue : Colors.green);
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Text("Resultado"),
+          content: Text(
+            msg,
+            style: TextStyle(color: cor, fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _verificarStatusCaixa(); // Vai forçar a abrir um novo caixa
+              },
+              child: Text("OK"),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erro ao salvar: $e")));
+    }
+  }
+
+  Future<void> _confirmarAberturaCaixa(BuildContext dialogContext) async {
+    double valorInicial =
+        double.tryParse(_fundoTrocoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    String operador = _operadorAberturaCtrl.text;
+
+    try {
+      DocumentReference ref = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('caixas_diarios')
+          .add({
+            'data_abertura': FieldValue.serverTimestamp(),
+            'usuario_nome': operador, // Idealmente seria ID + Nome
+            'valor_inicial': valorInicial,
+            'valor_fechamento': 0.0,
+            'status': 'ABERTO',
+            'saldo_atual':
+                valorInicial, // Vamos somando aqui ou calculamos no fechamento
+          });
+
+      setState(() {
+        _caixaAbertoId = ref.id;
+        _vendedorCodeCtrl.text = operador; // Já define quem está vendendo
+      });
+
+      Navigator.pop(dialogContext); // Fecha o Dialog
+      _searchFocus
+          .requestFocus(); // Volta foco para o leitor de código de barras
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Caixa aberto com sucesso! Boas vendas.")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erro ao abrir caixa: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // Lógica "Scan & Add"
@@ -958,6 +1448,20 @@ class _PdvViewState extends State<PdvView> {
   }
 
   void _finalizarVenda() async {
+    // 1. BLOQUEIO DE SEGURANÇA
+    if (_caixaAbertoId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "ERRO CRÍTICO: Caixa não está aberto! Recarregue a tela.",
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _verificarStatusCaixa(); // Tenta recuperar ou abrir
+      return;
+    }
+
     if (_vendedorCodeCtrl.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -966,36 +1470,27 @@ class _PdvViewState extends State<PdvView> {
     }
 
     try {
-      WriteBatch batch = _db.batch();
-
-      var vendaRef = _db
+      // --- LÓGICA SIMPLIFICADA COM VÍNCULO AO CAIXA ---
+      await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
           .collection('vendas')
-          .doc();
-      batch.set(vendaRef, {
-        'itens': _carrinho,
-        'valor_total': _totalCart,
-        'pagamentos': _pagamentos,
-        'troco': _troco,
-        'vendedor_codigo': _vendedorCodeCtrl.text,
-        'data_venda': FieldValue.serverTimestamp(),
-        'status': 'concluido',
-      });
+          .add({
+            'itens': _carrinho,
+            'valor_total': _totalCart,
+            'pagamentos': _pagamentos,
+            'troco': _troco,
+            'vendedor_codigo': _vendedorCodeCtrl.text,
+            'data_venda': FieldValue.serverTimestamp(),
+            'status': 'concluido',
+            'canal': 'PDV_MOBILE',
 
-      for (var item in _carrinho) {
-        var prodRef = _db
-            .collection('tenants')
-            .doc(AppConfig.tenantId)
-            .collection('produtos')
-            .doc(item['id']);
-        batch.update(prodRef, {
-          'qtd_vendida': FieldValue.increment(item['qtd']),
-        });
-      }
+            // VÍNCULO IMPORTANTE
+            'caixa_id':
+                _caixaAbertoId, // <--- AQUI ESTÁ A CHAVE DO CONTROLE FINANCEIRO
+          });
 
-      await batch.commit();
-
+      // Limpeza da tela
       setState(() {
         _carrinho.clear();
         _pagamentos.clear();
@@ -1009,7 +1504,9 @@ class _PdvViewState extends State<PdvView> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("VENDA REALIZADA COM SUCESSO!"),
+          content: Text(
+            "VENDA REGISTRADA! Processando estoque em segundo plano...",
+          ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),

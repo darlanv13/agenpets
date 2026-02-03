@@ -1,3 +1,4 @@
+import 'package:agenpet/services/app_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -14,10 +15,7 @@ class PagamentoScreen extends StatefulWidget {
 }
 
 class _PagamentoScreenState extends State<PagamentoScreen> {
-  final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final FirebaseFirestore _db = AppDatabase.instance;
 
   bool _isPaid = false;
   Map<String, dynamic>? args;
