@@ -203,7 +203,8 @@ class _LoginScreenState extends State<LoginScreen> {
     String cpfLimpo,
     String senha,
   ) async {
-    final emailLogin = "$cpfLimpo@agenpets.pro";
+    // Login com isolamento de tenant
+    final emailLogin = "$cpfLimpo@agenpets.${AppConfig.tenantId}";
 
     try {
       UserCredential userCred = await _auth.signInWithEmailAndPassword(
