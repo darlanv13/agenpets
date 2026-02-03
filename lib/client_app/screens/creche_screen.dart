@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
 import '../../services/firebase_service.dart';
 
 class CrecheScreen extends StatefulWidget {
@@ -19,27 +21,29 @@ class _CrecheScreenState extends State<CrecheScreen> {
   );
 
   final _firebaseService = FirebaseService();
+  final PageController _pageController = PageController();
 
-  // --- CORES DA MARCA ---
+  // --- CORES ---
   final Color _corAcai = Color(0xFF4A148C);
-  final Color _corLilas = Color(0xFFF3E5F5);
   final Color _corFundo = Color(0xFFF8F9FC);
 
-  // CONFIGURAÇÃO DE PREÇO
-  double _valorDiaria = 0.0;
+  // --- ESTADO ---
+  int _currentStep = 0;
+  bool _isLoading = false;
 
+  // DADOS
   String? _userCpf;
-  String? _petId;
-
-  // Controle do Calendário
-  DateTime _focusedDay = DateTime.now();
-  final Set<DateTime> _selectedDays = {};
-  final RangeSelectionMode _rangeSelectionMode = RangeSelectionMode.disabled;
-
+  double _valorDiaria = 0.0;
+  List<Map<String, dynamic>> _pets = [];
   Set<DateTime> _diasLotados = {};
 
-  bool _isLoading = false;
-  List<Map<String, dynamic>> _pets = [];
+  // SELEÇÃO
+  String? _petId;
+  String? _petNome;
+
+  // CALENDÁRIO
+  DateTime _focusedDay = DateTime.now();
+  final Set<DateTime> _selectedDays = {};
 
   @override
   void initState() {
@@ -59,14 +63,15 @@ class _CrecheScreenState extends State<CrecheScreen> {
   }
 
   Future<void> _carregarPets() async {
-    final snapshot = await _db
+    setState(() => _isLoading = true);
+    final snap = await _db
         .collection('users')
         .doc(_userCpf)
         .collection('pets')
         .get();
     setState(() {
-      _pets = snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-      if (_pets.isNotEmpty && _petId == null) _petId = _pets.first['id'];
+      _pets = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      _isLoading = false;
     });
   }
 
@@ -92,8 +97,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
     }
   }
 
-  // --- AÇÕES ---
-
+  // --- LOGICA CALENDARIO ---
   bool _isDayLotado(DateTime day) {
     final normalized = DateTime(day.year, day.month, day.day);
     return _diasLotados.contains(normalized);
@@ -120,6 +124,43 @@ class _CrecheScreenState extends State<CrecheScreen> {
     });
   }
 
+  // --- NAVEGAÇÃO ---
+  void _proximoPasso() {
+    if (_currentStep == 0 && _petId == null) return;
+    if (_currentStep == 1 && _selectedDays.isEmpty) return;
+
+    if (_currentStep < 2) {
+      setState(() => _currentStep++);
+      _pageController.animateToPage(
+        _currentStep,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _passoAnterior() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+      _pageController.animateToPage(
+        _currentStep,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<bool> _onWillPop() async {
+    if (_currentStep > 0) {
+      _passoAnterior();
+      return false;
+    }
+    return true;
+  }
+
+  // --- ACTIONS ---
   Future<void> _fazerReserva() async {
     if (_petId == null || _selectedDays.isEmpty) return;
 
@@ -142,8 +183,6 @@ class _CrecheScreenState extends State<CrecheScreen> {
     }
   }
 
-  // --- DIALOGS ---
-
   void _mostrarSucessoDialog() {
     showDialog(
       context: context,
@@ -159,36 +198,40 @@ class _CrecheScreenState extends State<CrecheScreen> {
                 color: Colors.green[50],
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.check_rounded, color: Colors.green, size: 60),
+              child: Icon(Icons.check_rounded, color: Colors.green, size: 40),
             ),
             SizedBox(height: 20),
             Text(
               "Solicitação Enviada!",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             SizedBox(height: 10),
             Text(
               "Estamos ansiosos para brincar com seu pet!\nAguarde a confirmação.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
+              style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13),
             ),
-            SizedBox(height: 25),
+            SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _corAcai,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: () {
-                  Navigator.pop(ctx); // Fecha dialog
-                  Navigator.pop(context); // Volta pra home
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
                 },
                 child: Text(
-                  "OK, VOLTAR",
-                  style: TextStyle(
+                  "VOLTAR PARA O MENU",
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -221,370 +264,499 @@ class _CrecheScreenState extends State<CrecheScreen> {
     );
   }
 
+  // --- UI ---
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Map<String, int>>(
-      stream: _userCpf != null
-          ? _firebaseService.getSaldoVouchers(_userCpf!)
-          : Stream.value({'banho': 0, 'tosa': 0, 'creche': 0}),
-      builder: (context, snapshot) {
-        final vouchers = snapshot.data ?? {'banho': 0, 'tosa': 0, 'creche': 0};
-        final int vouchersCreche = vouchers['creche'] ?? 0;
-
-        // Cálculos de Preço
-        int diasTotais = _selectedDays.length;
-        int diasPagantes = (diasTotais - vouchersCreche).clamp(0, diasTotais);
-        int vouchersUsados = (diasTotais - diasPagantes).clamp(
-          0,
-          vouchersCreche,
-        );
-
-        double total = diasPagantes * _valorDiaria;
-
-        return Scaffold(
-          backgroundColor: _corFundo,
-          appBar: AppBar(
-            title: Text(
-              "Reservar Creche",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            backgroundColor: _corAcai,
-            elevation: 0,
-            centerTitle: true,
-          ),
-          body: _isLoading && _pets.isEmpty
-              ? Center(child: CircularProgressIndicator(color: _corAcai))
-              : Column(
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: _corFundo,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: NeverScrollableScrollPhysics(),
                   children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: BouncingScrollPhysics(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 1. SELEÇÃO DE PET (HEADER CUSTOMIZADO)
-                            Container(
-                              padding: EdgeInsets.only(bottom: 20),
-                              decoration: BoxDecoration(
-                                color: _corAcai,
-                                borderRadius: BorderRadius.only(
-                                  bottomLeft: Radius.circular(30),
-                                  bottomRight: Radius.circular(30),
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          FontAwesomeIcons.paw,
-                                          color: Colors.white70,
-                                          size: 18,
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text(
-                                          "Quem vai se divertir?",
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(height: 15),
-                                  _buildPetSelector(),
-                                ],
-                              ),
-                            ),
-
-                            SizedBox(height: 25),
-
-                            // 2. CALENDÁRIO
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Escolha os dias",
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                  SizedBox(height: 5),
-                                  Text(
-                                    "Selecione os dias desejados no calendário",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(height: 15),
-                            _buildCalendar(),
-
-                            SizedBox(height: 20),
-
-                            // Legenda
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                children: [
-                                  _buildLegendItem(
-                                    Colors.green[100]!,
-                                    "Selecionado",
-                                  ),
-                                  _buildLegendItem(
-                                    Colors.red[100]!,
-                                    "Lotado/Indisp.",
-                                  ),
-                                  _buildLegendItem(
-                                    Colors.grey[200]!,
-                                    "Disponível",
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            SizedBox(height: 100), // Espaço para o bottom sheet
-                          ],
-                        ),
-                      ),
-                    ),
+                    _buildStepPets(),
+                    _buildStepData(),
+                    _buildStepResumo(),
                   ],
                 ),
-          bottomSheet: _buildBottomSummary(diasTotais, total, vouchersUsados),
-        );
-      },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  // --- WIDGETS ---
-
-  Widget _buildPetSelector() {
-    return SizedBox(
-      height: 100, // Altura dos cards
-      child: ListView.separated(
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        scrollDirection: Axis.horizontal,
-        itemCount: _pets.length + 1, // +1 para o botão de adicionar
-        separatorBuilder: (_, __) => SizedBox(width: 15),
-        itemBuilder: (context, index) {
-          // Último item: Botão "Adicionar Pet"
-          if (index == _pets.length) {
-            return GestureDetector(
-              onTap: () async {
-                // Navega para 'Meus Pets' e espera retorno para recarregar
-                await Navigator.pushNamed(
-                  context,
-                  '/meus_pets',
-                  arguments: {'cpf': _userCpf},
-                );
-                _carregarPets();
-              },
-              child: Container(
-                width: 90,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.5),
-                    width: 1,
-                    style: BorderStyle.solid,
-                  ),
-                ),
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      color: Colors.white,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.arrow_back_ios_new, size: 20),
+                onPressed: _passoAnterior,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(),
+              ),
+              SizedBox(width: 15),
+              Expanded(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.white24,
-                      child: Icon(Icons.add, color: Colors.white, size: 24),
-                    ),
-                    SizedBox(height: 8),
                     Text(
-                      "Novo Pet",
-                      style: TextStyle(
-                        fontSize: 11,
+                      _getStepTitle(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: _corAcai,
+                      ),
+                    ),
+                    Text(
+                      "Passo ${_currentStep + 1} de 3",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey,
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          }
+            ],
+          ),
+          SizedBox(height: 15),
+          LinearProgressIndicator(
+            value: (_currentStep + 1) / 3,
+            backgroundColor: Colors.grey[100],
+            valueColor: AlwaysStoppedAnimation<Color>(_corAcai),
+            minHeight: 4,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Itens Normais (Pets)
-          final pet = _pets[index];
-          final isSelected = pet['id'] == _petId;
+  String _getStepTitle() {
+    switch (_currentStep) {
+      case 0:
+        return "Quem vai se divertir?";
+      case 1:
+        return "Quais dias?";
+      case 2:
+        return "Confirmar Creche";
+      default:
+        return "Creche";
+    }
+  }
 
-          return GestureDetector(
-            onTap: () => setState(() => _petId = pet['id']),
-            child: AnimatedContainer(
-              duration: Duration(milliseconds: 200),
-              width: 90,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: isSelected ? Colors.transparent : Colors.white30,
-                  width: 1,
+  // PASSO 1: PETS (Reutilizando estrutura do Hotel/Agendamento)
+  Widget _buildStepPets() {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator(color: _corAcai));
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: _pets.isEmpty
+              ? _buildEmptyPets()
+              : ListView.builder(
+                  padding: EdgeInsets.all(20),
+                  itemCount: _pets.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == _pets.length) {
+                      return _buildAddPetCard();
+                    }
+                    final pet = _pets[index];
+                    return _buildPetSelectionCard(pet);
+                  },
                 ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 10,
-                          offset: Offset(0, 5),
-                        ),
-                      ]
-                    : [],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyPets() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(FontAwesomeIcons.paw, size: 50, color: Colors.grey[300]),
+          SizedBox(height: 20),
+          Text(
+            "Você ainda não tem pets.",
+            style: GoogleFonts.poppins(color: Colors.grey),
+          ),
+          TextButton(
+            onPressed: _abrirModalAdicionarPet,
+            child: Text("Cadastrar Pet Agora"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPetSelectionCard(Map<String, dynamic> pet) {
+    bool isSelected = _petId == pet['id'];
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _petId = pet['id'];
+          _petNome = pet['nome'];
+        });
+        _proximoPasso();
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected ? _corAcai.withOpacity(0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? _corAcai : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: [
+            if (!isSelected)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: Offset(0, 5),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: isSelected
-                        ? _corAcai.withOpacity(0.1)
-                        : Colors.white24,
-                    child: Icon(
-                      pet['tipo'] == 'gato'
-                          ? FontAwesomeIcons.cat
-                          : FontAwesomeIcons.dog,
-                      color: isSelected ? _corAcai : Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    pet['nome'],
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? _corAcai : Colors.white,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: pet['tipo'] == 'cao'
+                    ? Colors.blue.withOpacity(0.1)
+                    : Colors.orange.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                pet['tipo'] == 'cao'
+                    ? FontAwesomeIcons.dog
+                    : FontAwesomeIcons.cat,
+                color: pet['tipo'] == 'cao' ? Colors.blue : Colors.orange,
               ),
             ),
+            SizedBox(width: 15),
+            Expanded(
+              child: Text(
+                pet['nome'],
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[300]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddPetCard() {
+    return GestureDetector(
+      onTap: _abrirModalAdicionarPet,
+      child: Container(
+        margin: EdgeInsets.only(bottom: 15),
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.grey[300]!,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add, color: Colors.grey),
+            SizedBox(width: 10),
+            Text(
+              "Adicionar outro pet",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _abrirModalAdicionarPet() {
+    final nomeController = TextEditingController();
+    String tipoSelecionado = 'cao';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text("Novo Pet"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nomeController,
+                  decoration: InputDecoration(
+                    labelText: "Nome",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            setModalState(() => tipoSelecionado = 'cao'),
+                        child: Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: tipoSelecionado == 'cao'
+                                ? _corAcai
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Cão",
+                              style: TextStyle(
+                                color: tipoSelecionado == 'cao'
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () =>
+                            setModalState(() => tipoSelecionado = 'gato'),
+                        child: Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: tipoSelecionado == 'gato'
+                                ? _corAcai
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Gato",
+                              style: TextStyle(
+                                color: tipoSelecionado == 'gato'
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("Cancelar"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (nomeController.text.isNotEmpty) {
+                    await _db
+                        .collection('users')
+                        .doc(_userCpf)
+                        .collection('pets')
+                        .add({
+                          'nome': nomeController.text.trim(),
+                          'tipo': tipoSelecionado,
+                          'created_at': FieldValue.serverTimestamp(),
+                        });
+                    Navigator.pop(context);
+                    _carregarPets();
+                  }
+                },
+                child: Text("Salvar"),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildCalendar() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: TableCalendar(
-        locale: 'pt_BR',
-        firstDay: DateTime.now(),
-        lastDay: DateTime.now().add(Duration(days: 90)),
-        focusedDay: _focusedDay,
-        selectedDayPredicate: (day) =>
-            _selectedDays.contains(DateTime(day.year, day.month, day.day)),
-        rangeSelectionMode: RangeSelectionMode.disabled,
-        onDaySelected: _onDaySelected,
-        enabledDayPredicate: (day) {
-          // Desabilita dias passados e lotados
-          if (day.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
-            return false;
-          }
-          return !_isDayLotado(day);
-        },
-        headerStyle: HeaderStyle(
-          titleCentered: true,
-          formatButtonVisible: false,
-          titleTextStyle: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: _corAcai,
-          ),
-        ),
-        calendarStyle: CalendarStyle(
-          // Estilo do dia de Hoje
-          todayDecoration: BoxDecoration(
-            color: _corAcai.withOpacity(0.3),
-            shape: BoxShape.circle,
-          ),
-          todayTextStyle: TextStyle(
-            color: _corAcai,
-            fontWeight: FontWeight.bold,
-          ),
+  // PASSO 2: DATA (CALENDÁRIO)
+  Widget _buildStepData() {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 15,
+                          offset: Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: TableCalendar(
+                      locale: 'pt_BR',
+                      firstDay: DateTime.now(),
+                      lastDay: DateTime.now().add(Duration(days: 90)),
+                      focusedDay: _focusedDay,
 
-          // Estilo de dias selecionados
-          selectedDecoration: BoxDecoration(
-            color: _corAcai,
-            shape: BoxShape.circle,
-          ),
-          selectedTextStyle: TextStyle(color: Colors.white),
+                      selectedDayPredicate: (day) =>
+                          _selectedDays.contains(DateTime(day.year, day.month, day.day)),
+                      rangeSelectionMode: RangeSelectionMode.disabled,
+                      onDaySelected: _onDaySelected,
 
-          // Estilo de dias bloqueados/desabilitados
-          disabledTextStyle: TextStyle(color: Colors.red[200]),
-          disabledDecoration: BoxDecoration(shape: BoxShape.circle),
-        ),
-        calendarBuilders: CalendarBuilders(
-          // Marcador customizado para dias lotados (opcional, já usamos enabledDayPredicate)
-          disabledBuilder: (context, day, focusedDay) {
-            if (_isDayLotado(day)) {
-              return Center(
-                child: Container(
-                  width: 35,
-                  height: 35,
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${day.day}',
-                      style: TextStyle(
-                        color: Colors.red[300],
-                        decoration: TextDecoration.lineThrough,
+                      enabledDayPredicate: (day) {
+                        if (day.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
+                          return false;
+                        }
+                        return !_isDayLotado(day);
+                      },
+
+                      headerStyle: HeaderStyle(
+                        titleCentered: true,
+                        formatButtonVisible: false,
+                        titleTextStyle: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: _corAcai,
+                        ),
+                      ),
+                      calendarStyle: CalendarStyle(
+                        todayDecoration: BoxDecoration(
+                          color: _corAcai.withOpacity(0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        todayTextStyle: GoogleFonts.poppins(
+                          color: _corAcai,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        selectedDecoration: BoxDecoration(
+                          color: _corAcai,
+                          shape: BoxShape.circle,
+                        ),
+                        selectedTextStyle: GoogleFonts.poppins(color: Colors.white),
+                        disabledTextStyle: GoogleFonts.poppins(color: Colors.red[200]),
+                      ),
+                      calendarBuilders: CalendarBuilders(
+                        disabledBuilder: (context, day, focusedDay) {
+                          if (_isDayLotado(day)) {
+                            return Center(
+                              child: Container(
+                                width: 35,
+                                height: 35,
+                                decoration: BoxDecoration(
+                                  color: Colors.red[50],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${day.day}',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.red[300],
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return null;
+                        },
                       ),
                     ),
                   ),
-                ),
-              );
-            }
-            return null; // Usa estilo padrão disabled
-          },
+                  SizedBox(height: 20),
+                  // Legenda
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildLegendItem(_corAcai, "Selecionado"),
+                      _buildLegendItem(Colors.red[100]!, "Lotado"),
+                      _buildLegendItem(Colors.grey[200]!, "Disponível"),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
+        Container(
+          padding: EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+               BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: Offset(0, -5),
+              ),
+            ]
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _selectedDays.isNotEmpty ? _proximoPasso : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _corAcai,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                "CONTINUAR (${_selectedDays.length} dias)",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        )
+      ],
     );
   }
 
@@ -597,138 +769,234 @@ class _CrecheScreenState extends State<CrecheScreen> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         SizedBox(width: 5),
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+        Text(label, style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[600])),
       ],
     );
   }
 
-  Widget _buildBottomSummary(int dias, double total, int vouchersUsados) {
-    bool canSubmit = _petId != null && dias > 0 && !_isLoading;
+  // PASSO 3: RESUMO
+  Widget _buildStepResumo() {
+    return StreamBuilder<Map<String, int>>(
+      stream: _userCpf != null
+          ? _firebaseService.getSaldoVouchers(_userCpf!)
+          : Stream.value({'banho': 0, 'tosa': 0, 'creche': 0}),
+      builder: (context, snapshot) {
+        final vouchers = snapshot.data ?? {'banho': 0, 'tosa': 0, 'creche': 0};
+        final int vouchersCreche = vouchers['creche'] ?? 0;
 
-    return Container(
-      padding: EdgeInsets.all(25),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: Offset(0, -5),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Feedback de Vouchers
-            if (vouchersUsados > 0)
+        // Cálculos
+        int diasTotais = _selectedDays.length;
+        int diasPagantes = (diasTotais - vouchersCreche).clamp(0, diasTotais);
+        int vouchersUsados = (diasTotais - diasPagantes).clamp(0, vouchersCreche);
+        double total = diasPagantes * _valorDiaria;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Container(
-                margin: EdgeInsets.only(bottom: 15),
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.confirmation_number,
-                      size: 16,
-                      color: Colors.orange[800],
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: Offset(0, 10),
                     ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        total == 0
-                            ? "Coberto por $vouchersUsados vouchers!"
-                            : "$vouchersUsados dias cobertos por voucher.",
-                        style: TextStyle(
-                          color: Colors.orange[900],
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                      decoration: BoxDecoration(
+                        color: _corAcai,
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(20),
                         ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            FontAwesomeIcons.clipboardCheck,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          SizedBox(width: 15),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Revisão da Reserva",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                "Verifique os dados abaixo",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.all(25),
+                      child: Column(
+                        children: [
+                          _buildSummaryRow(FontAwesomeIcons.paw, "Pet", _petNome ?? ""),
+                          SizedBox(height: 20),
+                          Divider(color: Colors.grey[100]),
+                          SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSummaryBox(
+                                  FontAwesomeIcons.calendarCheck,
+                                  "Dias",
+                                  "$diasTotais",
+                                ),
+                              ),
+                              SizedBox(width: 15),
+                              Expanded(
+                                child: _buildSummaryBox(
+                                  FontAwesomeIcons.tag,
+                                  "Vouchers",
+                                  "-$vouchersUsados",
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text("Total a pagar", style: GoogleFonts.poppins(color: Colors.grey[600])),
+                              Text(
+                                total == 0 ? "GRÁTIS" : "R\$ ${total.toStringAsFixed(2)}",
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: total == 0 ? Colors.green : _corAcai,
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        total == 0 && vouchersUsados > 0
-                            ? "Custo Total"
-                            : "Valor a Pagar",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        total == 0 && vouchersUsados > 0
-                            ? "GRÁTIS"
-                            : "R\$ ${total.toStringAsFixed(2)}",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: total == 0 ? Colors.green : _corAcai,
-                        ),
-                      ),
-                      Text(
-                        dias == 1
-                            ? "1 dia selecionado"
-                            : "$dias dias selecionados",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _corAcai.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 20),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: canSubmit ? _fazerReserva : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 0,
+              SizedBox(height: 30),
+              SizedBox(
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _fazerReserva,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
-                    child: _isLoading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(
-                            "RESERVAR",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    elevation: 5,
                   ),
+                  child: _isLoading
+                      ? CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          "CONFIRMAR RESERVA",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          );
+        }
+      );
+  }
+
+  Widget _buildSummaryRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: Colors.grey[700], size: 20),
         ),
+        SizedBox(width: 15),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Icon(Icons.check_circle, color: Colors.green[400], size: 18),
+      ],
+    );
+  }
+
+  Widget _buildSummaryBox(IconData icon, String label, String value) {
+    return Container(
+      padding: EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[200]!),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: _corAcai),
+              SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: _corAcai,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 5),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
       ),
     );
   }
