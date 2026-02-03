@@ -56,7 +56,7 @@ exports.criarTenant = onCall(async (request) => {
   // C. (Opcional) Cria o documento de segredos vazio para garantir a estrutura
   const segredosRef = docRef.collection("config").doc("segredos");
   batch.set(segredosRef, {
-    criado_em: admin.firestore.FieldValue.serverTimestamp()
+    criado_em: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   await batch.commit();
@@ -111,7 +111,7 @@ exports.alternarStatusTenant = onCall(async (request) => {
 exports.salvarCredenciaisGateway = onCall(async (request) => {
   // Verifica autenticação (Recomendado)
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Usuário não autenticado.');
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
   }
 
   const {
@@ -119,7 +119,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
     gateway_pagamento,
     efipay_client_id,
     efipay_client_secret,
-    mercadopago_access_token
+    mercadopago_access_token,
   } = request.data;
 
   if (!tenantId) {
@@ -132,7 +132,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   if (gateway_pagamento) {
     const publicConfigRef = db.collection("tenants").doc(tenantId).collection("config").doc("parametros");
     batch.set(publicConfigRef, {
-      gateway_pagamento: gateway_pagamento
+      gateway_pagamento: gateway_pagamento,
     }, { merge: true });
   }
 
@@ -140,7 +140,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   // Regras do Firestore devem bloquear leitura pública deste documento
   const dadosSeguros = {
     updated_at: admin.firestore.FieldValue.serverTimestamp(),
-    atualizado_por: request.auth.uid // Audit trail: quem alterou
+    atualizado_por: request.auth.uid, // Audit trail: quem alterou
   };
 
   // Só salva se o dado foi enviado (evita sobrescrever com null)
@@ -157,6 +157,6 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
 
   return {
     success: true,
-    message: "Credenciais e configurações de pagamento salvas com segurança."
+    message: "Credenciais e configurações de pagamento salvas com segurança.",
   };
 });

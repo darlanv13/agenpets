@@ -190,7 +190,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 180,
+            expandedHeight: 170,
             floating: false,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
@@ -249,29 +249,33 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
           SliverToBoxAdapter(
             child: Transform.translate(
               offset: Offset(0, -25),
-              child: Center(
-                child: Container(
-                  width: MediaQuery.of(context).size.width * 0.85,
-                  constraints: BoxConstraints(maxWidth: 800),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 20,
-                        offset: Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: "Buscar loja...",
-                      prefixIcon: Icon(Icons.search, color: _primary),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 35),
+                child: Center(
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.85,
+                    constraints: BoxConstraints(maxWidth: 800),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 20,
+                          offset: Offset(0, 5),
+                        ),
+                      ],
                     ),
-                    onChanged: (v) => setState(() => _filtro = v.toLowerCase()),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: "Buscar loja...",
+                        prefixIcon: Icon(Icons.search, color: _primary),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(20),
+                      ),
+                      onChanged: (v) =>
+                          setState(() => _filtro = v.toLowerCase()),
+                    ),
                   ),
                 ),
               ),
@@ -309,7 +313,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 350,
                     mainAxisExtent:
-                        170, // Altura fixa controlada para evitar overflow
+                        150, // Altura fixa controlada para evitar overflow
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                   ),

@@ -62,7 +62,18 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
     }
 
     try {
-      // Fetch permissions from Firestore
+      // 1. Tenta obter permissões via Custom Claims (Token)
+      // Isso evita erros de leitura no Firestore (unavailable/permission-denied)
+      final idTokenResult = await user.getIdTokenResult(true);
+      final claims = idTokenResult.claims;
+
+      if (claims != null && claims['acessos'] != null) {
+        _acessos = List<String>.from(claims['acessos']);
+        // Se tiver perfil nos claims, usa também
+        if (claims['master'] == true) _isMaster = true;
+      }
+
+      // 2. Fallback / Complemento via Firestore
       // Path: tenants/{tenantId}/profissionais/{uid}
       final docRef = FirebaseFirestore.instance
           .collection('tenants')
@@ -70,17 +81,30 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
           .collection('profissionais')
           .doc(user.uid);
 
-      final snapshot = await docRef.get();
+      try {
+        final snapshot = await docRef.get();
+        if (snapshot.exists) {
+          final data = snapshot.data()!;
+          _perfil = data['perfil'] ?? _perfil;
+          if (_perfil == 'master') _isMaster = true;
 
-      if (snapshot.exists) {
-        final data = snapshot.data()!;
-        _perfil = data['perfil'] ?? _perfil;
+          // Se claims estava vazio mas banco tem, usa o banco
+          if (_acessos.isEmpty && data['acessos'] != null) {
+            _acessos = List<String>.from(data['acessos']);
+          }
+        }
+      } catch (e) {
+        print("Firestore indisponível, usando apenas Claims: $e");
+      }
 
-        // Se for Master no banco, garante a flag
-        if (_perfil == 'master') _isMaster = true;
-
-        if (data['acessos'] != null) {
-          _acessos = List<String>.from(data['acessos']);
+      // Se não tiver nenhum acesso explícito mas for perfil master, garante acesso total
+      if (_isMaster) {
+        // Master não precisa de lista de acessos, mas por segurança limpamos ou definimos tudo
+        // A lógica abaixo em _buildMenu já trata _isMaster separadamente
+      } else {
+        // Se for usuario padrao e não tiver acessos, tenta inferir dashboard
+        if (_acessos.isEmpty) {
+          _acessos.add('dashboard');
         }
       }
 
@@ -100,6 +124,14 @@ class _AdminWebScreenState extends State<AdminWebScreen> {
       _buildMenu(config);
     } catch (e) {
       print("Erro ao carregar permissões: $e");
+
+      // Fallback de Segurança:
+      // Se deu erro (ex: offline, permissão negada), garantimos acesso ao Dashboard
+      // para que o usuário não fique preso na tela de "Acesso Restrito".
+      if (_acessos.isEmpty) {
+        _acessos.add('dashboard');
+      }
+
       // Fallback: build menu based on basic args
       _buildMenu({});
     } finally {
