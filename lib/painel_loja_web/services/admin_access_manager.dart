@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 
 // Imports das Views
 import '../views/dashboard_view.dart';
@@ -48,8 +49,7 @@ class AdminAccessManager {
     Map<String, dynamic> tenantConfig = {};
 
     try {
-      final db = FirebaseFirestore.instanceFor(
-          app: Firebase.app(), databaseId: 'agenpets');
+      final db = AppDatabase.instance;
 
       // 1. Definição das Tarefas (Paralelas)
       // Task A: User Profile (Permissions)

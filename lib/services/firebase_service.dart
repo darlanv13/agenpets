@@ -1,4 +1,5 @@
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,10 +10,7 @@ class FirebaseService {
   // --- A CORREÇÃO ESTÁ AQUI ---
   // Antes estava: FirebaseFirestore.instance (que vai para o default)
   // Agora apontamos explicitamente para o banco 'agenpets'
-  final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final FirebaseFirestore _db = AppDatabase.instance;
 
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     app: Firebase.app(),

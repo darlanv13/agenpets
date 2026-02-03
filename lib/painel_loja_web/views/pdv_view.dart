@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/services/app_database.dart';
 
 class PdvView extends StatefulWidget {
   final bool isMaster;
@@ -14,10 +15,7 @@ class PdvView extends StatefulWidget {
 }
 
 class _PdvViewState extends State<PdvView> {
-  final _db = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'agenpets',
-  );
+  final _db = AppDatabase.instance;
 
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF5F7FA);
