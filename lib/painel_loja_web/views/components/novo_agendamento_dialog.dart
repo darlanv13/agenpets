@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class NovoAgendamentoDialog extends StatefulWidget {
   const NovoAgendamentoDialog({super.key});
@@ -107,6 +108,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
       final servicoEnvio = _servicoSelecionado!.toLowerCase();
 
       final result = await _functions.httpsCallable('buscarHorarios').call({
+        'tenantId': AppConfig.tenantId,
         'dataConsulta': dataString,
         'servico': servicoEnvio,
         // 'profissionalId': _profissionalIdSelecionado
@@ -190,23 +192,27 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
     final dataFim = dataInicio.add(Duration(hours: 1)); // Duração estimada
 
-    await _db.collection('agendamentos').add({
-      'userId': _clienteId,
-      'cliente_nome': _clienteNome, // Importante para busca funcionar
-      'pet_id': _petIdSelecionado,
-      // Salvar nome do pet também ajuda na busca: 'pet_nome': ...
-      'servico': _servicoSelecionado!.toLowerCase(),
-      'servicoNorm': _servicoSelecionado,
-      'data_inicio': Timestamp.fromDate(dataInicio),
-      'data_fim': Timestamp.fromDate(dataFim),
-      'status': 'agendado',
-      'status_pagamento': 'aguardando_pagamento',
-      'criado_por_admin': true,
-      'criado_em': FieldValue.serverTimestamp(),
-      'profissional_id': _profissionalIdSelecionado,
-      'profissional_nome': _profissionalNomeSelecionado,
-      'valor': 0.0,
-    });
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .add({
+          'userId': _clienteId,
+          'cliente_nome': _clienteNome, // Importante para busca funcionar
+          'pet_id': _petIdSelecionado,
+          // Salvar nome do pet também ajuda na busca: 'pet_nome': ...
+          'servico': _servicoSelecionado!.toLowerCase(),
+          'servicoNorm': _servicoSelecionado,
+          'data_inicio': Timestamp.fromDate(dataInicio),
+          'data_fim': Timestamp.fromDate(dataFim),
+          'status': 'agendado',
+          'status_pagamento': 'aguardando_pagamento',
+          'criado_por_admin': true,
+          'criado_em': FieldValue.serverTimestamp(),
+          'profissional_id': _profissionalIdSelecionado,
+          'profissional_nome': _profissionalNomeSelecionado,
+          'valor': 0.0,
+        });
 
     Navigator.pop(context);
     _showSnack("Agendamento realizado! ✅", Colors.green);

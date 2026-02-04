@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class RegistrarPagamentoDialog extends StatefulWidget {
   final String reservaId;
@@ -31,6 +32,7 @@ class _RegistrarPagamentoDialogState extends State<RegistrarPagamentoDialog> {
       await FirebaseFunctions.instanceFor(
         region: 'southamerica-east1',
       ).httpsCallable('registrarPagamentoHotel').call({
+        'tenantId': AppConfig.tenantId,
         'reservaId': widget.reservaId,
         'valor': valor,
         'metodo': _metodo,
@@ -42,7 +44,7 @@ class _RegistrarPagamentoDialogState extends State<RegistrarPagamentoDialog> {
         context,
       ).showSnackBar(SnackBar(content: Text("Erro: $e")));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
