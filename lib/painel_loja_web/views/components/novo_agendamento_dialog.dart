@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class NovoAgendamentoDialog extends StatefulWidget {
   const NovoAgendamentoDialog({super.key});
@@ -190,7 +191,11 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
     final dataInicio = DateFormat('yyyy-MM-dd HH:mm').parse(dataHoraString);
     final dataFim = dataInicio.add(Duration(hours: 1)); // Duração estimada
 
-    await _db.collection('agendamentos').add({
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .add({
       'userId': _clienteId,
       'cliente_nome': _clienteNome, // Importante para busca funcionar
       'pet_id': _petIdSelecionado,
