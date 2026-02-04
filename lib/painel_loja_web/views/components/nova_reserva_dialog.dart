@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class NovaReservaDialog extends StatefulWidget {
   const NovaReservaDialog({super.key});
@@ -52,7 +53,12 @@ class _NovaReservaDialogState extends State<NovaReservaDialog> {
   }
 
   void _carregarConfig() async {
-    final doc = await _db.collection('config').doc('parametros').get();
+    final doc = await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('config')
+        .doc('parametros')
+        .get();
     if (doc.exists) {
       setState(() {
         _valorDiaria = (doc.data()?['preco_hotel_diaria'] ?? 0).toDouble();
