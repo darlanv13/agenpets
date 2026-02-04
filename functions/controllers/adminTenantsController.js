@@ -160,3 +160,31 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
     message: "Credenciais e configurações de pagamento salvas com segurança.",
   };
 });
+
+// --- 6. [NOVO] Verificar Existência da Loja (Para Login Profissional) ---
+exports.verificarLoja = onCall(async (request) => {
+  const { cnpj } = request.data; // Espera apenas números
+
+  if (!cnpj) {
+    throw new HttpsError("invalid-argument", "CNPJ é obrigatório.");
+  }
+
+  // Como definimos que o ID é o CNPJ (numérico), buscamos direto
+  const docRef = db.collection("tenants").doc(cnpj);
+  const docSnap = await docRef.get();
+
+  if (!docSnap.exists) {
+    throw new HttpsError("not-found", "Loja não encontrada. Verifique o CNPJ.");
+  }
+
+  const data = docSnap.data();
+  if (data.ativo === false) {
+    throw new HttpsError("permission-denied", "Esta loja está inativa.");
+  }
+
+  return {
+    success: true,
+    tenantId: docSnap.id,
+    nome: data.nome,
+  };
+});

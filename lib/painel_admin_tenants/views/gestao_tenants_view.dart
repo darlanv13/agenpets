@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 class GestaoTenantsView extends StatefulWidget {
   @override
@@ -24,10 +25,16 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
 
   Future<void> _criarTenantDialog() async {
     final _nomeCtrl = TextEditingController();
+    final _cnpjCtrl = TextEditingController();
     final _slugCtrl = TextEditingController();
     final _cidadeCtrl = TextEditingController();
     final _formKey = GlobalKey<FormState>();
     bool _isLoading = false;
+
+    var maskCnpj = MaskTextInputFormatter(
+      mask: '##.###.###/####-##',
+      filter: {"#": RegExp(r'[0-9]')},
+    );
 
     await showDialog(
       context: context,
@@ -59,28 +66,31 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                         controller: _nomeCtrl,
                         decoration: _inputDecor("Nome da Loja", Icons.business),
                         validator: (v) => v!.isEmpty ? "Obrigatório" : null,
+                      ),
+                      SizedBox(height: 15),
+                      TextFormField(
+                        controller: _cnpjCtrl,
+                        inputFormatters: [maskCnpj],
+                        decoration: _inputDecor("CNPJ", Icons.badge),
+                        validator: (v) {
+                          if (v!.isEmpty) return "Obrigatório";
+                          if (v.length < 18) return "CNPJ incompleto";
+                          return null;
+                        },
                         onChanged: (val) {
-                          if (_slugCtrl.text.isEmpty ||
-                              !_slugCtrl.text.contains('_')) {
-                            // Lógica de slug simples para UX fluida
-                            final slug = val
-                                .toLowerCase()
-                                .trim()
-                                .replaceAll(RegExp(r'\s+'), '_')
-                                .replaceAll(RegExp(r'[^a-z0-9_]'), '');
-                            _slugCtrl.text = slug;
-                          }
+                          // Define o ID (slug) como apenas números do CNPJ
+                          _slugCtrl.text = maskCnpj.getUnmaskedText();
                         },
                       ),
                       SizedBox(height: 15),
                       TextFormField(
                         controller: _slugCtrl,
+                        readOnly: true, // ID gerado automaticamente
                         decoration: _inputDecor(
-                          "ID Único (Slug)",
+                          "ID Único (Automático)",
                           Icons.fingerprint,
-                          helper: "Ex: loja_centro",
+                          helper: "Será o CNPJ (somente números)",
                         ),
-                        validator: (v) => v!.isEmpty ? "Obrigatório" : null,
                       ),
                       SizedBox(height: 15),
                       TextFormField(
@@ -116,7 +126,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                         setState(() => _isLoading = true);
                         try {
                           await _functions.httpsCallable('criarTenant').call({
-                            'tenantId': _slugCtrl.text.trim(),
+                            'slug': _slugCtrl.text.trim(),
                             'nome': _nomeCtrl.text.trim(),
                             'cidade': _cidadeCtrl.text.trim(),
                           });
@@ -190,7 +200,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 170,
+            expandedHeight: 180,
             floating: false,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
@@ -249,9 +259,9 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
           SliverToBoxAdapter(
             child: Transform.translate(
               offset: Offset(0, -25),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 35),
-                child: Center(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(35.0),
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.85,
                     constraints: BoxConstraints(maxWidth: 800),
@@ -313,7 +323,7 @@ class _GestaoTenantsViewState extends State<GestaoTenantsView> {
                   gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 350,
                     mainAxisExtent:
-                        150, // Altura fixa controlada para evitar overflow
+                        170, // Altura fixa controlada para evitar overflow
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                   ),

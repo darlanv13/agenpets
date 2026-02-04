@@ -25,6 +25,7 @@ const adminController = require("./controllers/adminController");
 const paymentController = require("./controllers/paymentController");
 const adminTenantsController = require("./controllers/adminTenantsController");
 
+
 // 4. EXPORTAÇÕES (API PUBLICADA)
 
 // MÓDULO DE AGENDAMENTO E VENDAS (Refatorado)
@@ -56,6 +57,8 @@ exports.criarTenant = adminTenantsController.criarTenant;
 exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
+exports.verificarLoja = adminTenantsController.verificarLoja;
+
 
 
 // MÓDULO DE HOTELZINHO
@@ -85,4 +88,5 @@ exports.whatsappPetPronto = notificationsWhatsapp.whatsappPetPronto;
 
 exports.criarContaProfissional = adminController.criarContaProfissional;
 exports.atualizarContaProfissional = adminController.atualizarContaProfissional;
+exports.deletarContaProfissional = adminController.deletarContaProfissional;
 exports.deletarContaProfissional = adminController.deletarContaProfissional;

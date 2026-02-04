@@ -5,8 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/config/app_config.dart';
-import 'package:agenpet/services/app_database.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:agenpet/profissional_app/views/selecao_loja_screen.dart';
 
 class LoginProfissionalScreen extends StatefulWidget {
   const LoginProfissionalScreen({super.key});
@@ -18,7 +19,10 @@ class LoginProfissionalScreen extends StatefulWidget {
 
 class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
   // Instâncias do Firebase
-  final FirebaseFirestore _db = AppDatabase.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final _cpfController = TextEditingController();
@@ -41,10 +45,40 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
   bool _isLoading = false;
   bool _senhaVisivel = false;
   bool _verificandoAuth = true;
+  String? _nomeLoja;
 
   @override
   void initState() {
     super.initState();
+    _verificarConfiguracaoLoja();
+  }
+
+  // --- VERIFICAÇÃO INICIAL ---
+  Future<void> _verificarConfiguracaoLoja() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tenantId = prefs.getString('tenantId');
+    final nomeLoja = prefs.getString('nomeLoja');
+
+    if (tenantId == null) {
+      // Se não tem loja configurada, redireciona para seleção
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (ctx) => SelecaoLojaScreen()),
+        );
+      }
+      return;
+    }
+
+    // Configura o AppConfig com o tenant salvo
+    AppConfig.setTenantId(tenantId);
+    if (mounted) {
+      setState(() {
+        _nomeLoja = nomeLoja;
+      });
+    }
+
+    // Só depois de configurar o tenantId, verificamos login automático
     _verificarSessaoExistente();
   }
 
@@ -79,6 +113,17 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
 
     if (mounted) {
       setState(() => _verificandoAuth = false);
+    }
+  }
+
+  Future<void> _trocarLoja() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Limpa tudo ou remove 'tenantId'
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (ctx) => SelecaoLojaScreen()),
+      );
     }
   }
 
@@ -262,6 +307,24 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
                         color: Colors.white,
                       ),
                     ),
+                    if (_nomeLoja != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _nomeLoja!,
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -332,6 +395,15 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
                                   color: Colors.white,
                                 ),
                               ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    TextButton.icon(
+                      onPressed: _trocarLoja,
+                      icon: Icon(Icons.swap_horiz, color: Colors.grey),
+                      label: Text(
+                        "Trocar de Loja",
+                        style: TextStyle(color: Colors.grey),
                       ),
                     ),
                   ],
