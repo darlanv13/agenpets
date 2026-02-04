@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class RegistrarPagamentoCrecheDialog extends StatefulWidget {
   final String reservaId;
@@ -32,6 +33,7 @@ class _RegistrarPagamentoCrecheDialogState
       await FirebaseFunctions.instanceFor(
         region: 'southamerica-east1',
       ).httpsCallable('registrarPagamentoCreche').call({
+        'tenantId': AppConfig.tenantId,
         'reservaId': widget.reservaId,
         'valor': valor,
         'metodo': _metodo,
