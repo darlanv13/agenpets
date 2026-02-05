@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class DetalhesAgendamentoView extends StatefulWidget {
   final String agendamentoId;
@@ -58,9 +59,12 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
     );
 
     if (result != null) {
-      await _db.collection('agendamentos').doc(widget.agendamentoId).update({
-        'servicos_extras': result,
-      });
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('agendamentos')
+          .doc(widget.agendamentoId)
+          .update({'servicos_extras': result});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Serviços atualizados com sucesso!")),
       );
@@ -69,10 +73,12 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
 
   Future<void> _marcarComoPronto(BuildContext context) async {
     try {
-      await _db.collection('agendamentos').doc(widget.agendamentoId).update({
-        'status': 'pronto',
-        'fim_servico': FieldValue.serverTimestamp(),
-      });
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('agendamentos')
+          .doc(widget.agendamentoId)
+          .update({'status': 'pronto', 'fim_servico': FieldValue.serverTimestamp()});
       Navigator.pop(context); // Retorna para a tela anterior
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -89,9 +95,12 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
 
   Future<void> _confirmarRecebimento(BuildContext context) async {
     try {
-      await _db.collection('agendamentos').doc(widget.agendamentoId).update({
-        'status': 'checklist_pendente',
-      });
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('agendamentos')
+          .doc(widget.agendamentoId)
+          .update({'status': 'checklist_pendente'});
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -148,6 +157,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
   Future<void> _selecionarBanhista(BuildContext context) async {
     try {
       QuerySnapshot prosSnapshot = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('profissionais')
           .where('ativo', isEqualTo: true)
           .get();
@@ -189,6 +200,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                   onTap: () async {
                     Navigator.pop(ctx);
                     await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
                         .collection('agendamentos')
                         .doc(widget.agendamentoId)
                         .update({
@@ -226,6 +239,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
   Future<void> _selecionarTosador(BuildContext context) async {
     try {
       QuerySnapshot prosSnapshot = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
           .collection('profissionais')
           .where('ativo', isEqualTo: true)
           .get();
@@ -269,6 +284,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
 
                     // Atualiza com Tosador e muda status
                     await _db
+                        .collection('tenants')
+                        .doc(AppConfig.tenantId)
                         .collection('agendamentos')
                         .doc(widget.agendamentoId)
                         .update({
@@ -317,6 +334,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
             .collection('agendamentos')
             .doc(widget.agendamentoId)
             .snapshots(),
@@ -705,6 +724,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                                   : 'aguardando_finalizacao';
 
                               await _db
+                                  .collection('tenants')
+                                  .doc(AppConfig.tenantId)
                                   .collection('agendamentos')
                                   .doc(widget.agendamentoId)
                                   .update({'status': novoStatus});
@@ -764,6 +785,8 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                             "Finalizar Tosa?",
                             () async {
                               await _db
+                                  .collection('tenants')
+                                  .doc(AppConfig.tenantId)
                                   .collection('agendamentos')
                                   .doc(widget.agendamentoId)
                                   .update({'status': 'aguardando_finalizacao'});

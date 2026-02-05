@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/config/app_config.dart';
 
 class ProfissionalScreen extends StatefulWidget {
   const ProfissionalScreen({super.key});
@@ -496,9 +497,12 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     vouchersUsados.removeWhere((key, value) => value == false);
 
     if (vouchersUsados.isEmpty) {
-      await _db.collection('agendamentos').doc(agendamentoId).update({
-        'status': 'pronto',
-      });
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('agendamentos')
+          .doc(agendamentoId)
+          .update({'status': 'pronto'});
       return;
     }
 
@@ -511,6 +515,7 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
       );
 
       await _functions.httpsCallable('realizarCheckout').call({
+        'tenantId': AppConfig.tenantId,
         'agendamentoId': agendamentoId,
         'extrasIds': [],
         'metodoPagamento': 'voucher',
@@ -540,9 +545,12 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
   }
 
   Future<void> _cancelarAgendamento(String docId) async {
-    await _db.collection('agendamentos').doc(docId).update({
-      'status': 'cancelado',
-    });
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .doc(docId)
+        .update({'status': 'cancelado'});
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Agendamento cancelado."),
@@ -957,6 +965,8 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _db
+                  .collection('tenants')
+                  .doc(AppConfig.tenantId)
                   .collection('agendamentos')
                   .where(
                     'data_inicio',

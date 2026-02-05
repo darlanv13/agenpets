@@ -103,19 +103,14 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
-      final horariosStrings = await _firebaseService.buscarHorariosDisponiveis(
+      final grade = await _firebaseService.buscarHorariosDisponiveis(
         dataString,
         _servicoSelecionado!.toLowerCase(),
       );
 
       if (mounted) {
         setState(() {
-          // O backend novo retorna apenas lista de strings ["08:00", "09:00"]
-          // Precisamos adaptar para a estrutura visual {hora, livre}
-          // Assumindo que o que vem é LIVRE.
-          _gradeHorarios = horariosStrings
-              .map((hora) => {"hora": hora, "livre": true})
-              .toList();
+          _gradeHorarios = grade;
         });
       }
     } catch (e) {

@@ -124,7 +124,7 @@ class FirebaseService {
   }
   // --- AGENDAMENTOS (Via Cloud Functions) ---
 
-  Future<List<String>> buscarHorariosDisponiveis(
+  Future<List<Map<String, dynamic>>> buscarHorariosDisponiveis(
     String data,
     String servico,
   ) async {
@@ -134,7 +134,8 @@ class FirebaseService {
         'dataConsulta': data,
         'servico': servico,
       });
-      return List<String>.from(result.data['horarios']);
+      final List<dynamic> grade = result.data['grade'] ?? [];
+      return grade.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       throw Exception("Erro ao calcular horários: $e");
     }
