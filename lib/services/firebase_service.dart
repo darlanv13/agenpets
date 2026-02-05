@@ -124,7 +124,7 @@ class FirebaseService {
   }
   // --- AGENDAMENTOS (Via Cloud Functions) ---
 
-  Future<List<String>> buscarHorariosDisponiveis(
+  Future<List<Map<String, dynamic>>> buscarHorariosDisponiveis(
     String data,
     String servico,
   ) async {
@@ -134,7 +134,8 @@ class FirebaseService {
         'dataConsulta': data,
         'servico': servico,
       });
-      return List<String>.from(result.data['horarios']);
+      final List<dynamic> grade = result.data['grade'] ?? [];
+      return grade.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       throw Exception("Erro ao calcular horários: $e");
     }
@@ -181,9 +182,18 @@ class FirebaseService {
           return {
             // Note que removi o prefixo "vouchers_" dos nomes dos campos para ficar mais limpo
             // mas você pode manter se preferir, desde que alinhe com o servidor.
-            'banho': (data['vouchers_banho'] as num?)?.toInt() ?? 0,
-            'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? 0,
-            'creche': (data['vouchers_creche'] as num?)?.toInt() ?? 0,
+            'banho':
+                (data['vouchers_banho'] as num?)?.toInt() ??
+                (data['banho'] as num?)?.toInt() ??
+                0,
+            'tosa':
+                (data['vouchers_tosa'] as num?)?.toInt() ??
+                (data['tosa'] as num?)?.toInt() ??
+                0,
+            'creche':
+                (data['vouchers_creche'] as num?)?.toInt() ??
+                (data['creche'] as num?)?.toInt() ??
+                0,
           };
         });
   }

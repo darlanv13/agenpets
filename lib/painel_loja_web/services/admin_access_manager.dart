@@ -16,7 +16,6 @@ import '../views/venda_assinatura_view.dart';
 import '../views/gestao_banners_view.dart';
 import '../views/pdv_view.dart';
 import '../views/creche_view.dart';
-import '../views/gestao_equipe_view.dart';
 import '../views/gestao_estoque_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
@@ -184,13 +183,6 @@ class AdminAccessManager {
         title: "Banners do App",
         icon: Icons.view_carousel_rounded,
         widget: GestaoBannersView(),
-      ),
-      AdminModule(
-        id: 'equipe',
-        title: "Equipe",
-        icon: Icons.people_alt_rounded,
-        section: "ADMINISTRAÇÃO",
-        widget: GestaoEquipeView(),
       ),
       AdminModule(
         id: 'configuracoes',

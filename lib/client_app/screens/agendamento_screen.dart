@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:agenpet/services/firebase_service.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   const AgendamentoScreen({super.key});
@@ -20,9 +19,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     databaseId: 'agenpets',
   );
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
-    region: 'southamerica-east1',
-  );
+  final _firebaseService = FirebaseService();
 
   // --- CORES ---
   final Color _corAcai = Color(0xFF4A148C);
@@ -106,27 +103,18 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
     try {
       final dataString = DateFormat('yyyy-MM-dd').format(_dataSelecionada);
-      final result = await _functions.httpsCallable('buscarHorarios').call({
-        'dataConsulta': dataString,
-        'servico': _servicoSelecionado!.toLowerCase(),
-        'tenantId': AppConfig.tenantId,
-      });
+      final grade = await _firebaseService.buscarHorariosDisponiveis(
+        dataString,
+        _servicoSelecionado!.toLowerCase(),
+      );
 
       if (mounted) {
         setState(() {
-          List<dynamic> dados = result.data['grade'];
-          _gradeHorarios = dados
-              .map(
-                (item) => {
-                  "hora": item['hora'].toString(),
-                  "livre": item['livre'] as bool,
-                },
-              )
-              .toList();
+          _gradeHorarios = grade;
         });
       }
     } catch (e) {
-      print("Erro: $e");
+      print("Erro ao buscar horários: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -137,19 +125,24 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final dataHoraString =
-          "${DateFormat('yyyy-MM-dd').format(_dataSelecionada)} $_horarioSelecionado";
+      // Combina data selecionada com horário selecionado
+      final timeParts = _horarioSelecionado!.split(':');
+      final dataHora = DateTime(
+        _dataSelecionada.year,
+        _dataSelecionada.month,
+        _dataSelecionada.day,
+        int.parse(timeParts[0]),
+        int.parse(timeParts[1]),
+      );
 
-      await _functions.httpsCallable('criarAgendamento').call({
-        'servico': _servicoSelecionado,
-        'data_hora': dataHoraString,
-        'cpf_user': _userCpf,
-        'pet_id': _petId,
-        'metodo_pagamento': 'na_loja',
-        'valor': 0,
-        'observacoes': _obsController.text.trim(),
-        'tenantId': AppConfig.tenantId,
-      });
+      await _firebaseService.criarAgendamento(
+        servico: _servicoSelecionado!,
+        dataHora: dataHora,
+        cpfUser: _userCpf!,
+        petId: _petId!,
+        metodoPagamento: 'na_loja',
+        valor: 0,
+      );
 
       _mostrarSucessoDialog();
     } catch (e) {

@@ -49,24 +49,31 @@ android {
     productFlavors {
         create("cliente") {
             dimension = "app"
-            // Mantém o ID original passado no comando (ex: com.agenpets.afazendinha)
+            // Mantém o ID original passado no comando
             applicationId = customAppId 
-            // Mantém o nome original (ex: A Fazendinha)
+            // Mantém o nome original
             resValue("string", "app_name", customAppName) 
         }
 
         create("profissional") {
             dimension = "app"
-            // Adiciona um sufixo para o app Pro não substituir o app Cliente
-            // Ex: com.agenpets.afazendinha.pro
-            applicationIdSuffix = ".pro" 
-            // Adiciona "Pro" ao nome. Ex: A Fazendinha Pro
-            resValue("string", "app_name", "$customAppName Pro") 
+            
+            // --- CORREÇÃO ---
+            // Definimos o ID EXATO que está no seu JSON.
+            // Isso sobrescreve o padrão "com.agenpets.padrao"
+            applicationId = "com.agenpets.pro" 
+            
+            // Comente ou remova o sufixo, pois já definimos o ID completo acima
+            // applicationIdSuffix = ".pro" 
+            // ----------------
+
+            resValue("string", "app_name", "Agenpets Pro") 
         }
 
         create("tenants") {
             dimension = "app"
-            applicationIdSuffix = ".admin"
+            // Se for rodar este também sem config nova, comente a linha abaixo:
+            // applicationIdSuffix = ".admin"
             resValue("string", "app_name", "Painel Admin Agenpets")
         }
     }
