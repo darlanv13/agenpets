@@ -91,13 +91,16 @@ class _HotelScreenState extends State<HotelScreen> {
   Future<void> _carregarPrecoHotel() async {
     try {
       final config = await _firebaseService.getConfiguracoes();
-      if (config.isNotEmpty) {
+      if (mounted) {
         setState(() {
-          _valorDiaria = (config['preco_hotel_diaria'] ?? 80.00).toDouble();
+          _valorDiaria =
+              (config['preco_hotel_diaria'] ?? 80.00).toDouble();
         });
       }
     } catch (e) {
-      setState(() => _valorDiaria = 80.00);
+      if (mounted) {
+        setState(() => _valorDiaria = 80.00);
+      }
     }
   }
 
