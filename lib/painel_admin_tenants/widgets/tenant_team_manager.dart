@@ -22,13 +22,19 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   );
 
   final _nomeController = TextEditingController();
-  final _cpfController = TextEditingController();
+  final _docController = TextEditingController(); // Renamed from _cpfController
   final _senhaController = TextEditingController();
 
   var maskCpf = MaskTextInputFormatter(
     mask: '###.###.###-##',
     filter: {"#": RegExp(r'[0-9]')},
   );
+  var maskCnpj = MaskTextInputFormatter(
+    mask: '##.###.###/####-##',
+    filter: {"#": RegExp(r'[0-9]')},
+  );
+
+  bool _isCnpj = false;
   bool _isLoading = false;
   String _filtroEquipe = "";
   String? _editingUid; // ID do usuário sendo editado (null = criando novo)
@@ -45,7 +51,11 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     'gestao_precos': 'Tabela de Preços',
     'banners_app': 'Banners do App',
     'gestao_estoque': 'Gestão de Estoque',
-    'equipe': 'Gestão Equipe',
+    // 'equipe': 'Gestão Equipe', // Removido do painel da loja, mas aqui é admin tenant... mantemos como opção de permissão?
+    // O usuário pediu para remover a gestão do painel loja. Se um usuário "Gerente" da loja tiver acesso a "equipe", ele veria a tela que acabamos de remover.
+    // Como removemos a rota/view do painel da loja, dar essa permissão não fará nada (ou quebrará se tentar acessar).
+    // Por segurança, vamos manter na lista de permissões visuais para edição, mas sabendo que no front da loja não aparece mais.
+    // Ou melhor, se removemos do painel, não faz sentido dar permissão. Vamos remover daqui também.
     'configuracoes': 'Configs',
   };
 
@@ -156,13 +166,26 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   }
 
   Future<void> _salvar() async {
-    if (_nomeController.text.isEmpty || _cpfController.text.length < 14) {
-      _showSnack("Preencha nome e CPF.", Colors.orange);
+    if (_nomeController.text.isEmpty) {
+      _showSnack("Preencha o nome.", Colors.orange);
       return;
     }
 
-    // Senha só é obrigatória ao CRIAR. Na edição é opcional (mas backend atual não suporta troca de senha ainda,
-    // então ignoramos se vier vazio na edição, ou alertamos que não muda senha)
+    // Validação de Documento
+    String docClean = _docController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (_isCnpj) {
+      if (docClean.length != 14) {
+        _showSnack("CNPJ inválido (14 dígitos).", Colors.orange);
+        return;
+      }
+    } else {
+      if (docClean.length != 11) {
+        _showSnack("CPF inválido (11 dígitos).", Colors.orange);
+        return;
+      }
+    }
+
+    // Senha só é obrigatória ao CRIAR.
     if (_editingUid == null && _senhaController.text.length < 6) {
       _showSnack("Senha deve ter no mínimo 6 dígitos.", Colors.orange);
       return;
@@ -187,17 +210,19 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         // --- CRIAR ---
         await _functions.httpsCallable('criarContaProfissional').call({
           'nome': _nomeController.text.trim(),
-          'documento': _cpfController.text,
-          'cpf': _cpfController.text,
+          'documento': _docController.text, // Envia formatado
+          'cpf': _docController.text, // Mantemos backward compatibility se necessário, mas backend deve usar 'documento'
           'senha': _senhaController.text.trim(),
           'habilidades': _rolesSelecionadas.toList(),
           'acessos': acessos,
           'perfil': perfil,
           'tenantId': widget.tenantId,
+          'tipo_documento': _isCnpj ? 'cnpj' : 'cpf', // Informa o tipo
         });
         if (mounted) _showSnack("Adicionado!", Colors.green);
       } else {
         // --- EDITAR ---
+        // Nota: Geralmente não permitimos editar o documento (ID), apenas nome/permissões
         await _functions.httpsCallable('atualizarContaProfissional').call({
           'uid': _editingUid,
           'nome': _nomeController.text.trim(),
@@ -260,7 +285,14 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     setState(() {
       _editingUid = uid;
       _nomeController.text = data['nome'] ?? '';
-      _cpfController.text = data['documento'] ?? (data['cpf'] ?? '');
+
+      // Detecta se é CNPJ ou CPF baseado no tamanho do documento salvo
+      String doc = data['documento'] ?? (data['cpf'] ?? '');
+      String docClean = doc.replaceAll(RegExp(r'[^0-9]'), '');
+
+      _isCnpj = docClean.length > 11;
+      _docController.text = doc;
+
       _senhaController.clear(); // Não exibimos senha
 
       // Habilidades
@@ -278,9 +310,10 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   void _clearForm() {
     _editingUid = null;
     _nomeController.clear();
-    _cpfController.clear();
+    _docController.clear();
     _senhaController.clear();
     setState(() {
+      _isCnpj = false; // Reset p/ CPF default
       _rolesSelecionadas.clear();
       _filteredAvailablePages.keys.forEach(
         (k) => _selectedAccess[k] = (k == 'dashboard'),
@@ -356,11 +389,42 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
             SizedBox(height: 20),
             _buildInput(_nomeController, "Nome Completo", Icons.person),
             SizedBox(height: 15),
+
+            // Toggle CPF/CNPJ
+            Row(
+              children: [
+                Text("Tipo de Documento: ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                SizedBox(width: 10),
+                ChoiceChip(
+                  label: Text("CPF"),
+                  selected: !_isCnpj,
+                  onSelected: (v) {
+                    if(v) setState(() {
+                      _isCnpj = false;
+                      _docController.clear();
+                    });
+                  },
+                ),
+                SizedBox(width: 10),
+                ChoiceChip(
+                  label: Text("CNPJ"),
+                  selected: _isCnpj,
+                  onSelected: (v) {
+                    if(v) setState(() {
+                      _isCnpj = true;
+                      _docController.clear();
+                    });
+                  },
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+
             _buildInput(
-              _cpfController,
-              "CPF (Login)",
+              _docController,
+              _isCnpj ? "CNPJ (Login)" : "CPF (Login)",
               Icons.badge,
-              formatter: maskCpf,
+              formatter: _isCnpj ? maskCnpj : maskCpf,
             ),
             SizedBox(height: 15),
             _buildInput(
@@ -526,6 +590,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                     );
 
                     final skills = List<String>.from(data['habilidades'] ?? []);
+                    final docExibido = data['documento'] ?? (data['cpf'] ?? '---');
+
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(
@@ -543,7 +609,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        "CPF: ${data['documento']} • ${skills.join(', ').toUpperCase()}",
+                        "DOC: $docExibido • ${skills.join(', ').toUpperCase()}",
                         style: TextStyle(fontSize: 12),
                       ),
                       trailing: Row(
