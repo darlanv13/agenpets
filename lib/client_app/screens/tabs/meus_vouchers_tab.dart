@@ -259,6 +259,8 @@ class _MeusVouchersTabState extends State<MeusVouchersTab> {
       ),
       child: FutureBuilder<QuerySnapshot>(
         future: _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
             .collection('agendamentos')
             .where('userId', isEqualTo: widget.userCpf)
             .orderBy('data_inicio', descending: true)
