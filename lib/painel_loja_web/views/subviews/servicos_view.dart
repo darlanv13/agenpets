@@ -260,6 +260,7 @@ class _ServicosViewState extends State<ServicosView> {
     String nome = data['nome'] ?? 'Serviço';
     String? porte = data['porte'];
     String? pelagem = data['pelagem'];
+    String? categoria = data['categoria'];
     double preco = (data['preco'] ?? 0).toDouble();
 
     return DataRow(
@@ -284,53 +285,70 @@ class _ServicosViewState extends State<ServicosView> {
                     nome,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
-                  if (porte != null || pelagem != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Row(
-                        children: [
-                          if (porte != null)
-                            Container(
-                              margin: EdgeInsets.only(right: 5),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.blue[100]!),
-                              ),
-                              child: Text(
-                                porte,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.blue[800],
-                                ),
-                              ),
+                  Row(
+                    children: [
+                      if (categoria != null)
+                        Container(
+                          margin: EdgeInsets.only(right: 5, top: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[50],
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.purple[100]!),
+                          ),
+                          child: Text(
+                            categoria,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.purple[800],
                             ),
-                          if (pelagem != null)
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.orange[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.orange[100]!),
-                              ),
-                              child: Text(
-                                "Pelo $pelagem",
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.orange[800],
-                                ),
-                              ),
+                          ),
+                        ),
+                      if (porte != null)
+                        Container(
+                          margin: EdgeInsets.only(right: 5, top: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.blue[100]!),
+                          ),
+                          child: Text(
+                            porte,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blue[800],
                             ),
-                        ],
-                      ),
-                    ),
+                          ),
+                        ),
+                      if (pelagem != null)
+                        Container(
+                          margin: EdgeInsets.only(top: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.orange[100]!),
+                          ),
+                          child: Text(
+                            "Pelo $pelagem",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -382,6 +400,7 @@ class _ServicosViewState extends State<ServicosView> {
     // State for Dropdowns
     String? porteSelecionado = data?['porte'];
     String? pelagemSelecionada = data?['pelagem'];
+    String? categoriaSelecionada = data?['categoria'];
 
     final List<String> opcoesPorte = [
       'Todos',
@@ -390,6 +409,12 @@ class _ServicosViewState extends State<ServicosView> {
       'Grande Porte',
     ];
     final List<String> opcoesPelagem = ['Todos', 'Curta', 'Média', 'Longa'];
+    final List<String> opcoesCategoria = [
+      'Banho',
+      'Tosa',
+      'Estética',
+      'Outros',
+    ];
 
     showDialog(
       context: context,
@@ -425,6 +450,27 @@ class _ServicosViewState extends State<ServicosView> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
+                  ),
+                  SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    initialValue: categoriaSelecionada,
+                    decoration: InputDecoration(
+                      labelText: "Categoria (Tag)",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: opcoesCategoria.map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setStateDialog(() {
+                        categoriaSelecionada = newValue;
+                      });
+                    },
                   ),
                   SizedBox(height: 15),
                   DropdownButtonFormField<String>(
@@ -494,6 +540,7 @@ class _ServicosViewState extends State<ServicosView> {
                     'preco': preco,
                     'porte': porteSelecionado,
                     'pelagem': pelagemSelecionada,
+                    'categoria': categoriaSelecionada,
                   };
 
                   if (docId == null) {

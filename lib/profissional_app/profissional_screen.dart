@@ -123,6 +123,27 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
     if (userId == null) return;
 
+    // Tenta buscar a categoria do serviço para matching mais preciso
+    String servicoNorm =
+        (data['servicoNorm'] ?? data['servico'] ?? '').toString();
+    String? categoriaServico;
+
+    try {
+      final servicoQuery = await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('servicos_extras')
+          .where('nome', isEqualTo: servicoNorm)
+          .limit(1)
+          .get();
+
+      if (servicoQuery.docs.isNotEmpty) {
+        categoriaServico = servicoQuery.docs.first.data()['categoria'];
+      }
+    } catch (e) {
+      print("Erro ao buscar categoria do serviço: $e");
+    }
+
     final userDoc = await _db.collection('users').doc(userId).get();
     if (!userDoc.exists) return;
 
@@ -149,7 +170,11 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
     if (saldosDisponiveis.isNotEmpty) {
       // Abre o dialog personalizado que você gosta
-      _abrirDialogoSelecaoVoucher(agendamentoDoc, saldosDisponiveis);
+      _abrirDialogoSelecaoVoucher(
+        agendamentoDoc,
+        saldosDisponiveis,
+        categoriaServico: categoriaServico,
+      );
     } else {
       // Se não tem voucher, apenas muda para 'pronto' (não fecha financeiro)
       await agendamentoDoc.reference.update({'status': 'pronto'});
@@ -165,8 +190,9 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
   // --- MANTIDO: O DIALOG PERSONALIZADO QUE VOCÊ GOSTOU ---
   void _abrirDialogoSelecaoVoucher(
     DocumentSnapshot doc,
-    Map<String, int> saldos,
-  ) {
+    Map<String, int> saldos, {
+    String? categoriaServico,
+  }) {
     Map<String, bool> selecionados = {};
     final dataAgendamento = doc.data() as Map<String, dynamic>;
 
@@ -178,13 +204,29 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
 
     // Auto-seleção inteligente
     saldos.forEach((key, val) {
-      if (servicoNorm.contains(key) ||
-          (servicoNorm.contains('tosa') && key == 'tosa') ||
-          (servicoNorm.contains('banho') && key == 'banhos')) {
-        selecionados[key] = true;
-      } else {
-        selecionados[key] = false;
+      bool match = false;
+      String keyLower = key.toLowerCase();
+
+      // 1. Match por nome (Legacy)
+      if (servicoNorm.contains(keyLower)) match = true;
+      if (servicoNorm.contains('tosa') && keyLower == 'tosa') match = true;
+      if (servicoNorm.contains('banho') && keyLower == 'banhos') match = true;
+
+      // 2. Match por Categoria (Tag)
+      if (categoriaServico != null) {
+        if (categoriaServico == 'Banho' && keyLower.contains('banho')) {
+          match = true;
+        }
+        if (categoriaServico == 'Tosa' && keyLower.contains('tosa')) {
+          match = true;
+        }
+        // Se houver voucher de estética no futuro
+        if (categoriaServico == 'Estética' && keyLower.contains('estetica')) {
+          match = true;
+        }
       }
+
+      selecionados[key] = match;
     });
 
     showDialog(

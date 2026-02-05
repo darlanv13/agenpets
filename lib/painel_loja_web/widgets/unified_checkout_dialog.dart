@@ -93,6 +93,21 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     }
   }
 
+  String? _getCategoryForBaseItem() {
+    String baseName = (widget.baseItem['nome'] ?? '').toString();
+    try {
+      final service = widget.availableServices.firstWhere(
+        (s) =>
+            (s['nome'] ?? '').toString().toLowerCase() ==
+            baseName.toLowerCase(),
+        orElse: () => {},
+      );
+      return service['categoria'];
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<void> _loadVouchers() async {
     _availableVouchers = {};
     _vouchersToUse = {};
@@ -143,8 +158,20 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       String baseName = (widget.baseItem['nome'] ?? '')
           .toString()
           .toLowerCase();
+      String? category = _getCategoryForBaseItem();
+
       _availableVouchers.forEach((key, value) {
-        if (baseName.contains(key.toLowerCase())) {
+        bool match = false;
+        String keyLower = key.toLowerCase();
+
+        if (baseName.contains(keyLower)) match = true;
+
+        if (category != null) {
+          if (category == 'Banho' && keyLower.contains('banho')) match = true;
+          if (category == 'Tosa' && keyLower.contains('tosa')) match = true;
+        }
+
+        if (match) {
           _vouchersToUse[key] = true;
         }
       });
@@ -177,7 +204,17 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         String baseName = (widget.baseItem['nome'] ?? '')
             .toString()
             .toLowerCase();
-        if (baseName.contains(key.toLowerCase())) {
+        String? category = _getCategoryForBaseItem();
+        bool match = false;
+        String keyLower = key.toLowerCase();
+
+        if (baseName.contains(keyLower)) match = true;
+        if (category != null) {
+          if (category == 'Banho' && keyLower.contains('banho')) match = true;
+          if (category == 'Tosa' && keyLower.contains('tosa')) match = true;
+        }
+
+        if (match) {
           discount = _totalBase;
         }
       }
