@@ -94,12 +94,15 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
         .doc(AppConfig.tenantId)
         .collection('reservas_hotel')
         .where('cpf_user', isEqualTo: widget.userCpf)
-        .orderBy('check_in', descending: true)
+        // .orderBy('check_in', descending: true) // Removido para evitar erro de índice inexistente
         .snapshots()
-        .listen((snapshot) {
-      _reservasHotel = snapshot.docs;
-      _rebuildList();
-    });
+        .listen(
+      (snapshot) {
+        _reservasHotel = snapshot.docs;
+        _rebuildList();
+      },
+      onError: (e) => print("Erro stream Hotel: $e"),
+    );
     _subscriptions.add(subHotel);
 
     // 3. Creche
@@ -108,12 +111,15 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
         .doc(AppConfig.tenantId)
         .collection('reservas_creche')
         .where('cpf_user', isEqualTo: widget.userCpf)
-        .orderBy('check_in', descending: true)
+        // .orderBy('check_in', descending: true) // Removido para evitar erro de índice inexistente
         .snapshots()
-        .listen((snapshot) {
-      _reservasCreche = snapshot.docs;
-      _rebuildList();
-    });
+        .listen(
+      (snapshot) {
+        _reservasCreche = snapshot.docs;
+        _rebuildList();
+      },
+      onError: (e) => print("Erro stream Creche: $e"),
+    );
     _subscriptions.add(subCreche);
   }
 
