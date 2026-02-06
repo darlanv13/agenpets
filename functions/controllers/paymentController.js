@@ -214,7 +214,7 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
 });
 
 // --- 2. Webhook Unificado EfiPay ---
-exports.webhookPix = onRequest({ cors: true }, async (req, res) => {
+const webhookHandler = async (req, res) => {
     try {
         // Log para debug (essencial para ver o que o EfiPay está enviando)
         console.log("Webhook PIX Recebido (Headers):", req.headers);
@@ -249,7 +249,10 @@ exports.webhookPix = onRequest({ cors: true }, async (req, res) => {
         // Retorna 500 apenas se for erro de processamento interno real
         res.status(500).send("Erro interno no servidor");
     }
-});
+};
+
+exports.webhookPix = onRequest({ cors: true }, webhookHandler);
+exports.efipaywebhook = onRequest({ cors: true }, webhookHandler);
 
 // --- 3. Webhook Mercado Pago ---
 exports.webhookMercadoPago = onRequest({ cors: true }, async (req, res) => {
