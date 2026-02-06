@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -26,10 +27,27 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
 
   Map<String, Map<String, dynamic>> _petsCache = {};
 
+  // Gerenciamento de Múltiplos Streams
+  List<StreamSubscription> _subscriptions = [];
+  List<DocumentSnapshot> _agendamentos = [];
+  List<DocumentSnapshot> _reservasHotel = [];
+  List<DocumentSnapshot> _reservasCreche = [];
+  List<DocumentSnapshot> _allDocs = [];
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
     _carregarPets();
+    _setupListeners();
+  }
+
+  @override
+  void dispose() {
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _carregarPets() async {
@@ -55,17 +73,110 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     }
   }
 
+  void _setupListeners() {
+    // 1. Agendamentos (Banho/Tosa)
+    final subAgendamentos = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .where('userId', isEqualTo: widget.userCpf)
+        .orderBy('data_inicio', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      _agendamentos = snapshot.docs;
+      _rebuildList();
+    });
+    _subscriptions.add(subAgendamentos);
+
+    // 2. Hotel
+    final subHotel = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('reservas_hotel')
+        .where('cpf_user', isEqualTo: widget.userCpf)
+        .orderBy('check_in', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      _reservasHotel = snapshot.docs;
+      _rebuildList();
+    });
+    _subscriptions.add(subHotel);
+
+    // 3. Creche
+    final subCreche = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('reservas_creche')
+        .where('cpf_user', isEqualTo: widget.userCpf)
+        .orderBy('check_in', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      _reservasCreche = snapshot.docs;
+      _rebuildList();
+    });
+    _subscriptions.add(subCreche);
+  }
+
+  void _rebuildList() {
+    final List<DocumentSnapshot> combined = [
+      ..._agendamentos,
+      ..._reservasHotel,
+      ..._reservasCreche,
+    ];
+
+    // Ordenação unificada por data
+    combined.sort((a, b) {
+      final dateA = _getDate(a);
+      final dateB = _getDate(b);
+      return dateB.compareTo(dateA); // Descending (mais recente primeiro)
+    });
+
+    if (mounted) {
+      setState(() {
+        _allDocs = combined;
+        _isLoading = false;
+      });
+    }
+  }
+
+  // --- Helpers de Unificação ---
+
+  DateTime _getDate(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    if (data.containsKey('data_inicio')) {
+      return (data['data_inicio'] as Timestamp).toDate();
+    } else if (data.containsKey('check_in')) {
+      return (data['check_in'] as Timestamp).toDate();
+    }
+    return DateTime.now(); // Fallback
+  }
+
+  String _getService(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+
+    // Agendamentos normais
+    if (data.containsKey('servicoNorm')) {
+        return _capitalize(data['servicoNorm']);
+    }
+    if (data.containsKey('servico')) {
+        return _capitalize(data['servico']);
+    }
+
+    // Identifica pela coleção
+    final path = doc.reference.parent.id;
+    if (path == 'reservas_hotel') return 'Hotel';
+    if (path == 'reservas_creche') return 'Creche';
+
+    return 'Serviço';
+  }
+
   Map<String, List<DocumentSnapshot>> _groupAppointmentsByDate(
     List<DocumentSnapshot> docs,
   ) {
     final Map<String, List<DocumentSnapshot>> grouped = {};
 
     for (var doc in docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final Timestamp? ts = data['data_inicio'];
-      if (ts == null) continue;
-
-      final date = ts.toDate();
+      final date = _getDate(doc);
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(Duration(days: 1));
@@ -93,22 +204,15 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _corFundo,
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _db
-            .collection('tenants')
-            .doc(AppConfig.tenantId)
-            .collection('agendamentos')
-            .where('userId', isEqualTo: widget.userCpf)
-            .orderBy('data_inicio', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
+      body: Builder(
+        builder: (context) {
           // --- ESTADO DE CARREGAMENTO ---
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (_isLoading && _allDocs.isEmpty) {
             return Center(child: CircularProgressIndicator(color: _corAcai));
           }
 
           // --- ESTADO DE VAZIO ---
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (_allDocs.isEmpty) {
             return CustomScrollView(
               slivers: [
                 _buildSliverAppBar(),
@@ -118,8 +222,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
           }
 
           // --- PREPARAÇÃO DOS DADOS ---
-          final docs = snapshot.data!.docs;
-          final groupedDocs = _groupAppointmentsByDate(docs);
+          final groupedDocs = _groupAppointmentsByDate(_allDocs);
 
           return CustomScrollView(
             physics: BouncingScrollPhysics(),
@@ -170,7 +273,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
       ),
       centerTitle: false,
       automaticallyImplyLeading:
-          true, // Garante que o botão de voltar apareça se necessário
+          true,
       iconTheme: IconThemeData(color: _corAcai),
     );
   }
@@ -207,12 +310,9 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     final data = doc.data() as Map<String, dynamic>;
 
     // Tratamento de Dados
-    Timestamp? ts = data['data_inicio'];
-    final DateTime dataInicio = ts != null ? ts.toDate() : DateTime.now();
+    final DateTime dataInicio = _getDate(doc);
     final String status = data['status'] ?? 'agendado';
-    final String servico = _capitalize(
-      data['servicoNorm'] ?? data['servico'] ?? 'Serviço',
-    );
+    final String servico = _getService(doc);
 
     // Recupera dados do Pet do Cache
     final String? petId = data['pet_id'];
@@ -227,6 +327,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     String textoStatus = "Agendado";
     IconData statusIcon = FontAwesomeIcons.calendarCheck;
 
+    // --- Mapeamento de Status ---
     if (status == 'banhando') {
       corTema = Colors.blue;
       textoStatus = "No Banho";
@@ -248,6 +349,16 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
       textoStatus = "Cancelado";
       statusIcon = FontAwesomeIcons.xmark;
     }
+    // --- Status Hotel/Creche ---
+    else if (status == 'reservado') {
+      corTema = Colors.blueGrey;
+      textoStatus = "Reservado";
+      statusIcon = FontAwesomeIcons.calendarCheck;
+    } else if (status == 'hospedado') {
+      corTema = Colors.green;
+      textoStatus = "Hospedado";
+      statusIcon = FontAwesomeIcons.houseUser;
+    }
 
     return Container(
       margin: EdgeInsets.only(bottom: 12),
@@ -267,7 +378,8 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _abrirRecibo(context, data, doc.id),
+          // Recibo talvez precise de adaptação, mas mantemos o padrão por enquanto
+          onTap: () => _abrirRecibo(context, data, doc),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -376,13 +488,27 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
 
   void _abrirRecibo(
     BuildContext context,
-    Map<String, dynamic> data,
-    String docId,
+    Map<String, dynamic> rawData,
+    DocumentSnapshot doc,
   ) {
+    // Cria uma cópia mutável dos dados para injetar campos faltantes se necessário
+    final data = Map<String, dynamic>.from(rawData);
+
+    // Normaliza Data (para o ReciboScreen que espera data_inicio como Timestamp)
+    if (!data.containsKey('data_inicio')) {
+      final date = _getDate(doc);
+      data['data_inicio'] = Timestamp.fromDate(date);
+    }
+
+    // Normaliza Serviço
+    if (!data.containsKey('servico')) {
+      data['servico'] = _getService(doc);
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ReciboScreen(data: data, docId: docId),
+        builder: (context) => ReciboScreen(data: data, docId: doc.id),
       ),
     );
   }
