@@ -41,9 +41,17 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     }
 
     // Verifica certificado
-    if (currentOptions.certificate && !fs.existsSync(currentOptions.certificate)) {
-        console.error(`Certificado não encontrado em: ${currentOptions.certificate}`);
-        throw new HttpsError("failed-precondition", "Certificado EfiPay não configurado no servidor.");
+    if (currentOptions.certificate) {
+        if (!fs.existsSync(currentOptions.certificate)) {
+            console.error(`Certificado não encontrado em: ${currentOptions.certificate}`);
+            throw new HttpsError("failed-precondition", "Certificado EfiPay não configurado no servidor.");
+        }
+        // Verifica se é um arquivo placeholder (tamanho pequeno ou conteúdo específico)
+        const certStats = fs.statSync(currentOptions.certificate);
+        if (certStats.size < 100) {
+            console.error("Certificado placeholder detectado.");
+            throw new HttpsError("failed-precondition", "O certificado PIX não está configurado corretamente (arquivo placeholder detectado). Por favor, faça upload do certificado .p12 válido na pasta functions/certs/.");
+        }
     }
 
     // Busca o pacote (Pode ser global ou da loja, aqui assumindo global para simplificar, mas salvando a venda na loja)
@@ -99,7 +107,13 @@ exports.gerarPixAssinatura = onCall(async (request) => {
         imagemQrcode = qrCode.imagemQrcode;
     } catch (error) {
         console.error("Erro EfiPay:", JSON.stringify(error, null, 2));
-        throw new HttpsError("internal", "Erro ao gerar PIX: " + (error.message || error.error_description || "Erro desconhecido"));
+        // Tenta extrair a mensagem de erro de várias formas comuns em bibliotecas Node/Axios/Efi
+        const msg = error.message ||
+                    error.error_description ||
+                    (error.error ? error.error.toString() : null) ||
+                    (typeof error === 'string' ? error : "Erro desconhecido");
+
+        throw new HttpsError("internal", "Erro ao gerar PIX: " + msg);
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
