@@ -138,7 +138,7 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
           .doc(AppConfig.tenantId)
           .collection('pacotes')
           .where('ativo', isEqualTo: true)
-          .orderBy('preco', descending: false)
+          // .orderBy('preco', descending: false) // Removido para evitar erro de índice
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -153,13 +153,21 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
           return Center(child: Text("Nenhum plano disponível."));
         }
 
+        // Ordenação em memória
+        var docs = snapshot.data!.docs;
+        docs.sort((a, b) {
+          double pA = ((a.data() as Map)['preco'] ?? 0).toDouble();
+          double pB = ((b.data() as Map)['preco'] ?? 0).toDouble();
+          return pA.compareTo(pB);
+        });
+
         return ListView(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 40),
           children: [
             _buildHeaderPromocional(), // Banner de topo
             SizedBox(height: 20),
 
-            ...snapshot.data!.docs.map((doc) {
+            ...docs.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               return _buildPlanCardVibrante(doc.id, data);
             }),
