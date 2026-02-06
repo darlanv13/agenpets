@@ -7,10 +7,15 @@ const fs = require('fs');
 
 // --- 1. Testar Credenciais do Gateway (Simulação) ---
 exports.testarCredenciaisGateway = onCall({ cors: true }, async (request) => {
-  const { tenantId, efipay_client_id, efipay_client_secret, certificate_content } = request.data;
+  const { tenantId, efipay_client_id, efipay_client_secret, efipay_sandbox } = request.data;
 
   // Configura credenciais
   const currentOptions = { ...optionsEfi };
+
+  // Sobrescreve Sandbox se informado na requisição
+  if (efipay_sandbox !== undefined) {
+    currentOptions.sandbox = efipay_sandbox;
+  }
 
   // Se o cliente enviou ID/Secret (teste antes de salvar), usa eles.
   // Senão, tenta buscar do banco se tiver tenantId.
@@ -27,6 +32,11 @@ exports.testarCredenciaisGateway = onCall({ cors: true }, async (request) => {
       const data = configDoc.data();
       if (!clientIdFinal) clientIdFinal = data.efipay_client_id;
       if (!clientSecretFinal) clientSecretFinal = data.efipay_client_secret;
+
+      // Se não veio na request, tenta pegar do banco para o teste
+      if (efipay_sandbox === undefined && data.efipay_sandbox !== undefined) {
+        currentOptions.sandbox = data.efipay_sandbox;
+      }
     }
   }
 
@@ -171,6 +181,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
     efipay_client_secret,
     chave_pix,
     mercadopago_access_token,
+    efipay_sandbox,
   } = request.data;
 
   if (!tenantId) {
@@ -199,6 +210,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   if (efipay_client_secret !== undefined) dadosSeguros.efipay_client_secret = efipay_client_secret;
   if (chave_pix !== undefined) dadosSeguros.chave_pix = chave_pix;
   if (mercadopago_access_token !== undefined) dadosSeguros.mercadopago_access_token = mercadopago_access_token;
+  if (efipay_sandbox !== undefined) dadosSeguros.efipay_sandbox = efipay_sandbox;
   // Se o gateway mudou, salvamos também nos segredos para redundância/backend saber a preferência segura
   if (gateway_pagamento !== undefined) dadosSeguros.gateway_selecionado = gateway_pagamento;
 
