@@ -6,7 +6,7 @@ const optionsEfi = require("../config/efipay");
 const fs = require('fs');
 
 // --- 1. Gerar PIX para Assinatura (Agora com tenantId) ---
-exports.gerarPixAssinatura = onCall(async (request) => {
+exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
     // [MUDANÇA] Recebemos o tenantId
     const { cpf_user, pacoteId, tenantId } = request.data;
 
@@ -141,7 +141,7 @@ exports.gerarPixAssinatura = onCall(async (request) => {
 });
 
 // --- 2. Webhook Unificado (Entrega o voucher na carteira da Loja) ---
-exports.webhookPix = onRequest(async (req, res) => {
+exports.webhookPix = onRequest({ cors: true }, async (req, res) => {
     const { pix } = req.body;
 
     if (!pix || !Array.isArray(pix)) {
