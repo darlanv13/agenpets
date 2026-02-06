@@ -446,8 +446,10 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   }
 
   Future<void> _configurarWebhookEfi() async {
+    // URL padrão atualizada para o novo endpoint 'efipaywebhook'
+    // Mas mantém compatibilidade se o usuário preferir editar
     final urlCtrl = TextEditingController(
-      text: "https://webhookpix-vgbo2eilca-rj.a.run.app",
+      text: "https://efipaywebhook-vgbo2eilca-rj.a.run.app",
     );
 
     await showDialog(
