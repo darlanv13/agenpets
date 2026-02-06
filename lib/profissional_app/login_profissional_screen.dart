@@ -46,11 +46,29 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
   bool _senhaVisivel = false;
   bool _verificandoAuth = true;
   String? _nomeLoja;
+  bool _cnpjLocked = false;
+  bool _initializedArgs = false;
 
   @override
   void initState() {
     super.initState();
     _verificarConfiguracaoLoja();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initializedArgs) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map && args.containsKey('cnpj_empresa')) {
+        final cnpj = args['cnpj_empresa'];
+        if (cnpj != null && cnpj is String && cnpj.isNotEmpty) {
+          _cpfController.text = cnpj;
+          _cnpjLocked = true;
+        }
+      }
+      _initializedArgs = true;
+    }
   }
 
   // --- VERIFICAÇÃO INICIAL ---
@@ -341,9 +359,15 @@ class _LoginProfissionalScreenState extends State<LoginProfissionalScreen> {
                       // Permite digitar CNPJ
                       inputFormatters: [maskCnpj],
                       keyboardType: TextInputType.number,
+                      readOnly: _cnpjLocked,
                       decoration: InputDecoration(
-                        labelText: "CNPJ de Acesso", // Alterado label
+                        labelText: "CNPJ de Acesso",
                         prefixIcon: Icon(Icons.domain, color: _corAcai),
+                        filled: _cnpjLocked,
+                        fillColor: _cnpjLocked ? Colors.grey[200] : null,
+                        suffixIcon: _cnpjLocked
+                            ? Icon(Icons.lock, color: Colors.grey)
+                            : null,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),
