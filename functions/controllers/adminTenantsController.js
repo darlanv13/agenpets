@@ -258,7 +258,9 @@ exports.simularWebhookPix = onCall({ cors: true }, async (request) => {
   // Permite que o admin force o processamento de um pagamento
   // enviando o txid, caso o webhook real tenha falhado ou para testes.
 
-  // Auth check idealmente: if (!request.auth.token.admin) throw error...
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+  }
 
   const { txid } = request.data;
 

@@ -215,18 +215,39 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
 
 // --- 2. Webhook Unificado EfiPay ---
 exports.webhookPix = onRequest({ cors: true }, async (req, res) => {
-    const { pix } = req.body;
-
-    if (!pix || !Array.isArray(pix)) {
-        return res.status(400).send("Body inválido");
-    }
-
     try {
+        // Log para debug (essencial para ver o que o EfiPay está enviando)
+        console.log("Webhook PIX Recebido (Headers):", req.headers);
+        console.log("Webhook PIX Recebido (Body):", JSON.stringify(req.body));
+
+        // Validação básica para evitar crash
+        if (!req.body) {
+            console.warn("Body vazio recebido.");
+            // Retorna 200 para não quebrar validações de existência do endpoint
+            return res.status(200).send();
+        }
+
+        const { pix } = req.body;
+
+        // Se não tiver a chave 'pix', pode ser validação ou outro evento
+        if (!pix) {
+            console.log("Campo 'pix' não encontrado. Assumindo validação do endpoint.");
+            return res.status(200).send();
+        }
+
+        if (!Array.isArray(pix)) {
+            console.error("Campo 'pix' não é um array:", pix);
+            return res.status(400).send("Formato inválido");
+        }
+
+        // Processa os eventos
         await pixService.processarPixEvents(pix);
         res.status(200).send();
+
     } catch (e) {
-        console.error("Erro no Webhook PIX:", e);
-        res.status(500).send("Erro interno");
+        console.error("Erro CRÍTICO no Webhook PIX:", e);
+        // Retorna 500 apenas se for erro de processamento interno real
+        res.status(500).send("Erro interno no servidor");
     }
 });
 
