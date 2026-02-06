@@ -44,6 +44,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   bool _temTaxi = false;
 
   String _gatewayPagamento = 'efipay';
+  bool _efipaySandbox = false;
   bool _isLoading = true, _isSaving = false;
 
   @override
@@ -55,14 +56,29 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
 
   Future<void> _carregarConfiguracoes() async {
     try {
-      final doc = await _db
-          .collection('tenants')
-          .doc(widget.tenantId)
-          .collection('config')
-          .doc('parametros')
-          .get();
-      if (doc.exists) {
-        final data = doc.data()!;
+      final futures = await Future.wait([
+        _db
+            .collection('tenants')
+            .doc(widget.tenantId)
+            .collection('config')
+            .doc('parametros')
+            .get(),
+        _db
+            .collection('tenants')
+            .doc(widget.tenantId)
+            .collection('config')
+            .doc('segredos')
+            .get(),
+      ]);
+
+      final docParametros = futures[0];
+      final docSegredos = futures[1];
+
+      Map<String, dynamic> data = {};
+      if (docParametros.exists) data.addAll(docParametros.data()!);
+      if (docSegredos.exists) data.addAll(docSegredos.data()!);
+
+      if (mounted) {
         setState(() {
           _efipayClientIdCtrl.text = data['efipay_client_id'] ?? '';
           _efipayClientSecretCtrl.text = data['efipay_client_secret'] ?? '';
@@ -70,6 +86,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           _mpAccessTokenCtrl.text = data['mercadopago_access_token'] ?? '';
           _logoAppCtrl.text = data['logo_app_url'] ?? '';
           _logoAdminCtrl.text = data['logo_admin_url'] ?? '';
+          _efipaySandbox = data['efipay_sandbox'] ?? false;
 
           // Carrega módulos (com fallback para legacy se necessário)
           _temBanhoTosa = data['tem_banho_tosa'] ?? (data['tem_banho'] ?? true);
@@ -123,6 +140,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         'efipay_client_secret': _efipayClientSecretCtrl.text.trim(),
         'chave_pix': _efipayChavePixCtrl.text.trim(),
         'mercadopago_access_token': _mpAccessTokenCtrl.text.trim(),
+        'efipay_sandbox': _efipaySandbox,
       });
 
       if (mounted)
@@ -388,6 +406,13 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           ),
           SizedBox(height: 20),
           if (_gatewayPagamento == 'efipay') ...[
+            _buildSwitch(
+              "Ambiente de Teste (Sandbox)",
+              "Ative para usar credenciais de homologação",
+              _efipaySandbox,
+              (v) => setState(() => _efipaySandbox = v),
+            ),
+            SizedBox(height: 10),
             _buildInput(_efipayClientIdCtrl, "Client ID", Icons.key),
             SizedBox(height: 10),
             _buildInput(
@@ -398,6 +423,16 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             ),
             SizedBox(height: 10),
             _buildInput(_efipayChavePixCtrl, "Chave PIX", Icons.qr_code),
+            SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _configurarWebhookEfi,
+              icon: Icon(Icons.link),
+              label: Text("CONFIGURAR WEBHOOK NA EFI"),
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(double.infinity, 45),
+                foregroundColor: Colors.purple[800],
+              ),
+            ),
           ] else
             _buildInput(
               _mpAccessTokenCtrl,
@@ -405,6 +440,88 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
               Icons.vpn_key,
               obscure: true,
             ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _configurarWebhookEfi() async {
+    final urlCtrl = TextEditingController(
+      text: "https://webhookpix-vgbo2eilca-rj.a.run.app",
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Configurar Webhook na EfiPay"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Esta ação registrará a URL abaixo na EfiPay para receber notificações de PIX nesta conta.",
+            ),
+            SizedBox(height: 15),
+            TextField(
+              controller: urlCtrl,
+              decoration: InputDecoration(
+                labelText: "URL do Webhook",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CANCELAR"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              if (urlCtrl.text.isEmpty) return;
+
+              setState(() => _isSaving = true);
+              try {
+                final functions = FirebaseFunctions.instanceFor(
+                  region: 'southamerica-east1',
+                );
+                final result = await functions
+                    .httpsCallable('configurarWebhookEfi')
+                    .call({
+                      'tenantId': widget.tenantId,
+                      'webhookUrl': urlCtrl.text.trim(),
+                      'efipay_client_id': _efipayClientIdCtrl.text.trim(),
+                      'efipay_client_secret': _efipayClientSecretCtrl.text
+                          .trim(),
+                      'chave_pix': _efipayChavePixCtrl.text.trim(),
+                      'efipay_sandbox': _efipaySandbox,
+                    });
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(result.data['message'] ?? "Configurado!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  String msg = e.toString();
+                  if (e is FirebaseFunctionsException) msg = e.message ?? msg;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Erro: $msg"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isSaving = false);
+              }
+            },
+            child: Text("REGISTRAR"),
+          ),
         ],
       ),
     );

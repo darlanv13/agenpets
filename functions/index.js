@@ -53,12 +53,12 @@ exports.onMovimentacaoCriada = estoque.onMovimentacaoCriada;
 
 // MÓDULO ADMIN TENANTS (Multi-lojas)
 
-exports.testarCredenciaisGateway = adminTenantsController.testarCredenciaisGateway;
 exports.criarTenant = adminTenantsController.criarTenant;
 exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
 exports.verificarLoja = adminTenantsController.verificarLoja;
+exports.configurarWebhookEfi = adminTenantsController.configurarWebhookEfi;
 
 
 
