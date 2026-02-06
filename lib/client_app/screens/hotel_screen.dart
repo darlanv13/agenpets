@@ -93,8 +93,7 @@ class _HotelScreenState extends State<HotelScreen> {
       final config = await _firebaseService.getConfiguracoes();
       if (mounted) {
         setState(() {
-          _valorDiaria =
-              (config['preco_hotel_diaria'] ?? 80.00).toDouble();
+          _valorDiaria = (config['preco_hotel_diaria'] ?? 80.00).toDouble();
         });
       }
     } catch (e) {

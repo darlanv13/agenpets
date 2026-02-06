@@ -182,18 +182,9 @@ class FirebaseService {
           return {
             // Note que removi o prefixo "vouchers_" dos nomes dos campos para ficar mais limpo
             // mas você pode manter se preferir, desde que alinhe com o servidor.
-            'banho':
-                (data['vouchers_banho'] as num?)?.toInt() ??
-                (data['banho'] as num?)?.toInt() ??
-                0,
-            'tosa':
-                (data['vouchers_tosa'] as num?)?.toInt() ??
-                (data['tosa'] as num?)?.toInt() ??
-                0,
-            'creche':
-                (data['vouchers_creche'] as num?)?.toInt() ??
-                (data['creche'] as num?)?.toInt() ??
-                0,
+            'banho': (data['vouchers_banho'] as num?)?.toInt() ?? (data['banho'] as num?)?.toInt() ?? 0,
+            'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? (data['tosa'] as num?)?.toInt() ?? 0,
+            'creche': (data['vouchers_creche'] as num?)?.toInt() ?? (data['creche'] as num?)?.toInt() ?? 0,
           };
         });
   }

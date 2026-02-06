@@ -78,10 +78,7 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
           .doc(AppConfig.tenantId)
           .collection('agendamentos')
           .doc(widget.agendamentoId)
-          .update({
-            'status': 'pronto',
-            'fim_servico': FieldValue.serverTimestamp(),
-          });
+          .update({'status': 'pronto', 'fim_servico': FieldValue.serverTimestamp()});
       Navigator.pop(context); // Retorna para a tela anterior
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
