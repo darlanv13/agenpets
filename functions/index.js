@@ -59,6 +59,7 @@ exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
 exports.verificarLoja = adminTenantsController.verificarLoja;
+exports.simularWebhookPix = adminTenantsController.simularWebhookPix;
 
 
 
