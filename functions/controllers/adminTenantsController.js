@@ -5,70 +5,6 @@ const optionsEfi = require("../config/efipay");
 const pixService = require("../services/pixService");
 const fs = require('fs');
 
-// --- 1. Testar Credenciais do Gateway (Simulação) ---
-exports.testarCredenciaisGateway = onCall({ cors: true }, async (request) => {
-  const { tenantId, efipay_client_id, efipay_client_secret, efipay_sandbox } = request.data;
-
-  // Configura credenciais
-  const currentOptions = { ...optionsEfi };
-
-  // Sobrescreve Sandbox se informado na requisição
-  if (efipay_sandbox !== undefined) {
-    currentOptions.sandbox = efipay_sandbox;
-  }
-
-  // Se o cliente enviou ID/Secret (teste antes de salvar), usa eles.
-  // Senão, tenta buscar do banco se tiver tenantId.
-  let clientIdFinal = efipay_client_id;
-  let clientSecretFinal = efipay_client_secret;
-
-  if ((!clientIdFinal || !clientSecretFinal) && tenantId) {
-    const configDoc = await db.collection("tenants")
-      .doc(tenantId)
-      .collection("config")
-      .doc("segredos")
-      .get();
-    if (configDoc.exists) {
-      const data = configDoc.data();
-      if (!clientIdFinal) clientIdFinal = data.efipay_client_id;
-      if (!clientSecretFinal) clientSecretFinal = data.efipay_client_secret;
-
-      // Se não veio na request, tenta pegar do banco para o teste
-      if (efipay_sandbox === undefined && data.efipay_sandbox !== undefined) {
-        currentOptions.sandbox = data.efipay_sandbox;
-      }
-    }
-  }
-
-  if (!clientIdFinal || !clientSecretFinal) {
-    throw new HttpsError("invalid-argument", "Credenciais (Client ID e Client Secret) são obrigatórias para o teste.");
-  }
-
-  currentOptions.client_id = clientIdFinal;
-  currentOptions.client_secret = clientSecretFinal;
-
-  // Se tiver certificado global ou específico (futuro), verifica
-  if (currentOptions.certificate && !fs.existsSync(currentOptions.certificate)) {
-    throw new HttpsError("failed-precondition", "Certificado P12 não encontrado no servidor.");
-  }
-
-  try {
-    const efipay = new EfiPay(currentOptions);
-
-    // Tenta listar chaves PIX (operação leve)
-    // Se der erro de autenticação, vai cair no catch
-    await efipay.pixConfig();
-
-    return {
-      success: true,
-      message: "Credenciais válidas! Conexão com EfiPay estabelecida com sucesso.",
-    };
-  } catch (error) {
-    console.error("Erro Teste Gateway:", error);
-    const msg = error.error_description || error.message || "Erro desconhecido ao conectar com EfiPay.";
-    throw new HttpsError("internal", "Falha na autenticação: " + msg);
-  }
-});
 
 // --- 2. Criar Novo Tenant ---
 exports.criarTenant = onCall(async (request) => {
@@ -253,39 +189,6 @@ exports.verificarLoja = onCall(async (request) => {
   };
 });
 
-// --- 7. [DEBUG] Simular Webhook PIX (Manual Trigger) ---
-exports.simularWebhookPix = onCall({ cors: true }, async (request) => {
-  // Permite que o admin force o processamento de um pagamento
-  // enviando o txid, caso o webhook real tenha falhado ou para testes.
-
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-  }
-
-  const { txid } = request.data;
-
-  if (!txid) {
-    throw new HttpsError("invalid-argument", "txid é obrigatório.");
-  }
-
-  try {
-    const dummyPixEvent = [{
-      txid: txid,
-      valor: "0.00", // Valor simbólico, a lógica busca pelo txid
-      horario: new Date().toISOString()
-    }];
-
-    await pixService.processarPixEvents(dummyPixEvent);
-
-    return {
-      success: true,
-      message: `Simulação de webhook processada para txid: ${txid}`
-    };
-  } catch (e) {
-    console.error("Erro Simulação Webhook:", e);
-    throw new HttpsError("internal", "Erro ao processar simulação: " + e.message);
-  }
-});
 
 // --- 8. [NOVO] Configurar Webhook na EfiPay (Registro Automático) ---
 exports.configurarWebhookEfi = onCall({ cors: true }, async (request) => {

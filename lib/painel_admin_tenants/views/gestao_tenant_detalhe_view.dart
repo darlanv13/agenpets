@@ -425,16 +425,6 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             _buildInput(_efipayChavePixCtrl, "Chave PIX", Icons.qr_code),
             SizedBox(height: 20),
             OutlinedButton.icon(
-              onPressed: _testarGateway,
-              icon: Icon(Icons.check_circle_outline),
-              label: Text("TESTAR CREDENCIAIS"),
-              style: OutlinedButton.styleFrom(
-                minimumSize: Size(double.infinity, 45),
-                foregroundColor: Colors.blue[800],
-              ),
-            ),
-            SizedBox(height: 10),
-            OutlinedButton.icon(
               onPressed: _configurarWebhookEfi,
               icon: Icon(Icons.link),
               label: Text("CONFIGURAR WEBHOOK NA EFI"),
@@ -450,57 +440,9 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
               Icons.vpn_key,
               obscure: true,
             ),
-          SizedBox(height: 20),
-          Divider(),
-          TextButton.icon(
-            onPressed: _simularWebhook,
-            icon: Icon(Icons.bug_report, size: 18),
-            label: Text("SIMULAR WEBHOOK (TESTE)"),
-            style: TextButton.styleFrom(foregroundColor: Colors.orange[800]),
-          ),
         ],
       ),
     );
-  }
-
-  Future<void> _testarGateway() async {
-    setState(() => _isSaving = true);
-    try {
-      final functions = FirebaseFunctions.instanceFor(
-        region: 'southamerica-east1',
-      );
-      final result = await functions
-          .httpsCallable('testarCredenciaisGateway')
-          .call({
-            'tenantId': widget.tenantId,
-            'efipay_client_id': _efipayClientIdCtrl.text.trim(),
-            'efipay_client_secret': _efipayClientSecretCtrl.text.trim(),
-            'efipay_sandbox': _efipaySandbox,
-          });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result.data['message'] ?? "Sucesso!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String msg = e.toString();
-        if (e is FirebaseFunctionsException) msg = e.message ?? msg;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Falha: $msg"),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
   }
 
   Future<void> _configurarWebhookEfi() async {
@@ -578,73 +520,6 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
               }
             },
             child: Text("REGISTRAR"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _simularWebhook() async {
-    final txidCtrl = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Simular Webhook PIX"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text("Insira o TXID da transação para forçar a aprovação:"),
-            SizedBox(height: 10),
-            TextField(
-              controller: txidCtrl,
-              decoration: InputDecoration(
-                labelText: "TXID",
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("CANCELAR"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              if (txidCtrl.text.isEmpty) return;
-
-              setState(() => _isSaving = true);
-              try {
-                final functions = FirebaseFunctions.instanceFor(
-                  region: 'southamerica-east1',
-                );
-                final result = await functions
-                    .httpsCallable('simularWebhookPix')
-                    .call({'txid': txidCtrl.text.trim()});
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(result.data['message'] ?? "Processado!"),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Erro: $e"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              } finally {
-                if (mounted) setState(() => _isSaving = false);
-              }
-            },
-            child: Text("SIMULAR"),
           ),
         ],
       ),
