@@ -354,12 +354,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       } else {
         // Composite string for backend
         paymentString =
-            "Misto: ${_payments
-                .map(
-                  (p) =>
-                      "${p['metodo']} R\$${(p['valor'] as double).toStringAsFixed(2)}",
-                )
-                .join(', ')}";
+            "Misto: ${_payments.map((p) => "${p['metodo']} R\$${(p['valor'] as double).toStringAsFixed(2)}").join(', ')}";
       }
 
       // 2. Call Cloud Function

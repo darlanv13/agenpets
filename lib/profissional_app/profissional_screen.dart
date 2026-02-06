@@ -124,8 +124,8 @@ class _ProfissionalScreenState extends State<ProfissionalScreen> {
     if (userId == null) return;
 
     // Tenta buscar a categoria do serviço para matching mais preciso
-    String servicoNorm =
-        (data['servicoNorm'] ?? data['servico'] ?? '').toString();
+    String servicoNorm = (data['servicoNorm'] ?? data['servico'] ?? '')
+        .toString();
     String? categoriaServico;
 
     try {

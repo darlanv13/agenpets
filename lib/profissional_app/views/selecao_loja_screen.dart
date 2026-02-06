@@ -25,8 +25,11 @@ class _SelecaoLojaScreenState extends State<SelecaoLojaScreen> {
   bool _isLoading = false;
 
   Future<void> _verificarLoja() async {
-    final cnpj = maskCnpj.getUnmaskedText();
-    if (cnpj.length < 14) {
+    final cnpjUnmasked = maskCnpj.getUnmaskedText();
+    final cnpjVisual =
+        _cnpjController.text; // Mantém a máscara para a próxima tela
+
+    if (cnpjUnmasked.length < 14) {
       _showSnack("CNPJ inválido.", Colors.red);
       return;
     }
@@ -35,12 +38,17 @@ class _SelecaoLojaScreenState extends State<SelecaoLojaScreen> {
 
     try {
       final result = await _functions.httpsCallable('verificarLoja').call({
-        'cnpj': cnpj,
+        'cnpj': cnpjUnmasked,
       });
 
+      if (result.data == null) throw Exception("Retorno inválido.");
       final data = result.data as Map;
       final tenantId = data['tenantId'];
       final nomeLoja = data['nome'];
+
+      if (tenantId == null || nomeLoja == null) {
+        throw Exception("Dados incompletos da loja.");
+      }
 
       // Salva em Cache
       final prefs = await SharedPreferences.getInstance();
@@ -52,13 +60,20 @@ class _SelecaoLojaScreenState extends State<SelecaoLojaScreen> {
 
       if (mounted) {
         // Vai para Login Profissional (já configurado)
-        Navigator.pushReplacementNamed(context, '/login_profissional');
+        Navigator.pushReplacementNamed(
+          context,
+          '/login_profissional',
+          arguments: {'cnpj_empresa': cnpjVisual},
+        );
       }
     } catch (e) {
       String msg = "Loja não encontrada.";
       if (e is FirebaseFunctionsException) {
         if (e.code == 'not-found') msg = "Loja não encontrada.";
         if (e.code == 'permission-denied') msg = "Esta loja está inativa.";
+      } else {
+        // Mostra erro real se não for da Cloud Function (ex: erro de parsing)
+        msg = "Erro: $e";
       }
       _showSnack(msg, Colors.red);
     } finally {

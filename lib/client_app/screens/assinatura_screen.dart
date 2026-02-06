@@ -134,12 +134,15 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
   Widget _buildTabPlanos() {
     return StreamBuilder<QuerySnapshot>(
       stream: _db
-          .collection('pacotes_assinatura')
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('pacotes')
           .where('ativo', isEqualTo: true)
           .orderBy('preco', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
+          print("Erro ao carregar planos: ${snapshot.error}");
           return Center(child: Text("Erro ao carregar planos"));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {

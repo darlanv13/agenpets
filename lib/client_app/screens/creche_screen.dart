@@ -908,7 +908,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
                               ),
                               Text(
                                 total == 0
-                                    ? "GRÁTIS"
+                                    ? "R\$ 0.0"
                                     : "R\$ ${total.toStringAsFixed(2)}",
                                 style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.bold,
