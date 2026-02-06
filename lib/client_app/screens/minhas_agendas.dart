@@ -198,6 +198,14 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     return 'Serviço';
   }
 
+  // Helper para identificar o tipo (para badge)
+  String _getServiceType(DocumentSnapshot doc) {
+    final path = doc.reference.parent.id;
+    if (path == 'reservas_hotel') return 'HOTEL';
+    if (path == 'reservas_creche') return 'CRECHE';
+    return 'BANHO & TOSA';
+  }
+
   Map<String, List<DocumentSnapshot>> _groupAppointmentsByDate(
     List<DocumentSnapshot> docs,
   ) {
@@ -288,8 +296,8 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
 
     return SliverToBoxAdapter(
       child: Container(
-        height: 60,
-        padding: EdgeInsets.symmetric(vertical: 10),
+        height: 70, // Altura um pouco maior para acomodar melhor
+        padding: EdgeInsets.symmetric(vertical: 15),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: 20),
@@ -303,8 +311,9 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
               label: Text(
                 filter,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey[700],
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : _corAcai,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
               ),
               selected: isSelected,
@@ -318,14 +327,14 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
               backgroundColor: Colors.white,
               selectedColor: _corAcai,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 side: BorderSide(
-                  color: isSelected ? Colors.transparent : Colors.grey[300]!,
+                  color: isSelected ? Colors.transparent : _corAcai.withOpacity(0.2),
                 ),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              elevation: isSelected ? 2 : 0,
-              pressElevation: 0,
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              elevation: isSelected ? 4 : 0,
+              pressElevation: 2,
             );
           },
         ),
@@ -335,52 +344,64 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
 
   Widget _buildSliverAppBar() {
     return SliverAppBar(
-      backgroundColor: _corFundo,
-      expandedHeight: 80.0,
+      backgroundColor: _corAcai,
+      expandedHeight: 120.0,
       floating: true,
-      pinned: false,
+      pinned: true, // Fixado para melhor UX
       elevation: 0,
       flexibleSpace: FlexibleSpaceBar(
-        titlePadding: EdgeInsets.only(left: 20, bottom: 10),
+        titlePadding: EdgeInsets.only(left: 20, bottom: 16),
+        centerTitle: false,
         title: Text(
           "Minhas Agendas",
           style: TextStyle(
-            color: _corAcai,
+            color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 24,
+            fontSize: 20,
+          ),
+        ),
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                _corAcai,
+                Color(0xFF6A1B9A), // Um tom mais claro
+              ],
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -20,
+                top: -20,
+                child: Icon(
+                  FontAwesomeIcons.paw,
+                  size: 150,
+                  color: Colors.white.withOpacity(0.1),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      centerTitle: false,
-      automaticallyImplyLeading:
-          true,
-      iconTheme: IconThemeData(color: _corAcai),
+      automaticallyImplyLeading: true,
+      iconTheme: IconThemeData(color: Colors.white),
     );
   }
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 15, bottom: 10, left: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 14,
-            decoration: BoxDecoration(
-              color: _corAcai.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.only(top: 20, bottom: 12, left: 5),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: _corAcai,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -393,6 +414,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     final DateTime dataInicio = _getDate(doc);
     final String status = data['status'] ?? 'agendado';
     final String servico = _getService(doc);
+    final String serviceType = _getServiceType(doc); // "HOTEL", "CRECHE", "BANHO"
 
     // Recupera dados do Pet do Cache
     final String? petId = data['pet_id'];
@@ -441,71 +463,54 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     }
 
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
+            color: _corAcai.withOpacity(0.08),
+            blurRadius: 12,
             offset: Offset(0, 4),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          // Recibo talvez precise de adaptação, mas mantemos o padrão por enquanto
+          borderRadius: BorderRadius.circular(20),
           onTap: () => _abrirRecibo(context, data, doc),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(20.0),
             child: Row(
               children: [
-                // 1. Coluna Hora (Estilo Timeline)
+                // 1. Coluna Hora (Estilo Timeline Clean)
                 Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       DateFormat('HH:mm').format(dataInicio),
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.black87,
                       ),
                     ),
-                    SizedBox(height: 4),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    SizedBox(height: 8),
+                     Container(
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        color: corTema.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
+                        color: corTema.withOpacity(0.1),
+                        shape: BoxShape.circle,
                       ),
-                      child: Row(
-                        children: [
-                          Icon(statusIcon, size: 8, color: corTema),
-                          SizedBox(width: 4),
-                          Text(
-                            textoStatus.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: corTema,
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: Icon(statusIcon, size: 18, color: corTema),
                     ),
                   ],
                 ),
 
-                SizedBox(width: 16),
-
-                // Divisória Vertical
-                Container(width: 1, height: 40, color: Colors.grey[200]),
-
-                SizedBox(width: 16),
+                SizedBox(width: 20),
 
                 // 2. Info Principal
                 Expanded(
@@ -513,20 +518,52 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Badge do Tipo
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _corAcai.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _corAcai.withOpacity(0.1)),
+                            ),
+                            child: Text(
+                              serviceType,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _corAcai,
+                              ),
+                            ),
+                          ),
+                          // Status Texto
+                          Text(
+                            textoStatus.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: corTema,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Row(
                         children: [
                           Icon(
                             petType == 'gato'
                                 ? FontAwesomeIcons.cat
                                 : FontAwesomeIcons.dog,
-                            size: 14,
-                            color: Colors.grey[400],
+                            size: 16,
+                            color: Colors.grey[500],
                           ),
                           SizedBox(width: 6),
                           Text(
                             petName,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                              fontSize: 16,
                               color: Colors.black87,
                             ),
                             maxLines: 1,
@@ -537,7 +574,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
                       SizedBox(height: 4),
                       Text(
                         servico,
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -545,18 +582,13 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
                   ),
                 ),
 
+                SizedBox(width: 10),
+
                 // 3. Ícone de Ação
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: _corFundo,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.chevron_right,
-                    size: 18,
-                    color: Colors.grey[400],
-                  ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.grey[300],
                 ),
               ],
             ),
@@ -608,51 +640,53 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
               ),
               child: Icon(
                 FontAwesomeIcons.calendarXmark,
-                size: 50,
+                size: 60,
                 color: _corAcai.withValues(alpha: 0.5),
               ),
             ),
-            SizedBox(height: 24),
+            SizedBox(height: 30),
             Text(
               isFilterEmpty ? "Nenhum resultado" : "Nenhum agendamento",
               style: TextStyle(
                 color: Colors.black87,
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 12),
             Text(
               isFilterEmpty
-                  ? "Não encontramos agendamentos para este filtro."
-                  : "Seu pet está merecendo um cuidado especial. Que tal agendar algo agora?",
+                  ? "Não encontramos agendamentos para este filtro.\nTente selecionar outra categoria."
+                  : "Seu pet está merecendo um cuidado especial.\nQue tal agendar algo agora?",
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey[600],
-                fontSize: 14,
+                fontSize: 15,
                 height: 1.5,
               ),
             ),
-            SizedBox(height: 32),
+            SizedBox(height: 40),
             if (!isFilterEmpty)
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 55,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _corAcai,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    elevation: 0,
+                    elevation: 5,
+                    shadowColor: _corAcai.withOpacity(0.4),
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: Text(
-                    "Agendar Novo Horário",
+                    "AGENDAR NOVO HORÁRIO",
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      letterSpacing: 1.0,
                     ),
                   ),
                 ),
