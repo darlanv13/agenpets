@@ -433,6 +433,16 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
                 foregroundColor: Colors.blue[800],
               ),
             ),
+            SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _configurarWebhookEfi,
+              icon: Icon(Icons.link),
+              label: Text("CONFIGURAR WEBHOOK NA EFI"),
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(double.infinity, 45),
+                foregroundColor: Colors.purple[800],
+              ),
+            ),
           ] else
             _buildInput(
               _mpAccessTokenCtrl,
@@ -491,6 +501,87 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Future<void> _configurarWebhookEfi() async {
+    final urlCtrl = TextEditingController(
+      text: "https://webhookpix-vgbo2eilca-rj.a.run.app",
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Configurar Webhook na EfiPay"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Esta ação registrará a URL abaixo na EfiPay para receber notificações de PIX nesta conta.",
+            ),
+            SizedBox(height: 15),
+            TextField(
+              controller: urlCtrl,
+              decoration: InputDecoration(
+                labelText: "URL do Webhook",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("CANCELAR"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              if (urlCtrl.text.isEmpty) return;
+
+              setState(() => _isSaving = true);
+              try {
+                final functions = FirebaseFunctions.instanceFor(
+                  region: 'southamerica-east1',
+                );
+                final result = await functions
+                    .httpsCallable('configurarWebhookEfi')
+                    .call({
+                      'tenantId': widget.tenantId,
+                      'webhookUrl': urlCtrl.text.trim(),
+                      'efipay_client_id': _efipayClientIdCtrl.text.trim(),
+                      'efipay_client_secret': _efipayClientSecretCtrl.text.trim(),
+                      'chave_pix': _efipayChavePixCtrl.text.trim(),
+                      'efipay_sandbox': _efipaySandbox,
+                    });
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(result.data['message'] ?? "Configurado!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  String msg = e.toString();
+                  if (e is FirebaseFunctionsException) msg = e.message ?? msg;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Erro: $msg"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isSaving = false);
+              }
+            },
+            child: Text("REGISTRAR"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _simularWebhook() async {
