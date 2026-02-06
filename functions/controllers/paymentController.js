@@ -3,6 +3,7 @@ const { db, admin } = require("../config/firebase");
 const { addDays } = require("date-fns");
 const EfiPay = require("sdk-node-apis-efi");
 const optionsEfi = require("../config/efipay");
+const fs = require('fs');
 
 // --- 1. Gerar PIX para Assinatura (Agora com tenantId) ---
 exports.gerarPixAssinatura = onCall(async (request) => {
@@ -36,6 +37,12 @@ exports.gerarPixAssinatura = onCall(async (request) => {
         // Para suporte total a contas diferentes, seria necessário gerenciar múltiplos certificados.
     }
 
+    // Verifica certificado
+    if (currentOptions.certificate && !fs.existsSync(currentOptions.certificate)) {
+        console.error(`Certificado não encontrado em: ${currentOptions.certificate}`);
+        throw new HttpsError("failed-precondition", "Certificado EfiPay não configurado no servidor.");
+    }
+
     // Busca o pacote (Pode ser global ou da loja, aqui assumindo global para simplificar, mas salvando a venda na loja)
     // /db.collection('tenants').doc(tenantId).collection('pacotes').doc(pacoteId)...
     const pacoteRef = db.collection("tenants").doc(tenantId).collection("pacotes").doc(pacoteId);
@@ -47,6 +54,11 @@ exports.gerarPixAssinatura = onCall(async (request) => {
 
     const pacoteData = pacoteSnap.data();
     const valor = parseFloat(pacoteData.preco);
+
+    if (isNaN(valor) || valor <= 0) {
+        throw new HttpsError("invalid-argument", "Valor do pacote inválido.");
+    }
+
     const nomePacote = pacoteData.nome || "Pacote AgenPet";
 
     // Extrai Vouchers (Snapshot)
@@ -83,8 +95,8 @@ exports.gerarPixAssinatura = onCall(async (request) => {
         pixCopiaCola = qrCode.qrcode;
         imagemQrcode = qrCode.imagemQrcode;
     } catch (error) {
-        console.error("Erro EfiPay:", error);
-        throw new HttpsError("internal", "Erro ao gerar PIX: " + error.message);
+        console.error("Erro EfiPay:", JSON.stringify(error, null, 2));
+        throw new HttpsError("internal", "Erro ao gerar PIX: " + (error.message || error.error_description || "Erro desconhecido"));
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
@@ -189,4 +201,3 @@ exports.webhookPix = onRequest(async (req, res) => {
         res.status(500).send("Erro interno");
     }
 });
-
