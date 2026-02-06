@@ -33,6 +33,9 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
   List<DocumentSnapshot> _reservasHotel = [];
   List<DocumentSnapshot> _reservasCreche = [];
   List<DocumentSnapshot> _allDocs = [];
+
+  // Filtros
+  String _filtroSelecionado = 'Todos';
   bool _isLoading = true;
 
   @override
@@ -145,6 +148,25 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     }
   }
 
+  // --- Filtros ---
+  List<DocumentSnapshot> get _listaFiltrada {
+    if (_filtroSelecionado == 'Todos') {
+      return _allDocs;
+    }
+
+    return _allDocs.where((doc) {
+      final path = doc.reference.parent.id;
+      if (_filtroSelecionado == 'Banho & Tosa') {
+        return path == 'agendamentos';
+      } else if (_filtroSelecionado == 'Hotel') {
+        return path == 'reservas_hotel';
+      } else if (_filtroSelecionado == 'Creche') {
+        return path == 'reservas_creche';
+      }
+      return true;
+    }).toList();
+  }
+
   // --- Helpers de Unificação ---
 
   DateTime _getDate(DocumentSnapshot doc) {
@@ -217,44 +239,96 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
             return Center(child: CircularProgressIndicator(color: _corAcai));
           }
 
-          // --- ESTADO DE VAZIO ---
-          if (_allDocs.isEmpty) {
-            return CustomScrollView(
-              slivers: [
-                _buildSliverAppBar(),
-                SliverFillRemaining(child: _buildEmptyState()),
-              ],
-            );
-          }
+          final filteredDocs = _listaFiltrada;
+          final groupedDocs = _groupAppointmentsByDate(filteredDocs);
 
-          // --- PREPARAÇÃO DOS DADOS ---
-          final groupedDocs = _groupAppointmentsByDate(_allDocs);
-
+          // --- Custom Scroll View Principal ---
           return CustomScrollView(
             physics: BouncingScrollPhysics(),
             slivers: [
               _buildSliverAppBar(),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(20, 10, 20, 40),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final sectionKey = groupedDocs.keys.elementAt(index);
-                    final sectionDocs = groupedDocs[sectionKey]!;
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionHeader(sectionKey),
-                        ...sectionDocs.map((doc) => _buildCardModerno(doc)),
-                        SizedBox(height: 10),
-                      ],
-                    );
-                  }, childCount: groupedDocs.keys.length),
+              // Filtros
+              _buildFilterBar(),
+
+              // --- ESTADO DE VAZIO (Considerando Filtros) ---
+              if (filteredDocs.isEmpty)
+                 SliverFillRemaining(
+                   hasScrollBody: false,
+                   child: _buildEmptyState(isFilterEmpty: _allDocs.isNotEmpty),
+                 )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(20, 10, 20, 40),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final sectionKey = groupedDocs.keys.elementAt(index);
+                      final sectionDocs = groupedDocs[sectionKey]!;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionHeader(sectionKey),
+                          ...sectionDocs.map((doc) => _buildCardModerno(doc)),
+                          SizedBox(height: 10),
+                        ],
+                      );
+                    }, childCount: groupedDocs.keys.length),
+                  ),
                 ),
-              ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildFilterBar() {
+    final filters = ["Todos", "Banho & Tosa", "Hotel", "Creche"];
+
+    return SliverToBoxAdapter(
+      child: Container(
+        height: 60,
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          itemCount: filters.length,
+          separatorBuilder: (c, i) => SizedBox(width: 10),
+          itemBuilder: (context, index) {
+            final filter = filters[index];
+            final isSelected = _filtroSelecionado == filter;
+
+            return ChoiceChip(
+              label: Text(
+                filter,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey[700],
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              selected: isSelected,
+              onSelected: (bool selected) {
+                if (selected) {
+                  setState(() {
+                    _filtroSelecionado = filter;
+                  });
+                }
+              },
+              backgroundColor: Colors.white,
+              selectedColor: _corAcai,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isSelected ? Colors.transparent : Colors.grey[300]!,
+                ),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              elevation: isSelected ? 2 : 0,
+              pressElevation: 0,
+            );
+          },
+        ),
       ),
     );
   }
@@ -519,7 +593,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState({bool isFilterEmpty = false}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40.0),
@@ -540,7 +614,7 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
             ),
             SizedBox(height: 24),
             Text(
-              "Nenhum agendamento",
+              isFilterEmpty ? "Nenhum resultado" : "Nenhum agendamento",
               style: TextStyle(
                 color: Colors.black87,
                 fontSize: 20,
@@ -549,7 +623,9 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
             ),
             SizedBox(height: 8),
             Text(
-              "Seu pet está merecendo um cuidado especial. Que tal agendar algo agora?",
+              isFilterEmpty
+                  ? "Não encontramos agendamentos para este filtro."
+                  : "Seu pet está merecendo um cuidado especial. Que tal agendar algo agora?",
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey[600],
@@ -558,28 +634,29 @@ class _MinhasAgendasState extends State<MinhasAgendas> {
               ),
             ),
             SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _corAcai,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            if (!isFilterEmpty)
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _corAcai,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
                   ),
-                  elevation: 0,
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  "Agendar Novo Horário",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    "Agendar Novo Horário",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
