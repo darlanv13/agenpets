@@ -29,6 +29,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
 
   final _efipayClientIdCtrl = TextEditingController();
   final _efipayClientSecretCtrl = TextEditingController();
+  final _efipayChavePixCtrl = TextEditingController();
   final _mpAccessTokenCtrl = TextEditingController();
   final _logoAppCtrl = TextEditingController();
   final _logoAdminCtrl = TextEditingController();
@@ -65,6 +66,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         setState(() {
           _efipayClientIdCtrl.text = data['efipay_client_id'] ?? '';
           _efipayClientSecretCtrl.text = data['efipay_client_secret'] ?? '';
+          _efipayChavePixCtrl.text = data['chave_pix'] ?? '';
           _mpAccessTokenCtrl.text = data['mercadopago_access_token'] ?? '';
           _logoAppCtrl.text = data['logo_app_url'] ?? '';
           _logoAdminCtrl.text = data['logo_admin_url'] ?? '';
@@ -119,6 +121,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
         'gateway_pagamento': _gatewayPagamento,
         'efipay_client_id': _efipayClientIdCtrl.text.trim(),
         'efipay_client_secret': _efipayClientSecretCtrl.text.trim(),
+        'chave_pix': _efipayChavePixCtrl.text.trim(),
         'mercadopago_access_token': _mpAccessTokenCtrl.text.trim(),
       });
 
@@ -392,6 +395,12 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
               "Client Secret",
               Icons.lock,
               obscure: true,
+            ),
+            SizedBox(height: 10),
+            _buildInput(
+              _efipayChavePixCtrl,
+              "Chave PIX",
+              Icons.qr_code,
             ),
           ] else
             _buildInput(

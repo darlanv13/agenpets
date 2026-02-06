@@ -169,6 +169,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
     gateway_pagamento,
     efipay_client_id,
     efipay_client_secret,
+    chave_pix,
     mercadopago_access_token,
   } = request.data;
 
@@ -196,6 +197,7 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   // Só salva se o dado foi enviado (evita sobrescrever com null)
   if (efipay_client_id !== undefined) dadosSeguros.efipay_client_id = efipay_client_id;
   if (efipay_client_secret !== undefined) dadosSeguros.efipay_client_secret = efipay_client_secret;
+  if (chave_pix !== undefined) dadosSeguros.chave_pix = chave_pix;
   if (mercadopago_access_token !== undefined) dadosSeguros.mercadopago_access_token = mercadopago_access_token;
   // Se o gateway mudou, salvamos também nos segredos para redundância/backend saber a preferência segura
   if (gateway_pagamento !== undefined) dadosSeguros.gateway_selecionado = gateway_pagamento;
