@@ -139,6 +139,11 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
             currentOptions.client_secret = config.efipay_client_secret;
         }
 
+        // Sobrescreve Sandbox se configurado na loja
+        if (config.efipay_sandbox !== undefined) {
+            currentOptions.sandbox = config.efipay_sandbox;
+        }
+
         // Verifica certificado
         if (currentOptions.certificate) {
             if (!fs.existsSync(currentOptions.certificate)) {
