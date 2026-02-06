@@ -42,6 +42,7 @@ exports.realizarVendaAssinatura = vendas.realizarVendaAssinatura;
 // Pagamentos (Pix / Gateway) - Mantido do controller original de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
 exports.webhookPix = paymentController.webhookPix;
+exports.webhookMercadoPago = paymentController.webhookMercadoPago;
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 
 // MÓDULO DE ESTOQUE E KARDEX (NOVO - Triggers)
