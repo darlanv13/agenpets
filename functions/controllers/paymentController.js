@@ -30,7 +30,10 @@ exports.gerarPixAssinatura = onCall(async (request) => {
     // Configura credenciais dinâmicas do EfiPay
     const currentOptions = { ...optionsEfi }; // Copia padrão (incluindo certificado)
 
-    if (config.efipay_client_id && config.efipay_client_secret) {
+    if (config.efipay_client_id) {
+        if (!config.efipay_client_secret) {
+             throw new HttpsError("failed-precondition", "Configuração EfiPay incompleta: Client Secret não encontrado na loja.");
+        }
         currentOptions.client_id = config.efipay_client_id;
         currentOptions.client_secret = config.efipay_client_secret;
         // Nota: O certificado ainda será o padrão definido em optionsEfi.
