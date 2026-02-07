@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/utils/validators.dart';
 
 class NovaReservaCrecheDialog extends StatefulWidget {
   const NovaReservaCrecheDialog({super.key});
@@ -127,11 +128,16 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
   Future<void> _buscarCliente() async {
     if (_cpfController.text.isEmpty) return;
 
+    String cpfLimpo = _cpfController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (!Validators.isCpfValido(cpfLimpo)) {
+      _showSnack("CPF inválido", Colors.red);
+      return;
+    }
+
     setState(() {
       _buscandoCliente = true;
       _clienteNaoEncontrado = false;
     });
-    String cpfLimpo = _cpfController.text.replaceAll(RegExp(r'[^0-9]'), '');
 
     try {
       final userDoc = await _db.collection('users').doc(cpfLimpo).get();
