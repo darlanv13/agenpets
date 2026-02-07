@@ -138,7 +138,10 @@ class _AssinaturaScreenState extends State<AssinaturaScreen>
           .doc(AppConfig.tenantId)
           .collection('pacotes')
           .where('ativo', isEqualTo: true)
-          // .orderBy('preco', descending: false) // Removido para evitar erro de índice
+          .orderBy(
+            'preco',
+            descending: false,
+          ) // Removido para evitar erro de índice
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
