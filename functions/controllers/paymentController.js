@@ -65,10 +65,16 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
     try {
         // Busca e-mail do usuário para preencher o payer (obrigatório/recomendado)
         const userDoc = await db.collection("users").doc(cpf_user).get();
-        const emailUser = userDoc.exists ? userDoc.data().email : "cliente@agenpets.com.br";
-        const nomeUser = userDoc.exists ? userDoc.data().nome : "Cliente AgenPet";
-        const [firstName, ...rest] = nomeUser.split(" ");
-        const lastName = rest.join(" ");
+        const userData = userDoc.exists ? userDoc.data() : {};
+
+        // Garante valores padrão para evitar rejeição da API
+        const emailUser = (userData.email && userData.email.includes('@')) ? userData.email : "cliente@agenpets.com.br";
+        const nomeUser = userData.nome || "Cliente AgenPet";
+
+        // Separa nome e sobrenome
+        const parts = nomeUser.trim().split(" ");
+        const firstName = parts[0] || "Cliente";
+        const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "AgenPet";
 
         const paymentData = {
             transaction_amount: valor,
@@ -77,7 +83,7 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
             payer: {
                 email: emailUser,
                 first_name: firstName,
-                last_name: lastName || "Sobrenome",
+                last_name: lastName,
                 identification: {
                     type: "CPF",
                     number: cpfLimpo
