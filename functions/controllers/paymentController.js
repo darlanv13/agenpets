@@ -1,9 +1,6 @@
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { db, admin } = require("../config/firebase");
 const { addDays } = require("date-fns");
-const EfiPay = require("sdk-node-apis-efi");
-const optionsEfi = require("../config/efipay");
-const fs = require('fs');
 const pixService = require("../services/pixService");
 const axios = require('axios');
 
@@ -16,16 +13,7 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
         throw new HttpsError("invalid-argument", "CPF, ID do pacote e ID da Loja são obrigatórios.");
     }
 
-    // 1. Busca Configuração da Loja (Chaves de API)
-    // Busca configs públicas (para saber o gateway selecionado)
-    const paramsDoc = await db.collection("tenants")
-        .doc(tenantId)
-        .collection("config")
-        .doc("parametros")
-        .get();
-    const params = paramsDoc.exists ? paramsDoc.data() : {};
-
-    const gatewaySelecionado = params.gateway_pagamento || "efipay";
+    const gatewaySelecionado = "mercadopago"; // Forçado
 
     // Busca segredos
     const segredosDoc = await db.collection("tenants")
@@ -67,124 +55,59 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
     let metodoPagamento = "pix";
 
     // =========================================================================
-    // BRANCH: MERCADO PAGO
+    // MERCADO PAGO (Único Gateway)
     // =========================================================================
-    if (gatewaySelecionado === "mercadopago") {
-        const mpAccessToken = config.mercadopago_access_token;
-        if (!mpAccessToken) {
-            throw new HttpsError("failed-precondition", "Token do Mercado Pago não configurado na loja.");
-        }
-
-        try {
-            // Busca e-mail do usuário para preencher o payer (obrigatório/recomendado)
-            const userDoc = await db.collection("users").doc(cpf_user).get();
-            const emailUser = userDoc.exists ? userDoc.data().email : "cliente@agenpets.com.br";
-            const nomeUser = userDoc.exists ? userDoc.data().nome : "Cliente AgenPet";
-            const [firstName, ...rest] = nomeUser.split(" ");
-            const lastName = rest.join(" ");
-
-            const paymentData = {
-                transaction_amount: valor,
-                description: nomePacote,
-                payment_method_id: "pix",
-                payer: {
-                    email: emailUser,
-                    first_name: firstName,
-                    last_name: lastName || "Sobrenome",
-                    identification: {
-                        type: "CPF",
-                        number: cpfLimpo
-                    }
-                },
-                // Opcional: notification_url: `https://.../webhookMercadoPago`
-            };
-
-            const response = await axios.post("https://api.mercadopago.com/v1/payments", paymentData, {
-                headers: {
-                    "Authorization": `Bearer ${mpAccessToken}`,
-                    "Content-Type": "application/json",
-                    "X-Idempotency-Key": `${tenantId}-${pacoteId}-${Date.now()}`
-                }
-            });
-
-            const data = response.data;
-            txid = data.id.toString(); // Mercado Pago usa o ID numérico como identificador principal
-
-            const qrInfo = data.point_of_interaction?.transaction_data;
-            if (qrInfo) {
-                pixCopiaCola = qrInfo.qr_code;
-                imagemQrcode = qrInfo.qr_code_base64;
-            }
-            metodoPagamento = "mercadopago_pix";
-
-        } catch (error) {
-            console.error("Erro Mercado Pago:", error.response ? error.response.data : error.message);
-            const msg = error.response?.data?.message || error.message || "Erro ao criar PIX no Mercado Pago.";
-            throw new HttpsError("internal", "Erro Mercado Pago: " + msg);
-        }
-
+    const mpAccessToken = config.mercadopago_access_token;
+    if (!mpAccessToken) {
+        throw new HttpsError("failed-precondition", "Token do Mercado Pago não configurado na loja.");
     }
-    // =========================================================================
-    // BRANCH: EFIPAY (Padrão)
-    // =========================================================================
-    else {
-        // Configura credenciais dinâmicas do EfiPay
-        const currentOptions = { ...optionsEfi }; // Copia padrão (incluindo certificado)
 
-        if (config.efipay_client_id) {
-            if (!config.efipay_client_secret) {
-                throw new HttpsError("failed-precondition", "Configuração EfiPay incompleta: Client Secret não encontrado na loja.");
+    try {
+        // Busca e-mail do usuário para preencher o payer (obrigatório/recomendado)
+        const userDoc = await db.collection("users").doc(cpf_user).get();
+        const emailUser = userDoc.exists ? userDoc.data().email : "cliente@agenpets.com.br";
+        const nomeUser = userDoc.exists ? userDoc.data().nome : "Cliente AgenPet";
+        const [firstName, ...rest] = nomeUser.split(" ");
+        const lastName = rest.join(" ");
+
+        const paymentData = {
+            transaction_amount: valor,
+            description: nomePacote,
+            payment_method_id: "pix",
+            payer: {
+                email: emailUser,
+                first_name: firstName,
+                last_name: lastName || "Sobrenome",
+                identification: {
+                    type: "CPF",
+                    number: cpfLimpo
+                }
+            },
+            // Opcional: notification_url: `https://.../webhookMercadoPago`
+        };
+
+        const response = await axios.post("https://api.mercadopago.com/v1/payments", paymentData, {
+            headers: {
+                "Authorization": `Bearer ${mpAccessToken}`,
+                "Content-Type": "application/json",
+                "X-Idempotency-Key": `${tenantId}-${pacoteId}-${Date.now()}`
             }
-            currentOptions.client_id = config.efipay_client_id;
-            currentOptions.client_secret = config.efipay_client_secret;
+        });
+
+        const data = response.data;
+        txid = data.id.toString(); // Mercado Pago usa o ID numérico como identificador principal
+
+        const qrInfo = data.point_of_interaction?.transaction_data;
+        if (qrInfo) {
+            pixCopiaCola = qrInfo.qr_code;
+            imagemQrcode = qrInfo.qr_code_base64;
         }
+        metodoPagamento = "mercadopago_pix";
 
-        // Sobrescreve Sandbox se configurado na loja
-        if (config.efipay_sandbox !== undefined) {
-            currentOptions.sandbox = config.efipay_sandbox;
-        }
-
-        // Verifica certificado
-        if (currentOptions.certificate) {
-            if (!fs.existsSync(currentOptions.certificate)) {
-                console.error(`Certificado não encontrado em: ${currentOptions.certificate}`);
-                throw new HttpsError("failed-precondition", "Certificado EfiPay não configurado no servidor.");
-            }
-            const certStats = fs.statSync(currentOptions.certificate);
-            if (certStats.size < 100) {
-                console.error("Certificado placeholder detectado.");
-                throw new HttpsError("failed-precondition", "O certificado PIX não está configurado corretamente (arquivo placeholder detectado).");
-            }
-        }
-
-        try {
-            const efipay = new EfiPay(currentOptions);
-            // Usa chave PIX da config se existir, senão usa padrão
-            // Tenta pegar de segredos (caso tenha migrado) ou parametros (padrão)
-            const chavePix = config.chave_pix || params.chave_pix || "client_id_homologacao";
-
-            const bodyPix = {
-                calendario: { expiracao: 3600 },
-                devedor: { cpf: cpfLimpo, nome: "Cliente AgenPet" },
-                valor: { original: valor.toFixed(2) },
-                chave: chavePix,
-            };
-
-            const cobranca = await efipay.pixCreateImmediateCharge([], bodyPix);
-            txid = cobranca.txid;
-
-            const qrCode = await efipay.pixGenerateQRCode({ id: cobranca.loc.id });
-            pixCopiaCola = qrCode.qrcode;
-            imagemQrcode = qrCode.imagemQrcode;
-        } catch (error) {
-            console.error("Erro EfiPay:", JSON.stringify(error, null, 2));
-            const msg = error.message ||
-                error.error_description ||
-                (error.error ? error.error.toString() : null) ||
-                (typeof error === 'string' ? error : "Erro desconhecido");
-
-            throw new HttpsError("internal", "Erro ao gerar PIX: " + msg);
-        }
+    } catch (error) {
+        console.error("Erro Mercado Pago:", error.response ? error.response.data : error.message);
+        const msg = error.response?.data?.message || error.message || "Erro ao criar PIX no Mercado Pago.";
+        throw new HttpsError("internal", "Erro Mercado Pago: " + msg);
     }
 
     // Salva a Venda 'Pendente' com o ID DA LOJA
@@ -212,47 +135,6 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
         gateway: gatewaySelecionado
     };
 });
-
-// --- 2. Webhook Unificado EfiPay ---
-const webhookHandler = async (req, res) => {
-    try {
-        // Log para debug (essencial para ver o que o EfiPay está enviando)
-        console.log("Webhook PIX Recebido (Headers):", req.headers);
-        console.log("Webhook PIX Recebido (Body):", JSON.stringify(req.body));
-
-        // Validação básica para evitar crash
-        if (!req.body) {
-            console.warn("Body vazio recebido.");
-            // Retorna 200 para não quebrar validações de existência do endpoint
-            return res.status(200).send();
-        }
-
-        const { pix } = req.body;
-
-        // Se não tiver a chave 'pix', pode ser validação ou outro evento
-        if (!pix) {
-            console.log("Campo 'pix' não encontrado. Assumindo validação do endpoint.");
-            return res.status(200).send();
-        }
-
-        if (!Array.isArray(pix)) {
-            console.error("Campo 'pix' não é um array:", pix);
-            return res.status(400).send("Formato inválido");
-        }
-
-        // Processa os eventos
-        await pixService.processarPixEvents(pix);
-        res.status(200).send();
-
-    } catch (e) {
-        console.error("Erro CRÍTICO no Webhook PIX:", e);
-        // Retorna 500 apenas se for erro de processamento interno real
-        res.status(500).send("Erro interno no servidor");
-    }
-};
-
-exports.webhookPix = onRequest({ cors: true }, webhookHandler);
-exports.efipaywebhook = onRequest({ cors: true }, webhookHandler);
 
 // --- 3. Webhook Mercado Pago ---
 exports.webhookMercadoPago = onRequest({ cors: true }, async (req, res) => {
