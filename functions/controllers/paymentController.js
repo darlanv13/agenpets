@@ -76,6 +76,10 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
         const firstName = parts[0] || "Cliente";
         const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "AgenPet";
 
+        // URL do Webhook com tenantId para evitar problemas de índice no Firestore
+        const projectId = JSON.parse(process.env.FIREBASE_CONFIG).projectId;
+        const webhookUrl = `https://southamerica-east1-${projectId}.cloudfunctions.net/webhookMercadoPago?tenantId=${tenantId}`;
+
         const paymentData = {
             transaction_amount: valor,
             description: nomePacote,
@@ -89,7 +93,7 @@ exports.gerarPixAssinatura = onCall({ cors: true }, async (request) => {
                     number: cpfLimpo
                 }
             },
-            // Opcional: notification_url: `https://.../webhookMercadoPago`
+            notification_url: webhookUrl
         };
 
         const response = await axios.post("https://api.mercadopago.com/v1/payments", paymentData, {
@@ -153,21 +157,22 @@ exports.webhookMercadoPago = onRequest({ cors: true }, async (req, res) => {
 
     if ((topic === 'payment' || req.body.action === 'payment.updated') && id) {
         try {
-            // Precisamos buscar o status atualizado do pagamento na API do MP
-            // O problema é saber de QUAL loja é esse pagamento para pegar o token correto.
-            // Solução Ideal: Webhook URL contendo o tenantId ou buscar em todas as lojas (lento).
-            // Solução Pragmática (AgenPets): 
-            // 1. Busca a venda pelo txid (que salvamos como sendo o ID do MP) em collectionGroup
-            const vendaSnap = await db.collectionGroup("vendas_assinaturas").where("txid", "==", id.toString()).get();
+            let tenantId = req.query.tenantId;
 
-            if (vendaSnap.empty) {
-                console.log(`Venda MP não encontrada para ID: ${id}`);
-                return res.status(200).send(); // Retorna 200 para o MP parar de enviar
+            if (!tenantId) {
+                // FALLBACK: Se não vier tenantId na URL, busca via collectionGroup (Requer índice)
+                // 1. Busca a venda pelo txid (que salvamos como sendo o ID do MP) em collectionGroup
+                const vendaSnap = await db.collectionGroup("vendas_assinaturas").where("txid", "==", id.toString()).get();
+
+                if (vendaSnap.empty) {
+                    console.log(`Venda MP não encontrada para ID: ${id}`);
+                    return res.status(200).send(); // Retorna 200 para o MP parar de enviar
+                }
+
+                const vendaDoc = vendaSnap.docs[0];
+                const vendaData = vendaDoc.data();
+                tenantId = vendaData.tenantId;
             }
-
-            const vendaDoc = vendaSnap.docs[0];
-            const vendaData = vendaDoc.data();
-            const tenantId = vendaData.tenantId;
 
             // Busca credencial da loja
             const segredosDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("segredos").get();
@@ -188,7 +193,7 @@ exports.webhookMercadoPago = onRequest({ cors: true }, async (req, res) => {
             if (status === 'approved') {
                 // Simula evento PIX para aproveitar o serviço existente
                 // O serviço espera { txid }
-                const eventoSimulado = [{ txid: id.toString() }];
+                const eventoSimulado = [{ txid: id.toString(), tenantId: tenantId }];
                 await pixService.processarPixEvents(eventoSimulado);
             }
 
