@@ -1,7 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { db, admin } = require("../config/firebase");
-const EfiPay = require("sdk-node-apis-efi");
-const optionsEfi = require("../config/efipay");
 const pixService = require("../services/pixService");
 const fs = require('fs');
 
@@ -44,7 +42,7 @@ exports.criarTenant = onCall(async (request) => {
     tem_tosa: true,
     tem_hotel: false,
     tem_creche: false,
-    gateway_pagamento: "efipay", // Default
+    gateway_pagamento: "mercadopago", // Default
     logo_app_url: "",
     logo_admin_url: "",
   });
@@ -113,11 +111,9 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   const {
     tenantId,
     gateway_pagamento,
-    efipay_client_id,
-    efipay_client_secret,
-    chave_pix,
+
     mercadopago_access_token,
-    efipay_sandbox,
+
   } = request.data;
 
   if (!tenantId) {
@@ -188,77 +184,3 @@ exports.verificarLoja = onCall(async (request) => {
     nome: data.nome,
   };
 });
-
-
-// --- 8. [NOVO] Configurar Webhook na EfiPay (Registro Automático) ---
-exports.configurarWebhookEfi = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-  }
-
-  const { tenantId, webhookUrl, efipay_client_id, efipay_client_secret, efipay_sandbox, chave_pix } = request.data;
-
-  // 1. Configura Credenciais
-  const currentOptions = { ...optionsEfi };
-
-  if (efipay_sandbox !== undefined) {
-    currentOptions.sandbox = efipay_sandbox;
-  }
-
-  // Se não vieram na requisição, busca do banco
-  let clientId = efipay_client_id;
-  let clientSecret = efipay_client_secret;
-  let chavePix = chave_pix;
-
-  if (tenantId && (!clientId || !clientSecret || !chavePix)) {
-    const doc = await db.collection("tenants").doc(tenantId).collection("config").doc("segredos").get();
-    if (doc.exists) {
-      const data = doc.data();
-      if (!clientId) clientId = data.efipay_client_id;
-      if (!clientSecret) clientSecret = data.efipay_client_secret;
-      if (!chavePix) chavePix = data.chave_pix;
-      // Se sandbox não veio na request, usa do banco
-      if (efipay_sandbox === undefined && data.efipay_sandbox !== undefined) {
-        currentOptions.sandbox = data.efipay_sandbox;
-      }
-    }
-  }
-
-  if (!clientId || !clientSecret || !chavePix || !webhookUrl) {
-    throw new HttpsError("invalid-argument", "Credenciais (Client ID, Secret, Chave Pix) e URL do Webhook são obrigatórias.");
-  }
-
-  currentOptions.client_id = clientId;
-  currentOptions.client_secret = clientSecret;
-
-  if (currentOptions.certificate && !fs.existsSync(currentOptions.certificate)) {
-    throw new HttpsError("failed-precondition", "Certificado P12 não encontrado.");
-  }
-
-  try {
-    const efipay = new EfiPay(currentOptions);
-
-    const params = {
-      chave: chavePix,
-    };
-
-    const body = {
-      webhookUrl: webhookUrl,
-    };
-
-    // Chama API da Efi para registrar o webhook
-    const response = await efipay.pixConfigWebhook(params, body);
-
-    return {
-      success: true,
-      message: "Webhook configurado com sucesso na EfiPay!",
-      data: response
-    };
-
-  } catch (error) {
-    console.error("Erro Configurar Webhook Efi:", error);
-    const msg = error.error_description || error.message || "Erro ao configurar webhook.";
-    throw new HttpsError("internal", "Falha na EfiPay: " + msg);
-  }
-});
-

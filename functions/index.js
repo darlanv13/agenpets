@@ -41,8 +41,6 @@ exports.realizarVendaAssinatura = vendas.realizarVendaAssinatura;
 
 // Pagamentos (Pix / Gateway) - Mantido do controller original de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
-exports.webhookPix = paymentController.webhookPix;
-exports.efipaywebhook = paymentController.efipaywebhook;
 exports.webhookMercadoPago = paymentController.webhookMercadoPago;
 exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
 
@@ -59,7 +57,6 @@ exports.atualizarTenant = adminTenantsController.atualizarTenant;
 exports.alternarStatusTenant = adminTenantsController.alternarStatusTenant;
 exports.salvarCredenciaisGateway = adminTenantsController.salvarCredenciaisGateway;
 exports.verificarLoja = adminTenantsController.verificarLoja;
-exports.configurarWebhookEfi = adminTenantsController.configurarWebhookEfi;
 
 
 
