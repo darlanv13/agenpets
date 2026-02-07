@@ -5,6 +5,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/utils/validators.dart';
+import 'package:agenpet/painel_loja_web/views/components/cadastro_rapido_dialog.dart';
 
 class NovoAgendamentoDialog extends StatefulWidget {
   const NovoAgendamentoDialog({super.key});
@@ -28,6 +30,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
   // Dados
   String? _clienteId;
   String? _clienteNome;
+  bool _clienteNaoEncontrado = false;
   List<Map<String, dynamic>> _petsEncontrados = [];
   String? _petIdSelecionado;
 
@@ -143,6 +146,11 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
       return;
     }
 
+    if (!Validators.isCpfValido(termo)) {
+      _showSnack("CPF inválido", Colors.red);
+      return;
+    }
+
     final snap = await _db
         .collection('users')
         .where('cpf', isEqualTo: termo)
@@ -171,6 +179,7 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
       setState(() {
         _clienteId = userDoc.id;
         _clienteNome = uData['nome'];
+        _clienteNaoEncontrado = false;
         _petsEncontrados = petsList;
         _petIdSelecionado = petsList.isNotEmpty ? petsList.first['id'] : null;
       });
@@ -179,7 +188,27 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
       setState(() {
         _clienteId = null;
         _clienteNome = null;
+        _clienteNaoEncontrado = true;
         _petsEncontrados = [];
+      });
+    }
+  }
+
+  void _abrirCadastroRapido() async {
+    final result = await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => CadastroRapidoDialog(cpfInicial: _buscaController.text),
+    );
+
+    if (result != null && result['sucesso'] == true) {
+      setState(() {
+        _clienteNaoEncontrado = false;
+        _clienteId = result['cpf'];
+        _clienteNome = result['nome_cliente'];
+        _buscaController.text = result['cpf'];
+        _petsEncontrados = [result['pet_novo']];
+        _petIdSelecionado = result['pet_novo']['id'];
       });
     }
   }
@@ -333,6 +362,40 @@ class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
                                 ),
                               ],
                             ),
+
+                            // CLIENTE NÃO ENCONTRADO
+                            if (_clienteNaoEncontrado) ...[
+                              SizedBox(height: 15),
+                              Container(
+                                padding: EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.red[100]!),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      "Cliente não encontrado",
+                                      style: TextStyle(
+                                        color: Colors.red[800],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        minimumSize: Size(double.infinity, 35),
+                                      ),
+                                      onPressed: _abrirCadastroRapido,
+                                      child: Text("Cadastrar Agora"),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
 
                             // CLIENTE ENCONTRADO
                             if (_clienteNome != null) ...[
