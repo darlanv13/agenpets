@@ -1,8 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { db, admin } = require("../config/firebase");
 const { addMinutes, format, parse, isSameDay } = require("date-fns");
-const EfiPay = require("sdk-node-apis-efi");
-const optionsEfi = require("../config/efipay");
+const axios = require('axios');
 
 // --- 1. BUSCAR HORÁRIOS ---
 exports.buscarHorarios = onCall(async (request) => {
@@ -182,15 +181,60 @@ exports.criarAgendamento = onCall(async (request) => {
 
     if (metodo_pagamento === "pix") {
         try {
-            const efipay = new EfiPay(optionsEfi);
-            const cobranca = await efipay.pixCreateImmediateCharge([], {
-                calendario: { expiracao: 3600 }, devedor: { cpf: cpf_user.replace(/\D/g, ""), nome: "Cliente" },
-                valor: { original: valor.toFixed(2) }, chave: process.env.EFI_CLIENT_ID_HOMOLOG
-            });
-            const qrCode = await efipay.pixGenerateQRCode({ id: cobranca.loc.id });
-            novoAgendamento.txid = cobranca.txid;
-            resposta = { success: true, pix_copia_cola: qrCode.qrcode, imagem_qrcode: qrCode.imagemQrcode };
-        } catch (e) { console.error("Erro PIX:", e); }
+            // Busca Token MP (Segredos)
+            const segredosDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("segredos").get();
+            const segredos = segredosDoc.exists ? segredosDoc.data() : {};
+            const mpAccessToken = segredos.mercadopago_access_token;
+
+            if (!mpAccessToken) {
+                console.error("Token MP não encontrado para tenant:", tenantId);
+                // Não falha o agendamento, mas avisa (ou lança erro se preferir)
+                // throw new HttpsError("failed-precondition", "Pagamento indisponível.");
+            } else {
+                // Busca Dados do User para Payer
+                const userDoc = await db.collection("users").doc(cpf_user).get();
+                const userData = userDoc.data() || {};
+                const emailUser = userData.email || "cliente@agenpets.com.br";
+                const nomeUser = userData.nome || "Cliente";
+                const [firstName, ...rest] = nomeUser.split(" ");
+                const lastName = rest.join(" ");
+
+                const paymentData = {
+                    transaction_amount: parseFloat(valor),
+                    description: `Agendamento ${servicoNorm}`,
+                    payment_method_id: "pix",
+                    payer: {
+                        email: emailUser,
+                        first_name: firstName,
+                        last_name: lastName || "Sobrenome",
+                        identification: { type: "CPF", number: cpf_user.replace(/\D/g, "") }
+                    }
+                };
+
+                const response = await axios.post("https://api.mercadopago.com/v1/payments", paymentData, {
+                    headers: {
+                        "Authorization": `Bearer ${mpAccessToken}`,
+                        "Content-Type": "application/json",
+                        "X-Idempotency-Key": `${tenantId}-${cpf_user}-${Date.now()}`
+                    }
+                });
+
+                const data = response.data;
+                const qrInfo = data.point_of_interaction?.transaction_data;
+
+                if (qrInfo) {
+                    novoAgendamento.txid = data.id.toString(); // ID do MP
+                    resposta = {
+                        success: true,
+                        pix_copia_cola: qrInfo.qr_code,
+                        imagem_qrcode: qrInfo.qr_code_base64
+                    };
+                }
+            }
+        } catch (e) {
+            console.error("Erro PIX (Mercado Pago):", e.response ? e.response.data : e.message);
+            // Opcional: throw new HttpsError('internal', 'Erro ao gerar PIX');
+        }
     }
 
     await db.collection("tenants").doc(tenantId).collection("agendamentos").add(novoAgendamento);

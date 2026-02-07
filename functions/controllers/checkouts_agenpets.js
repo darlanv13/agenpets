@@ -1,8 +1,6 @@
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { db, admin } = require("../config/firebase"); // O admin é essencial para datas!
 const { addMinutes, format, parse, isSameDay } = require("date-fns"); // date-fns essencial
-const EfiPay = require("sdk-node-apis-efi");
-const optionsEfi = require("../config/efipay");
 
 function addDays(date, days) {
     var result = new Date(date);
