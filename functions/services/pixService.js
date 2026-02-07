@@ -13,10 +13,19 @@ exports.processarPixEvents = async (pixList) => {
 
     for (const p of pixList) {
         const txid = p.txid;
-        console.log(`Processando PIX txid: ${txid}`);
+        const tenantId = p.tenantId; // Pode vir do webhook
+        console.log(`Processando PIX txid: ${txid} (Tenant: ${tenantId || 'Desconhecido'})`);
 
-        // A. Tenta atualizar AGENDAMENTO (Busca em todas as lojas)
-        const agendamentoSnap = await db.collectionGroup("agendamentos").where("txid", "==", txid).get();
+        // A. Tenta atualizar AGENDAMENTO
+        let agendamentoSnap;
+        if (tenantId) {
+            // Busca direta (Mais eficiente e não precisa de índice global)
+            agendamentoSnap = await db.collection("tenants").doc(tenantId).collection("agendamentos").where("txid", "==", txid).get();
+        } else {
+            // Busca global (Fallback - precisa de índice collectionGroup)
+            agendamentoSnap = await db.collectionGroup("agendamentos").where("txid", "==", txid).get();
+        }
+
         if (!agendamentoSnap.empty) {
             const batch = db.batch();
             agendamentoSnap.forEach((doc) => {
@@ -24,11 +33,19 @@ exports.processarPixEvents = async (pixList) => {
             });
             await batch.commit();
             console.log(`Agendamento(s) confirmado(s) para txid: ${txid}`);
-            continue; // Se achou agendamento, assume que não é venda de pacote (ou processa ambos se necessário, mas aqui prioriza um)
+            continue; // Se achou agendamento, assume que não é venda de pacote
         }
 
         // B. Tenta atualizar VENDA DE ASSINATURA/PACOTE
-        const vendaSnap = await db.collectionGroup("vendas_assinaturas").where("txid", "==", txid).get();
+        let vendaSnap;
+        if (tenantId) {
+            // Busca direta
+            vendaSnap = await db.collection("tenants").doc(tenantId).collection("vendas_assinaturas").where("txid", "==", txid).get();
+        } else {
+            // Busca global
+            vendaSnap = await db.collectionGroup("vendas_assinaturas").where("txid", "==", txid).get();
+        }
+
         if (!vendaSnap.empty) {
             const vendaDoc = vendaSnap.docs[0];
             const vendaData = vendaDoc.data();
