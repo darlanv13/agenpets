@@ -1,8 +1,8 @@
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/painel_loja_web/services/caixa_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 enum CheckoutContext { hotel, creche, agenda }
@@ -13,8 +13,7 @@ class UnifiedCheckoutDialog extends StatefulWidget {
   final String? userId; // Client User ID for voucher lookup
   final Map<String, dynamic> clientData; // User data for display info
   final Map<String, dynamic> baseItem; // {nome, preco, detalhes, ...}
-  final List<Map<String, dynamic>>
-  availableServices; // "Catalog" of extras (servicos_extras)
+  final List<Map<String, dynamic>> availableServices; // "Catalog" of extras
   final double totalAlreadyPaid;
   final Map<String, dynamic>? vouchersConsumedHistory; // From agenda history
   final Color themeColor;
@@ -39,10 +38,6 @@ class UnifiedCheckoutDialog extends StatefulWidget {
 }
 
 class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
-  final _functions = FirebaseFunctions.instanceFor(
-    region: 'southamerica-east1',
-  );
-
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',
@@ -53,11 +48,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
-
-  // State - Payments (Split Payment Logic)
-  final List<Map<String, dynamic>> _payments = [];
-  String _selectedMethod = 'Dinheiro';
-  final TextEditingController _amountController = TextEditingController();
 
   // State - Vouchers
   Map<String, bool> _vouchersToUse = {};
@@ -76,7 +66,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   }
 
   void _initExtrasFromBaseItem() {
-    // Load Extras from Agendamento (if CheckList added them)
     if (widget.baseItem.containsKey('servicos_extras')) {
       final extras = widget.baseItem['servicos_extras'];
       if (extras is List) {
@@ -112,7 +101,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     _availableVouchers = {};
     _vouchersToUse = {};
 
-    // Check previous consumption (for Agenda mostly)
     if (widget.vouchersConsumedHistory != null &&
         widget.vouchersConsumedHistory!.isNotEmpty) {
       if (mounted) {
@@ -139,8 +127,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
 
       if (voucherDoc.exists) {
         final data = voucherDoc.data()!;
-        // Verify validity
-        Timestamp? validade = data['validade']; // Field name in new structure
+        Timestamp? validade = data['validade'];
         if (validade != null && validade.toDate().isAfter(DateTime.now())) {
           data.forEach((key, value) {
             if (key != 'nome_pacote' &&
@@ -154,7 +141,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         }
       }
 
-      // Auto-select if base item matches
       String baseName = (widget.baseItem['nome'] ?? '')
           .toString()
           .toLowerCase();
@@ -165,7 +151,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         String keyLower = key.toLowerCase();
 
         if (baseName.contains(keyLower)) match = true;
-
         if (category != null) {
           if (category == 'Banho' && keyLower.contains('banho')) match = true;
           if (category == 'Tosa' && keyLower.contains('tosa')) match = true;
@@ -190,17 +175,11 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       _addedExtras.fold(0, (sum, item) => sum + (item['preco'] as double));
 
   double get _discountVoucher {
-    // If voucher was consumed previously, full discount on base
-    if (_voucherConsumedPreviously) {
-      return _totalBase;
-    }
+    if (_voucherConsumedPreviously) return _totalBase;
 
     double discount = 0;
-
-    // Agenda Logic: if 'banhos' or 'tosa' voucher is used, base service is free.
     _vouchersToUse.forEach((key, active) {
       if (active) {
-        // Simple heuristic: if key matches base item, discount base price.
         String baseName = (widget.baseItem['nome'] ?? '')
             .toString()
             .toLowerCase();
@@ -214,9 +193,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
           if (category == 'Tosa' && keyLower.contains('tosa')) match = true;
         }
 
-        if (match) {
-          discount = _totalBase;
-        }
+        if (match) discount = _totalBase;
       }
     });
     return discount;
@@ -225,35 +202,8 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   double get _totalDue => (_totalBase + _totalExtras) - _discountVoucher;
 
   double get _remainingToPay {
-    double paidInSession = _payments.fold(
-      0,
-      (sum, p) => sum + (p['valor'] as double),
-    );
-    double val = _totalDue - widget.totalAlreadyPaid - paidInSession;
-    return val > 0 ? val : 0.0; // Ensure no negative
-  }
-
-  // --- PAYMENT LOGIC ---
-
-  void _addPayment() {
-    double amount =
-        double.tryParse(_amountController.text.replaceAll(',', '.')) ?? 0.0;
-    if (amount <= 0) return;
-
-    // Optional: Prevent overpayment?
-    // LojaView calculates 'Troco', so overpayment is allowed there.
-    // Here we stick to exact or partial.
-
-    setState(() {
-      _payments.add({'metodo': _selectedMethod, 'valor': amount});
-      _amountController.clear();
-    });
-  }
-
-  void _removePayment(int index) {
-    setState(() {
-      _payments.removeAt(index);
-    });
+    double val = _totalDue - widget.totalAlreadyPaid;
+    return val > 0 ? val : 0.0;
   }
 
   // --- SEARCH LOGIC ---
@@ -261,7 +211,6 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
   void _performSearch(String query) async {
     setState(() => _isSearching = true);
 
-    // 1. Local Search (Services)
     List<Map<String, dynamic>> localResults = [];
     if (query.isEmpty) {
       localResults = List.from(widget.availableServices);
@@ -275,11 +224,9 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
           .toList();
     }
 
-    // 2. Remote Search (Products) - Only if query is not empty
     List<Map<String, dynamic>> remoteResults = [];
     if (query.isNotEmpty) {
       try {
-        // Fallback for case sensitivity: Try to capitalize first letter if user typed lowercase
         String searchQuery = query;
         if (query.isNotEmpty && query[0] == query[0].toLowerCase()) {
           searchQuery = query[0].toUpperCase() + query.substring(1);
@@ -332,66 +279,155 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
     });
   }
 
+  // --- NEW SUBMIT LOGIC (SEND TO PDV) ---
+
   void _submitCheckout() async {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Prepare Data
-      List<String> extrasIds = _addedExtras
-          .map((e) => e['id'] as String)
-          .toList();
-
-      String paymentString;
-      if (_payments.isEmpty) {
-        // If remaining is 0 without payments, it implies Voucher or Pre-Paid
-        if (_discountVoucher >= _totalBase && _totalExtras == 0) {
-          paymentString = "voucher";
-        } else {
-          paymentString = "isento/ja_pago";
+      // 1. Verify if Caja is Open
+      final isOpen = await CaixaService.isCaixaAberto(AppConfig.tenantId);
+      if (!isOpen) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                  SizedBox(width: 10),
+                  Text("Caixa Fechado"),
+                ],
+              ),
+              content: Text(
+                "O caixa do PDV precisa estar aberto para receber este serviço.\nPor favor, abra o caixa na tela de PDV/Loja.",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text("OK, Entendi"),
+                ),
+              ],
+            ),
+          );
         }
-      } else if (_payments.length == 1) {
-        paymentString = _payments.first['metodo'];
-      } else {
-        // Composite string for backend
-        paymentString =
-            "Misto: ${_payments.map((p) => "${p['metodo']} R\$${(p['valor'] as double).toStringAsFixed(2)}").join(', ')}";
+        return;
       }
 
-      // 2. Call Cloud Function
-      if (widget.contextType == CheckoutContext.hotel) {
-        await _functions.httpsCallable('realizarCheckoutHotel').call({
-          'tenantId': AppConfig.tenantId,
-          'reservaId': widget.referenceId,
-          'extrasIds': extrasIds,
-          'metodoPagamentoDiferenca': paymentString,
-        });
-      } else if (widget.contextType == CheckoutContext.creche) {
-        await _functions.httpsCallable('realizarCheckoutCreche').call({
-          'tenantId': AppConfig.tenantId,
-          'reservaId': widget.referenceId,
-          'extrasIds': extrasIds,
-          'metodoPagamentoDiferenca': paymentString,
-        });
-      } else if (widget.contextType == CheckoutContext.agenda) {
-        // Filter used vouchers for Agenda
-        Map<String, bool> usedVouchers = {};
-        _vouchersToUse.forEach((key, val) {
-          if (val) usedVouchers[key] = true;
-        });
+      // 2. Construct Items List
+      // Base Item + Extras
+      List<Map<String, dynamic>> itensComanda = [];
 
-        await _functions.httpsCallable('realizarCheckout').call({
-          'tenantId': AppConfig.tenantId,
-          'agendamentoId': widget.referenceId,
-          'extrasIds': extrasIds,
-          'metodoPagamento': paymentString,
-          'vouchersParaUsar': usedVouchers,
-          'responsavel': 'UnifiedCheckout',
+      // Add Base Item
+      if (_totalBase > 0 || _discountVoucher > 0) {
+        // If voucher covers it, we still add it but maybe price is affected?
+        // Comanda logic: Items list usually sums to total.
+        // If we have a voucher discount, we can add it as a negative item or just adjust base price.
+        // Let's add the base item with full price, and a discount item if applicable.
+        itensComanda.add({
+          'nome': widget.baseItem['nome'],
+          'preco': _totalBase,
+          'tipo': 'servico_base',
         });
       }
 
-      // 3. Success
+      // Add Extras
+      for (var extra in _addedExtras) {
+        itensComanda.add({
+          'nome': extra['nome'],
+          'preco': (extra['preco'] as num).toDouble(),
+          'tipo': 'extra',
+          'id_origem': extra['id'],
+        });
+      }
+
+      // Add Voucher Discount as Item (Negative Price)
+      if (_discountVoucher > 0) {
+        itensComanda.add({
+          'nome': 'Desconto Voucher / Pacote',
+          'preco': -_discountVoucher,
+          'tipo': 'desconto',
+        });
+      }
+
+      // Already Paid deduction?
+      // Usually "Already Paid" means we only charge the difference.
+      // If we send to PDV, we should probably only send the *difference* to be paid?
+      // Or send everything and let PDV handle "Total vs Paid"?
+      // For simplicity in PDV, let's send the *amount due* as the billable items.
+      // But if we add "Base Item $50" and "Already Paid $20", the PDV cart will show $50.
+      // We should insert a "Pagamento Anterior" item.
+      if (widget.totalAlreadyPaid > 0) {
+        itensComanda.add({
+          'nome': 'Pagamento Adiantado / Parcial',
+          'preco': -widget.totalAlreadyPaid,
+          'tipo': 'deducao',
+        });
+      }
+
+      // 3. Create Comanda
+      String origemCollection = '';
+      if (widget.contextType == CheckoutContext.agenda)
+        origemCollection = 'agendamentos';
+      if (widget.contextType == CheckoutContext.hotel)
+        origemCollection = 'reservas_hotel';
+      if (widget.contextType == CheckoutContext.creche)
+        origemCollection = 'reservas_creche';
+
+      final comandaData = {
+        'tenantId': AppConfig.tenantId,
+        'cliente_nome': widget.clientData['nome'] ?? 'Cliente Não Identificado',
+        'cliente_id': widget.userId,
+        'valor_total': _remainingToPay, // This matches sum of items
+        'itens': itensComanda,
+        'origem_tipo': widget.contextType.toString().split('.').last,
+        'origem_collection': origemCollection,
+        'origem_id': widget.referenceId,
+        'status': 'aberta',
+        'created_at': FieldValue.serverTimestamp(),
+        'vouchers_usados': _vouchersToUse,
+      };
+
+      await _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('comandas')
+          .add(comandaData);
+
+      // 4. Update Original Document
+      final docRef = _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection(origemCollection)
+          .doc(widget.referenceId);
+
+      await docRef.update({
+        'enviado_pdv': true,
+        'status_pagamento': 'no_caixa', // Optional flag
+        'servicos_extras': _addedExtras, // Save selected extras
+        'valor_final_calculado':
+            _remainingToPay + widget.totalAlreadyPaid, // Total value
+      });
+
+      // 5. Success
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Close Dialog
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 10),
+                Text("Enviado para o Caixa com Sucesso!"),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
         widget.onSuccess();
       }
     } catch (e) {
@@ -399,7 +435,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Erro ao finalizar: $e"),
+            content: Text("Erro ao enviar: $e"),
             backgroundColor: Colors.red,
           ),
         );
@@ -446,7 +482,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       contentPadding: EdgeInsets.all(0),
       content: SizedBox(
         width: 900,
-        height: 650,
+        height: 600, // Reduced height as payment section is gone
         child: Row(
           children: [
             // LEFT: SEARCH & SUMMARY
@@ -472,7 +508,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
               ),
             ),
 
-            // RIGHT: PAYMENT & VOUCHERS
+            // RIGHT: SUMMARY & ACTIONS
             Expanded(
               flex: 5,
               child: Container(
@@ -485,7 +521,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Pagamento & Vouchers",
+                          "Resumo & Envio",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -498,7 +534,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                         ),
                       ],
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: 15),
 
                     // VOUCHERS SECTION
                     if (_loadingVouchers)
@@ -674,6 +710,8 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                       ),
                     ],
 
+                    Spacer(),
+
                     // FINANCIAL SUMMARY
                     _buildFinancialRow("Valor Base", _totalBase),
                     if (_discountVoucher > 0)
@@ -694,39 +732,41 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
                       -widget.totalAlreadyPaid,
                       color: Colors.blue,
                     ),
-                    _buildFinancialRow(
-                      "(-) Pago Agora",
-                      -_payments.fold(
-                        0.0,
-                        (s, p) => s + (p['valor'] as double),
-                      ),
-                      color: Colors.blue,
-                    ),
-                    SizedBox(height: 5),
+
+                    SizedBox(height: 10),
 
                     Container(
-                      padding: EdgeInsets.all(5),
+                      padding: EdgeInsets.all(15),
                       decoration: BoxDecoration(
                         color: _remainingToPay <= 0.01
-                            ? Colors.green[100]
-                            : Colors.red[50],
-                        borderRadius: BorderRadius.circular(8),
+                            ? Colors.green[50]
+                            : Colors.blue[50],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _remainingToPay <= 0.01
+                              ? Colors.green[200]!
+                              : Colors.blue[200]!,
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            "RESTANTE",
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            "A RECEBER NO CAIXA",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                              fontSize: 12,
+                            ),
                           ),
                           Text(
                             "R\$ ${_remainingToPay.toStringAsFixed(2)}",
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 24,
                               fontWeight: FontWeight.w900,
                               color: _remainingToPay <= 0.01
                                   ? Colors.green[800]
-                                  : Colors.red[800],
+                                  : Colors.blue[800],
                             ),
                           ),
                         ],
@@ -735,145 +775,42 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
 
                     SizedBox(height: 20),
 
-                    // ADD PAYMENT SECTION
-                    if (_remainingToPay > 0.01) ...[
-                      Text(
-                        "Adicionar Pagamento:",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _selectedMethod,
-                              items: ['Dinheiro', 'Pix', 'Cartão', 'Outro']
-                                  .map(
-                                    (m) => DropdownMenuItem(
-                                      value: m,
-                                      child: Text(
-                                        m,
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _selectedMethod = v!),
-                              decoration: InputDecoration(
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 0,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: _amountController,
-                              keyboardType: TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: "Valor",
-                                prefixText: "R\$ ",
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 0,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              onSubmitted: (_) => _addPayment(),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          IconButton(
-                            icon: Icon(
-                              Icons.add_circle,
-                              color: Colors.green,
-                              size: 30,
-                            ),
-                            onPressed: _addPayment,
-                          ),
-                        ],
-                      ),
-                    ],
-
-                    SizedBox(height: 10),
-
-                    // LIST OF ADDED PAYMENTS
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: _payments.length,
-                        separatorBuilder: (_, __) => Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final p = _payments[index];
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              p['metodo'],
-                              style: TextStyle(fontSize: 13),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  "R\$ ${(p['valor'] as double).toStringAsFixed(2)}",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () => _removePayment(index),
-                                  child: Icon(
-                                    Icons.close,
-                                    size: 14,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                    Text(
+                      "Ao enviar, o cliente aparecerá na lista de 'Serviços' no PDV para pagamento.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
                       ),
                     ),
 
-                    // CONFIRM BUTTON
                     SizedBox(height: 10),
+
+                    // SEND BUTTON
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        icon: _isLoading
+                            ? SizedBox()
+                            : Icon(Icons.point_of_sale),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _remainingToPay <= 0.01
-                              ? Colors.green
-                              : Colors.grey,
+                          backgroundColor: widget.themeColor,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
+                          elevation: 5,
                         ),
-                        onPressed: (_remainingToPay <= 0.01 && !_isLoading)
-                            ? _submitCheckout
-                            : null,
-                        child: _isLoading
+                        onPressed: (_isLoading) ? null : _submitCheckout,
+                        label: _isLoading
                             ? CircularProgressIndicator(color: Colors.white)
                             : Text(
-                                "FINALIZAR CHECKOUT",
+                                "ENVIAR PARA O CAIXA",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
+                                  fontSize: 16,
                                 ),
                               ),
                       ),
@@ -913,7 +850,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             Text(
-              "Adicione itens ou finalize",
+              "Revise os valores e envie ao caixa",
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
@@ -927,7 +864,7 @@ class _UnifiedCheckoutDialogState extends State<UnifiedCheckoutDialog> {
       controller: _searchController,
       onChanged: (val) => _performSearch(val),
       decoration: InputDecoration(
-        hintText: "Buscar serviços ou produtos...",
+        hintText: "Adicionar serviços ou produtos...",
         prefixIcon: Icon(Icons.search, color: Colors.grey),
         suffixIcon: _searchController.text.isNotEmpty
             ? IconButton(

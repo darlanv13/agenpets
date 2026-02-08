@@ -508,6 +508,11 @@ class _HotelViewState extends State<HotelView> {
       textoStatus = "Hóspede no Hotel";
       iconeStatus = FontAwesomeIcons.bed;
     }
+    if (data['enviado_pdv'] == true && status != 'concluido') {
+      corStatus = Colors.purple;
+      textoStatus = "Enviado ao Caixa (PDV)";
+      iconeStatus = Icons.point_of_sale;
+    }
     if (status == 'concluido') {
       corStatus = _corSucesso;
       textoStatus = "Estadia Finalizada";
@@ -813,12 +818,19 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
-                if (status == 'hospedado')
+                if (status == 'hospedado' ||
+                    (data['enviado_pdv'] == true && status != 'concluido'))
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
-                    label: Text("CHECK-OUT E PAGAR"),
+                    label: Text(
+                      data['enviado_pdv'] == true
+                          ? "REENVIAR AO CAIXA"
+                          : "ENVIAR AO CAIXA",
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
+                      backgroundColor: data['enviado_pdv'] == true
+                          ? Colors.purple
+                          : _corAcai,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,
