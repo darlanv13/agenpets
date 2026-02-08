@@ -511,6 +511,11 @@ class _CrecheViewState extends State<CrecheView> {
       textoStatus = "Presente na Creche";
       iconeStatus = FontAwesomeIcons.dog;
     }
+    if (data['enviado_pdv'] == true && status != 'concluido') {
+      corStatus = Colors.purple;
+      textoStatus = "Enviado ao Caixa (PDV)";
+      iconeStatus = Icons.point_of_sale;
+    }
     if (status == 'concluido') {
       corStatus = _corSucesso;
       textoStatus = "Diária Finalizada";
@@ -816,12 +821,12 @@ class _CrecheViewState extends State<CrecheView> {
                     ),
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
-                if (status == 'na creche')
+                if (status == 'na creche' || (data['enviado_pdv'] == true && status != 'concluido'))
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
-                    label: Text("CHECK-OUT E PAGAR"),
+                    label: Text(data['enviado_pdv'] == true ? "REENVIAR AO CAIXA" : "ENVIAR AO CAIXA"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _corAcai,
+                      backgroundColor: data['enviado_pdv'] == true ? Colors.purple : _corAcai,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,

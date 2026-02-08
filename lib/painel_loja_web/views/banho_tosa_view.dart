@@ -547,6 +547,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
   Widget _buildPainelDetalhesCompacto(DocumentSnapshot agendamentoDoc) {
     final data = agendamentoDoc.data() as Map<String, dynamic>;
     final status = data['status'] ?? 'agendado';
+    final bool isEnviadoPdv = data['enviado_pdv'] == true;
     final bool isPronto = status == 'pronto';
     final bool isConcluido = status == 'concluido';
 
@@ -579,6 +580,13 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
       textoStatus = "Pronto / Aguardando Dono";
       iconeStatus = Icons.notifications_active;
     }
+
+    if (isEnviadoPdv && !isConcluido) {
+      corStatus = Colors.purple;
+      textoStatus = "Enviado ao Caixa (PDV)";
+      iconeStatus = Icons.point_of_sale;
+    }
+
     if (status == 'concluido') {
       corStatus = _corSucesso;
       textoStatus = "Finalizado";
@@ -892,15 +900,15 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                     ],
                   ),
                 ),
-                if (isPronto)
+                if (isPronto || (isEnviadoPdv && !isConcluido))
                   ElevatedButton.icon(
                     icon: Icon(Icons.point_of_sale, size: 18),
                     label: Text(
-                      "CHECKOUT",
+                      isEnviadoPdv ? "REENVIAR AO CAIXA" : "ENVIAR AO CAIXA",
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _corSucesso,
+                      backgroundColor: isEnviadoPdv ? Colors.purple : _corSucesso,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,

@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/services/app_database.dart';
+import 'package:intl/intl.dart';
 
 class PdvView extends StatefulWidget {
   final bool isMaster;
@@ -24,11 +25,10 @@ class _PdvViewState extends State<PdvView> {
   String? _caixaAbertoId; // Armazena o ID do caixa se estiver aberto
   bool _verificandoCaixa = true; // Para mostrar um loading inicial
   final TextEditingController _fundoTrocoCtrl = TextEditingController();
-  final TextEditingController _operadorAberturaCtrl =
-      TextEditingController(); // Quem está abrindo
+  final TextEditingController _operadorAberturaCtrl = TextEditingController();
 
   // Carrinho
-  final List<Map<String, dynamic>> _carrinho = [];
+  List<Map<String, dynamic>> _carrinho = [];
   final ScrollController _cartScrollCtrl = ScrollController();
 
   // Pagamentos Multiplos
@@ -47,13 +47,18 @@ class _PdvViewState extends State<PdvView> {
   // Paginação
   final int _itensPorPagina = 4;
 
+  // --- COMANDAS / SERVIÇOS ---
+  int _tabIndex = 0; // 0 = Produtos, 1 = Serviços
+  Map<String, dynamic>? _currentComanda;
+  String? _currentComandaId;
+
   @override
   void initState() {
     super.initState();
     // Foco inicial
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocus.requestFocus();
-      _verificarStatusCaixa(); // <--- CHAMA A VERIFICAÇÃO AQUI
+      _verificarStatusCaixa();
     });
   }
 
@@ -81,7 +86,9 @@ class _PdvViewState extends State<PdvView> {
               child: Column(
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // CAIXA STATUS
                       Container(
                         margin: EdgeInsets.only(bottom: 10),
                         padding: EdgeInsets.symmetric(
@@ -124,10 +131,11 @@ class _PdvViewState extends State<PdvView> {
                               TextButton.icon(
                                 icon: Icon(Icons.lock_clock, color: Colors.red),
                                 label: Text(
-                                  "FECHAR CAIXA",
+                                  "FECHAR",
                                   style: TextStyle(
                                     color: Colors.red,
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 10
                                   ),
                                 ),
                                 onPressed: _iniciarFechamentoCaixa,
@@ -135,14 +143,33 @@ class _PdvViewState extends State<PdvView> {
                           ],
                         ),
                       ),
+
+                      // TABS
+                      Row(
+                        children: [
+                          _buildTabButton("Produtos", 0),
+                          SizedBox(width: 10),
+                          _buildTabButton("Serviços", 1),
+                        ],
+                      )
                     ],
                   ),
-                  // CABEÇALHO BUSCA (SCANNER)
-                  _buildHeader(),
+
                   SizedBox(height: 10),
 
-                  // GRID DE PRODUTOS (AREA MAIOR PARA OS CARDS)
-                  Expanded(flex: 4, child: _buildProductGridWithPagination()),
+                  // CONTEUDO DA ESQUERDA (GRID ou LISTA)
+                  Expanded(
+                    flex: 4,
+                    child: _tabIndex == 0
+                      ? Column(
+                          children: [
+                            _buildHeader(), // Search Bar
+                            SizedBox(height: 10),
+                            Expanded(child: _buildProductGridWithPagination()),
+                          ],
+                        )
+                      : _buildComandasList(),
+                  ),
 
                   Divider(height: 20, thickness: 2),
 
@@ -196,6 +223,44 @@ class _PdvViewState extends State<PdvView> {
               ),
               child: Column(
                 children: [
+                  // HEADER: SE É COMANDA
+                  if (_currentComanda != null)
+                    Container(
+                      margin: EdgeInsets.only(bottom: 15),
+                      padding: EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue[200]!)
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.receipt_long, color: Colors.blue[800]),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "PAGANDO SERVIÇO DE:",
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                                ),
+                                Text(
+                                  _currentComanda!['cliente_nome'] ?? 'Cliente',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                )
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, color: Colors.red),
+                            onPressed: _limparComandaAtual,
+                            tooltip: "Cancelar Comanda",
+                          )
+                        ],
+                      ),
+                    ),
+
                   // TOTAL DESTAQUE GIGANTE
                   Container(
                     width: double.infinity,
@@ -284,6 +349,138 @@ class _PdvViewState extends State<PdvView> {
     );
   }
 
+  Widget _buildTabButton(String label, int index) {
+    bool isActive = _tabIndex == index;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _tabIndex = index;
+          if (index == 0 && _currentComanda != null) {
+            // Se voltar para produtos, talvez queira limpar?
+            // Não necessariamente, pode querer adicionar produto à comanda.
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? _corAcai : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isActive ? _corAcai : Colors.grey[300]!)
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.white : Colors.grey[600],
+            fontWeight: FontWeight.bold
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- COMANDAS LIST ---
+  Widget _buildComandasList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _db
+          .collection('tenants')
+          .doc(AppConfig.tenantId)
+          .collection('comandas')
+          .where('status', isEqualTo: 'aberta')
+          .orderBy('created_at', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.assignment_turned_in_outlined, size: 50, color: Colors.grey[300]),
+                Text("Nenhum serviço aguardando pagamento.", style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: docs.length,
+          itemBuilder: (ctx, i) {
+            final doc = docs[i];
+            final data = doc.data() as Map<String, dynamic>;
+            final created = (data['created_at'] as Timestamp?)?.toDate() ?? DateTime.now();
+            final valor = (data['valor_total'] ?? 0).toDouble();
+            final nome = data['cliente_nome'] ?? 'Cliente';
+            final origem = data['origem_tipo'] ?? 'serviço';
+
+            return Card(
+              margin: EdgeInsets.only(bottom: 10),
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue[50],
+                  child: Icon(Icons.receipt, color: Colors.blue),
+                ),
+                title: Text(nome, style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("$origem • ${DateFormat('HH:mm').format(created)}"),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text("R\$ ${valor.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _corAcai)),
+                    Icon(Icons.arrow_forward_ios, size: 12, color: Colors.grey)
+                  ],
+                ),
+                onTap: () => _selecionarComanda(doc.id, data),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _selecionarComanda(String id, Map<String, dynamic> data) {
+    setState(() {
+      _carrinho.clear(); // Limpa carrinho atual
+      _pagamentos.clear(); // Limpa pagamentos
+      _currentComanda = data;
+      _currentComandaId = id;
+
+      // Popula carrinho com itens da comanda
+      if (data['itens'] != null) {
+        for (var item in data['itens']) {
+          _carrinho.add({
+            'id': item['id_origem'] ?? 'srv_${DateTime.now().millisecondsSinceEpoch}',
+            'nome': item['nome'],
+            'preco': (item['preco'] as num).toDouble(),
+            'qtd': 1, // Serviços geralmente são 1
+            'tipo': item['tipo'] ?? 'servico' // Mantem tipo para rastreio
+          });
+        }
+      }
+    });
+
+    // Opcional: Auto-preencher vendedor se tiver na comanda?
+    // Mas geralmente quem fecha o caixa é o operador atual.
+  }
+
+  void _limparComandaAtual() {
+    setState(() {
+      _currentComanda = null;
+      _currentComandaId = null;
+      _carrinho.clear();
+      _pagamentos.clear();
+    });
+  }
+
+  // --- RESTO DO CÓDIGO (Header, Caixa, Grid, Cart, Checkout) ---
+  // Mantive a estrutura original mas ajustada para usar as variaveis novas
+
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
@@ -309,7 +506,7 @@ class _PdvViewState extends State<PdvView> {
         onSubmitted: (val) => _handleScanSubmit(val),
         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
-          hintText: "ESCANEIE O CÓDIGO DE BARRAS...",
+          hintText: "ESCANEIE O CÓDIGO...",
           hintStyle: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.grey[400],
@@ -337,32 +534,24 @@ class _PdvViewState extends State<PdvView> {
     setState(() => _verificandoCaixa = true);
 
     try {
-      // Busca se existe algum caixa ABERTO neste Tenant
-      // OBS: Idealmente filtraríamos também pelo ID do Usuário ou ID do Terminal
-      // Aqui vamos pegar o último aberto que ainda não foi fechado.
       var query = await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
           .collection('caixas_diarios')
           .where('status', isEqualTo: 'ABERTO')
-          // .where('usuario_id', isEqualTo: 'user123') // Se tiver Auth, descomente
           .limit(1)
           .get();
 
       if (query.docs.isNotEmpty) {
-        // Já existe caixa aberto!
         setState(() {
           _caixaAbertoId = query.docs.first.id;
           _verificandoCaixa = false;
-
-          // Opcional: Pré-preencher o vendedor com quem abriu o caixa
           var dados = query.docs.first.data();
           if (dados['usuario_nome'] != null) {
             _vendedorCodeCtrl.text = dados['usuario_nome'];
           }
         });
       } else {
-        // Nenhum caixa aberto. Precisamos abrir!
         setState(() => _verificandoCaixa = false);
         if (mounted) _abrirDialogoCaixa();
       }
@@ -375,10 +564,10 @@ class _PdvViewState extends State<PdvView> {
   void _abrirDialogoCaixa() {
     showDialog(
       context: context,
-      barrierDismissible: false, // OBRIGA a interagir (não fecha clicando fora)
+      barrierDismissible: false,
       builder: (ctx) {
         return PopScope(
-          canPop: false, // Bloqueia o botão voltar do Android
+          canPop: false,
           child: AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
@@ -419,11 +608,8 @@ class _PdvViewState extends State<PdvView> {
               ],
             ),
             actions: [
-              // Botão Sair (caso a pessoa tenha entrado por engano)
               TextButton(
-                onPressed: () => Navigator.of(
-                  ctx,
-                ).pop(), // Aqui poderia dar um pop na rota principal
+                onPressed: () => Navigator.of(ctx).pop(),
                 child: Text(
                   "Sair do PDV",
                   style: TextStyle(color: Colors.grey),
@@ -453,7 +639,6 @@ class _PdvViewState extends State<PdvView> {
   // --- LÓGICA DE FECHAMENTO DE CAIXA ---
 
   void _iniciarFechamentoCaixa() async {
-    // 1. Mostrar loading enquanto calculamos
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -461,7 +646,6 @@ class _PdvViewState extends State<PdvView> {
     );
 
     try {
-      // 2. Buscar vendas deste caixa para somar
       var vendasSnapshot = await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
@@ -469,12 +653,11 @@ class _PdvViewState extends State<PdvView> {
           .where('caixa_id', isEqualTo: _caixaAbertoId)
           .get();
 
-      // 3. Calcular totais por método
       double totalDinheiro = 0.0;
       double totalPix = 0.0;
       double totalCartao = 0.0;
       double totalOutros = 0.0;
-      double totalTrocoDado = 0.0; // Importante subtrair do dinheiro
+      double totalTrocoDado = 0.0;
 
       for (var doc in vendasSnapshot.docs) {
         var dados = doc.data();
@@ -498,11 +681,8 @@ class _PdvViewState extends State<PdvView> {
         }
       }
 
-      // O dinheiro líquido esperado na gaveta é: (Vendas em Dinheiro - Troco Entregue)
-      // Se tiver Fundo de Troco (valor inicial), precisamos somar também (faremos isso no dialog)
       double dinheiroLiquidoVendas = totalDinheiro - totalTrocoDado;
 
-      // Busca valor inicial do caixa para exibir
       var caixaDoc = await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
@@ -512,9 +692,8 @@ class _PdvViewState extends State<PdvView> {
 
       double valorInicial = (caixaDoc.data()?['valor_inicial'] ?? 0).toDouble();
 
-      Navigator.pop(context); // Fecha loading
+      Navigator.pop(context);
 
-      // 4. Abrir Dialog de Conferência
       if (mounted) {
         _mostrarDialogoConferencia(
           valorInicial: valorInicial,
@@ -525,7 +704,7 @@ class _PdvViewState extends State<PdvView> {
         );
       }
     } catch (e) {
-      Navigator.pop(context); // Fecha loading
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Erro ao calcular fechamento: $e"),
@@ -565,7 +744,6 @@ class _PdvViewState extends State<PdvView> {
                   isBold: true,
                 ),
                 SizedBox(height: 20),
-
                 Text(
                   "Outros Recebimentos (Info):",
                   style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -573,7 +751,6 @@ class _PdvViewState extends State<PdvView> {
                 Text(
                   "Pix: R\$ ${pix.toStringAsFixed(2)} | Cartão: R\$ ${cartao.toStringAsFixed(2)}",
                 ),
-
                 SizedBox(height: 20),
                 TextField(
                   controller: _dinheiroGavetaCtrl,
@@ -582,15 +759,7 @@ class _PdvViewState extends State<PdvView> {
                     labelText: "Valor Contado na Gaveta (R\$)",
                     hintText: "Quanto dinheiro tem fisicamente?",
                     border: OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.red, width: 2),
-                    ),
                   ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  "Dica: Conte as moedas e notas. Se o valor for menor que o esperado, será registrada uma 'Quebra'.",
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -659,9 +828,7 @@ class _PdvViewState extends State<PdvView> {
     required double esperado,
     required Map<String, double> resumo,
   }) async {
-    double diferenca =
-        valorInformado - esperado; // Negativo = Falta dinheiro (Quebra)
-
+    double diferenca = valorInformado - esperado;
     try {
       await _db
           .collection('tenants')
@@ -673,38 +840,30 @@ class _PdvViewState extends State<PdvView> {
             'status': 'FECHADO',
             'valor_fechamento_informado': valorInformado,
             'valor_fechamento_esperado': esperado,
-            'diferenca_quebra': diferenca, // Importante para auditoria
+            'diferenca_quebra': diferenca,
             'resumo_vendas': resumo,
           });
 
       setState(() {
-        _caixaAbertoId = null; // Bloqueia o PDV
+        _caixaAbertoId = null;
         _vendedorCodeCtrl.clear();
       });
 
-      // Mostra resultado
       String msg = diferenca == 0
           ? "Caixa fechado com Sucesso! Valores batem."
           : "Caixa fechado com Diferença de R\$ ${diferenca.toStringAsFixed(2)}";
-
-      Color cor = diferenca < -0.5
-          ? Colors.red
-          : (diferenca > 0.5 ? Colors.blue : Colors.green);
 
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Text("Resultado"),
-          content: Text(
-            msg,
-            style: TextStyle(color: cor, fontWeight: FontWeight.bold),
-          ),
+          content: Text(msg),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                _verificarStatusCaixa(); // Vai forçar a abrir um novo caixa
+                _verificarStatusCaixa();
               },
               child: Text("OK"),
             ),
@@ -730,22 +889,20 @@ class _PdvViewState extends State<PdvView> {
           .collection('caixas_diarios')
           .add({
             'data_abertura': FieldValue.serverTimestamp(),
-            'usuario_nome': operador, // Idealmente seria ID + Nome
+            'usuario_nome': operador,
             'valor_inicial': valorInicial,
             'valor_fechamento': 0.0,
             'status': 'ABERTO',
-            'saldo_atual':
-                valorInicial, // Vamos somando aqui ou calculamos no fechamento
+            'saldo_atual': valorInicial,
           });
 
       setState(() {
         _caixaAbertoId = ref.id;
-        _vendedorCodeCtrl.text = operador; // Já define quem está vendendo
+        _vendedorCodeCtrl.text = operador;
       });
 
-      Navigator.pop(dialogContext); // Fecha o Dialog
-      _searchFocus
-          .requestFocus(); // Volta foco para o leitor de código de barras
+      Navigator.pop(dialogContext);
+      _searchFocus.requestFocus();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Caixa aberto com sucesso! Boas vendas.")),
@@ -760,15 +917,12 @@ class _PdvViewState extends State<PdvView> {
     }
   }
 
-  // Lógica "Scan & Add"
   Future<void> _handleScanSubmit(String value) async {
     if (value.isEmpty) {
       _searchFocus.requestFocus();
       return;
     }
-
     try {
-      // 1. Tenta buscar por Código de Barras Exato
       var queryBarra = await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
@@ -784,10 +938,6 @@ class _PdvViewState extends State<PdvView> {
         return;
       }
 
-      // 2. Se não achou, tenta por Nome Exato (caso digite)
-      // Nota: Firestore é Case Sensitive por padrão. Para busca robusta por nome, o ideal é o Grid.
-      // Mas "Enter" deve ser ação rápida.
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Produto não encontrado pelo código: $value"),
@@ -795,8 +945,6 @@ class _PdvViewState extends State<PdvView> {
           duration: Duration(seconds: 2),
         ),
       );
-
-      // Mantém o texto para correção, mas seleciona tudo para facilitar redigitar
       _searchCtrl.selection = TextSelection(
         baseOffset: 0,
         extentOffset: _searchCtrl.text.length,
@@ -862,10 +1010,8 @@ class _PdvViewState extends State<PdvView> {
           );
         }
 
-        // LIMITA A 4 ITENS INICIAIS COMO SOLICITADO
         var displayDocs = docs.take(_itensPorPagina).toList();
 
-        // Identificar Mais Vendido
         String bestSellerId = '';
         int maxVendas = -1;
         for (var doc in docs) {
@@ -884,8 +1030,8 @@ class _PdvViewState extends State<PdvView> {
               child: GridView.builder(
                 physics: NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, // 2 por linha
-                  childAspectRatio: 2.9, // Cards largos
+                  crossAxisCount: 2,
+                  childAspectRatio: 2.9,
                   crossAxisSpacing: 15,
                   mainAxisSpacing: 15,
                 ),
@@ -911,7 +1057,7 @@ class _PdvViewState extends State<PdvView> {
     return InkWell(
       onTap: () {
         _addToCart(doc.id, data);
-        _clearAndRefocus(); // Ao clicar, também limpa a busca para nova ação
+        _clearAndRefocus();
       },
       borderRadius: BorderRadius.circular(15),
       child: Stack(
@@ -1014,8 +1160,6 @@ class _PdvViewState extends State<PdvView> {
     );
   }
 
-  // --- LÓGICA DO CARRINHO ---
-
   void _addToCart(String id, Map<String, dynamic> data) {
     setState(() {
       int index = _carrinho.indexWhere((item) => item['id'] == id);
@@ -1028,7 +1172,6 @@ class _PdvViewState extends State<PdvView> {
           'preco': data['preco'],
           'qtd': 1,
         });
-        // Scroll to bottom when new item added
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_cartScrollCtrl.hasClients) {
             _cartScrollCtrl.animateTo(
@@ -1053,8 +1196,6 @@ class _PdvViewState extends State<PdvView> {
 
   double get _totalCart =>
       _carrinho.fold(0, (sum, item) => sum + (item['preco'] * item['qtd']));
-
-  // --- LÓGICA DE MÚLTIPLOS PAGAMENTOS ---
 
   double get _totalPago =>
       _pagamentos.fold(0, (sum, item) => sum + item['valor']);
@@ -1238,7 +1379,6 @@ class _PdvViewState extends State<PdvView> {
     return Expanded(
       child: Column(
         children: [
-          // PAGAMENTO INFO MAIOR
           _buildRowTotal(
             "Pago",
             _totalPago,
@@ -1263,7 +1403,6 @@ class _PdvViewState extends State<PdvView> {
 
           SizedBox(height: 20),
 
-          // INPUT PAGAMENTO
           if (_restante > 0 || _pagamentos.isEmpty)
             Row(
               children: [
@@ -1334,7 +1473,6 @@ class _PdvViewState extends State<PdvView> {
 
           SizedBox(height: 15),
 
-          // LISTA PAGAMENTOS MINI
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -1448,7 +1586,6 @@ class _PdvViewState extends State<PdvView> {
   }
 
   void _finalizarVenda() async {
-    // 1. BLOQUEIO DE SEGURANÇA
     if (_caixaAbertoId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1458,7 +1595,7 @@ class _PdvViewState extends State<PdvView> {
           backgroundColor: Colors.red,
         ),
       );
-      _verificarStatusCaixa(); // Tenta recuperar ou abrir
+      _verificarStatusCaixa();
       return;
     }
 
@@ -1470,7 +1607,6 @@ class _PdvViewState extends State<PdvView> {
     }
 
     try {
-      // --- LÓGICA SIMPLIFICADA COM VÍNCULO AO CAIXA ---
       await _db
           .collection('tenants')
           .doc(AppConfig.tenantId)
@@ -1484,11 +1620,38 @@ class _PdvViewState extends State<PdvView> {
             'data_venda': FieldValue.serverTimestamp(),
             'status': 'concluido',
             'canal': 'PDV_MOBILE',
-
-            // VÍNCULO IMPORTANTE
-            'caixa_id':
-                _caixaAbertoId, // <--- AQUI ESTÁ A CHAVE DO CONTROLE FINANCEIRO
+            'caixa_id': _caixaAbertoId,
+            'comanda_id': _currentComandaId // Se vier de comanda
           });
+
+      // Se for pagamento de comanda, atualiza status
+      if (_currentComanda != null && _currentComandaId != null) {
+        // 1. Marca Comanda como Paga
+        await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection('comandas')
+            .doc(_currentComandaId)
+            .update({'status': 'pago'});
+
+        // 2. Marca Origem como Concluido (e Pago)
+        String? origemCol = _currentComanda!['origem_collection'];
+        String? origemId = _currentComanda!['origem_id'];
+
+        if (origemCol != null && origemId != null && origemCol.isNotEmpty) {
+           await _db
+            .collection('tenants')
+            .doc(AppConfig.tenantId)
+            .collection(origemCol)
+            .doc(origemId)
+            .update({
+              'status': 'concluido',
+              'status_pagamento': 'pago',
+              'valor_final_cobrado': _totalCart,
+              'data_pagamento': FieldValue.serverTimestamp(),
+            });
+        }
+      }
 
       // Limpeza da tela
       setState(() {
@@ -1499,13 +1662,15 @@ class _PdvViewState extends State<PdvView> {
         _searchCtrl.clear();
         _filtroBusca = '';
         _vendedorCodeCtrl.clear();
+        _currentComanda = null;
+        _currentComandaId = null;
       });
       _searchFocus.requestFocus();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "VENDA REGISTRADA! Processando estoque em segundo plano...",
+            "VENDA REGISTRADA!",
           ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
