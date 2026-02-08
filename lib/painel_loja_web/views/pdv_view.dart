@@ -427,6 +427,28 @@ class _PdvViewState extends State<PdvView> {
           .orderBy('created_at', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 40, color: Colors.red),
+                SizedBox(height: 10),
+                Text(
+                  "Erro ao carregar serviços.\nVerifique se o índice 'status' + 'created_at' existe.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.red),
+                ),
+                SizedBox(height: 5),
+                SelectableText(
+                  snapshot.error.toString(),
+                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                )
+              ],
+            ),
+          );
+        }
+
         if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
 
         final docs = snapshot.data!.docs;
