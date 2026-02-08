@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
+import 'package:agenpet/painel_loja_web/views/login_web_view.dart';
 import '../../services/firebase_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -282,6 +283,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Se for Desktop (>= 800px), exibe o login específico do painel da loja
+    if (MediaQuery.of(context).size.width >= 800) {
+      return const LoginWebView();
+    }
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
