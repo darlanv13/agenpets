@@ -1,3 +1,4 @@
+import 'package:agenpet/painel_loja_web/services/comanda_service.dart';
 import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/nova_reserva_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/registrar_pagamento_dialog.dart';
@@ -818,12 +819,20 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
-                if (status == 'hospedado' || (data['enviado_pdv'] == true && status != 'concluido'))
+                if (status == 'hospedado' ||
+                    (data['enviado_pdv'] == true && status != 'concluido')) ...[
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
-                    label: Text(data['enviado_pdv'] == true ? "REENVIAR AO CAIXA" : "ENVIAR AO CAIXA"),
+                    label: Text(
+                      data['enviado_pdv'] == true
+                          ? "REENVIAR AO CAIXA"
+                          : "ENVIAR AO CAIXA",
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: data['enviado_pdv'] == true ? Colors.purple : _corAcai,
+                      backgroundColor:
+                          data['enviado_pdv'] == true
+                              ? Colors.purple
+                              : _corAcai,
                       foregroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(
                         horizontal: 20,
@@ -832,6 +841,31 @@ class _HotelViewState extends State<HotelView> {
                     ),
                     onPressed: () => _abrirCheckoutHotel(doc.id, data),
                   ),
+                  if (data['enviado_pdv'] == true) ...[
+                    SizedBox(width: 10),
+                    TextButton.icon(
+                      icon: Icon(Icons.undo, size: 18, color: Colors.red),
+                      label: Text(
+                        "CANCELAR",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onPressed: () async {
+                        final success = await ComandaService.cancelarEnvio(
+                          tenantId: AppConfig.tenantId,
+                          origemCollection: 'reservas_hotel',
+                          origemId: doc.id,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Envio cancelado com sucesso."),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ]
                 if (status == 'concluido')
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),

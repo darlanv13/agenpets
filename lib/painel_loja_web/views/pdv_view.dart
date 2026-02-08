@@ -149,7 +149,22 @@ class _PdvViewState extends State<PdvView> {
                         children: [
                           _buildTabButton("Produtos", 0),
                           SizedBox(width: 10),
-                          _buildTabButton("Serviços", 1),
+                          StreamBuilder<QuerySnapshot>(
+                            stream: _db
+                                .collection('tenants')
+                                .doc(AppConfig.tenantId)
+                                .collection('comandas')
+                                .where('status', isEqualTo: 'aberta')
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              int count = 0;
+                              if (snapshot.hasData) {
+                                count = snapshot.data!.docs.length;
+                              }
+                              return _buildTabButton("Serviços", 1,
+                                  badgeCount: count);
+                            },
+                          ),
                         ],
                       )
                     ],
@@ -349,33 +364,54 @@ class _PdvViewState extends State<PdvView> {
     );
   }
 
-  Widget _buildTabButton(String label, int index) {
+  Widget _buildTabButton(String label, int index, {int badgeCount = 0}) {
     bool isActive = _tabIndex == index;
     return InkWell(
       onTap: () {
         setState(() {
           _tabIndex = index;
-          if (index == 0 && _currentComanda != null) {
-            // Se voltar para produtos, talvez queira limpar?
-            // Não necessariamente, pode querer adicionar produto à comanda.
-          }
+          // Se voltar para produtos, mantemos o estado por enquanto
         });
       },
       borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? _corAcai : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isActive ? _corAcai : Colors.grey[300]!)
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : Colors.grey[600],
-            fontWeight: FontWeight.bold
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(
+                color: isActive ? _corAcai : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border:
+                    Border.all(color: isActive ? _corAcai : Colors.grey[300]!)),
+            child: Text(
+              label,
+              style: TextStyle(
+                  color: isActive ? Colors.white : Colors.grey[600],
+                  fontWeight: FontWeight.bold),
+            ),
           ),
-        ),
+          if (badgeCount > 0)
+            Positioned(
+              right: -5,
+              top: -5,
+              child: Container(
+                padding: EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  badgeCount.toString(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
