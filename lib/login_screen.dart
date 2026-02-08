@@ -327,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     SizedBox(height: 15),
                     Text(
-                      "AgenPet",
+                      "AgenPets",
                       style: TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
