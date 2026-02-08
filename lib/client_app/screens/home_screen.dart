@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   if (_temBanhoTosa)
                     _buildMenuCard(
-                      "Agendar Banho/Tosa",
+                      "Banho & Tosa",
                       FontAwesomeIcons.shower,
                       _corAcai,
                       Colors.white,
@@ -253,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // Itens Fixos do Usuário
                   _buildMenuCard(
-                    "Meus Agendamentos",
+                    "Agendamentos",
                     FontAwesomeIcons.calendarCheck,
                     Colors.blueAccent,
                     Colors.white,
