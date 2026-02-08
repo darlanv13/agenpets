@@ -14,11 +14,12 @@ setGlobalOptions({ region: "southamerica-east1" });
 const agendamento = require("./controllers/agendamento");
 const vendas = require("./controllers/vendas");
 const estoque = require("./controllers/estoque");
+const pdv = require("./controllers/pdvController");
 
 // --- MÓDULOS EXISTENTES (Mantidos) ---
 const hotelController = require("./controllers/hotelController");
 const crecheController = require("./controllers/crecheController");
-const checkoutsAgenpets = require("./controllers/checkouts_agenpets");
+// const checkoutsAgenpets = require("./controllers/checkouts_agenpets"); // Desativado
 const notificationsApp = require("./controllers/notifications_app");
 const notificationsWhatsapp = require("./controllers/notifications_whatsapp");
 const adminController = require("./controllers/adminController");
@@ -42,13 +43,14 @@ exports.realizarVendaAssinatura = vendas.realizarVendaAssinatura;
 // Pagamentos (Pix / Gateway) - Mantido do controller original de pagamentos
 exports.comprarAssinatura = paymentController.gerarPixAssinatura;
 exports.webhookMercadoPago = paymentController.webhookMercadoPago;
-exports.realizarCheckout = checkoutsAgenpets.realizarCheckout;
+// exports.realizarCheckout = checkoutsAgenpets.realizarCheckout; // Desativado
 
-// MÓDULO DE ESTOQUE E KARDEX (NOVO - Triggers)
+// MÓDULO DE ESTOQUE E PDV (Triggers)
 
 // Estas funções rodam automaticamente quando o banco de dados muda
-exports.onVendaCriada = estoque.onVendaCriada;
-exports.onMovimentacaoCriada = estoque.onMovimentacaoCriada;
+exports.onVendaCriada = estoque.onVendaCriada; // Baixa estoque
+exports.onMovimentacaoCriada = estoque.onMovimentacaoCriada; // Atualiza saldo
+exports.processarVendaComanda = pdv.onVendaComanda; // Fecha comanda e serviço
 
 // MÓDULO ADMIN TENANTS (Multi-lojas)
 
@@ -64,7 +66,7 @@ exports.verificarLoja = adminTenantsController.verificarLoja;
 
 exports.reservarHotel = hotelController.reservarHotel;
 exports.obterDiasLotados = hotelController.obterDiasLotados;
-exports.realizarCheckoutHotel = hotelController.realizarCheckoutHotel;
+// exports.realizarCheckoutHotel = hotelController.realizarCheckoutHotel; // Desativado
 exports.registrarPagamentoHotel = hotelController.registrarPagamentoHotel;
 
 
@@ -73,7 +75,7 @@ exports.registrarPagamentoHotel = hotelController.registrarPagamentoHotel;
 exports.reservarCreche = crecheController.reservarCreche;
 exports.obterDiasLotadosCreche = crecheController.obterDiasLotadosCreche;
 exports.obterPrecoCreche = crecheController.obterPrecoCreche;
-exports.realizarCheckoutCreche = crecheController.realizarCheckoutCreche;
+// exports.realizarCheckoutCreche = crecheController.realizarCheckoutCreche; // Desativado
 exports.registrarPagamentoCreche = crecheController.registrarPagamentoCreche;
 
 // MÓDULO DE NOTIFICAÇÕES (Push & WhatsApp)
