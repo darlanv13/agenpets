@@ -183,7 +183,8 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
     let extrasProcessados = [];
 
     if (extrasIds && extrasIds.length > 0) {
-        for (const extraId of extrasIds) {
+        // Otimização: Busca em paralelo usando Promise.all para evitar N+1 queries
+        const extraPromises = extrasIds.map(async (extraId) => {
             let extraDoc = await db.collection("tenants").doc(tenantId).collection('servicos_extras').doc(extraId).get();
             let extraData = extraDoc.exists ? extraDoc.data() : null;
 
@@ -195,10 +196,18 @@ exports.realizarCheckoutHotel = onCall(async (request) => {
 
             if (extraDoc.exists && extraData) {
                 const p = Number(extraData.preco || 0);
-                custoExtras += p;
-                extrasProcessados.push({ id: extraId, nome: extraData.nome, preco: p });
+                return { id: extraId, nome: extraData.nome, preco: p };
             }
-        }
+            return null;
+        });
+
+        const results = await Promise.all(extraPromises);
+        results.forEach(res => {
+            if (res) {
+                custoExtras += res.preco;
+                extrasProcessados.push(res);
+            }
+        });
     }
 
     const valorTotalServico = custoDiarias + custoExtras;
