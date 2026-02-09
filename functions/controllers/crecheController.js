@@ -15,15 +15,16 @@ exports.reservarCreche = onCall(async (request) => {
         const reservasRef = db.collection("tenants").doc(tenantId).collection("reservas_creche");
         const userRef = db.collection("users").doc(cpf_user);
 
-        // 1. Verificar Vouchers Disponíveis (NA LOJA ESPECÍFICA)
-        // Vouchers ficam em users/{cpf}/vouchers/{tenantId}
+        // 0. Obter Configuração de Capacidade (Otimizado)
+        const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
+        const CAPACIDADE_MAXIMA = configDoc.exists ? (configDoc.data().capacidade_creche || 60) : 60;
+
+        // 1. Verificar Vouchers Disponíveis
         const voucherRef = userRef.collection('vouchers').doc(tenantId);
         const voucherDoc = await voucherRef.get();
 
         let vouchersDisponiveis = 0;
         if (voucherDoc.exists) {
-            // Assume que o campo se chama 'creche' ou 'vouchers_creche'? 
-            // PaymentController usa 'creche'. Flutter usa 'creche'.
             vouchersDisponiveis = voucherDoc.data().creche || voucherDoc.data().vouchers_creche || 0;
         }
 
@@ -32,8 +33,8 @@ exports.reservarCreche = onCall(async (request) => {
             vouchersAUsar = Math.min(dates.length, vouchersDisponiveis);
         }
 
-        // 2. Processar disponibilidade para cada data
-        for (const dateStr of dates) {
+        // 2. Processar disponibilidade para cada data (PARALELIZADO)
+        const checkAvailabilityPromises = dates.map(async (dateStr) => {
             const dayStart = startOfDay(new Date(dateStr));
             const dayEnd = addDays(dayStart, 1);
 
@@ -51,10 +52,12 @@ exports.reservarCreche = onCall(async (request) => {
                 }
             });
 
-            if (vagasOcupadas >= 60) {
+            if (vagasOcupadas >= CAPACIDADE_MAXIMA) {
                 throw new HttpsError('resource-exhausted', `Creche lotada para o dia ${format(dayStart, 'dd/MM/yyyy')}.`);
             }
-        }
+        });
+
+        await Promise.all(checkAvailabilityPromises);
 
         // 3. Criar Reservas e Deduzir Vouchers
         const batch = db.batch();
