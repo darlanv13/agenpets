@@ -1,3 +1,4 @@
+import 'package:agenpet/painel_loja_web/services/comanda_service.dart';
 import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/nova_reserva_creche_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/registrar_pagamento_creche_dialog.dart';
@@ -822,7 +823,7 @@ class _CrecheViewState extends State<CrecheView> {
                     onPressed: () => _fazerCheckIn(doc.id),
                   ),
                 if (status == 'na creche' ||
-                    (data['enviado_pdv'] == true && status != 'concluido'))
+                    (data['enviado_pdv'] == true && status != 'concluido')) ...[
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.fileInvoiceDollar, size: 18),
                     label: Text(
@@ -842,6 +843,31 @@ class _CrecheViewState extends State<CrecheView> {
                     ),
                     onPressed: () => _abrirCheckoutCreche(doc.id, data),
                   ),
+                  if (data['enviado_pdv'] == true) ...[
+                    SizedBox(width: 10),
+                    TextButton.icon(
+                      icon: Icon(Icons.undo, size: 18, color: Colors.red),
+                      label: Text(
+                        "CANCELAR",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onPressed: () async {
+                        final success = await ComandaService.cancelarEnvio(
+                          tenantId: AppConfig.tenantId,
+                          origemCollection: 'reservas_creche',
+                          origemId: doc.id,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Envio cancelado com sucesso."),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ],
                 if (status == 'concluido')
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),

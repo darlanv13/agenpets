@@ -1,3 +1,4 @@
+import 'package:agenpet/painel_loja_web/services/comanda_service.dart';
 import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
 import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/novo_agendamento_dialog.dart';
@@ -900,7 +901,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                     ],
                   ),
                 ),
-                if (isPronto || (isEnviadoPdv && !isConcluido))
+                if (isPronto || (isEnviadoPdv && !isConcluido)) ...[
                   ElevatedButton.icon(
                     icon: Icon(Icons.point_of_sale, size: 18),
                     label: Text(
@@ -918,8 +919,40 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
                       ),
                     ),
                     onPressed: () => _abrirCheckout(agendamentoDoc),
-                  )
-                else if (status == 'agendado' ||
+                  ),
+                  if (isEnviadoPdv) ...[
+                    SizedBox(width: 10),
+                    TextButton.icon(
+                      icon: Icon(Icons.undo, size: 18, color: Colors.red),
+                      label: Text(
+                        "CANCELAR ENVIO",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onPressed: () async {
+                        final success = await ComandaService.cancelarEnvio(
+                          tenantId: AppConfig.tenantId,
+                          origemCollection: 'agendamentos',
+                          origemId: agendamentoDoc.id,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Envio cancelado com sucesso."),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "Não foi possível cancelar (pode já estar pago).",
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ] else if (status == 'agendado' ||
                     status == 'aguardando_pagamento')
                   ElevatedButton.icon(
                     icon: Icon(FontAwesomeIcons.dog, size: 18),
