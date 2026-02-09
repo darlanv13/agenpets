@@ -5,7 +5,7 @@ const { db, admin } = require("../config/firebase");
 exports.reservarCreche = onCall(async (request) => {
     try {
         console.log("Iniciando reserva creche...", request.data);
-        const { dates, pet_id, cpf_user, tenantId } = request.data;
+        const { dates, pet_id, cpf_user, tenantId, taxi_dog, endereco_buscar } = request.data;
 
         if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
         if (!dates || !Array.isArray(dates) || dates.length === 0) {
@@ -93,7 +93,9 @@ exports.reservarCreche = onCall(async (request) => {
                 payment_status: paymentStatus,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 origem: 'app_cliente',
-                pago_com_voucher: paymentStatus === 'paid_voucher'
+                pago_com_voucher: paymentStatus === 'paid_voucher',
+                taxi_dog: !!taxi_dog,
+                endereco_buscar: endereco_buscar || null
             });
         }
 

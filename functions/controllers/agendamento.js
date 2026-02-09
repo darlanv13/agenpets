@@ -102,7 +102,7 @@ exports.buscarHorarios = onCall(async (request) => {
 
 // --- 2. CRIAR AGENDAMENTO ---
 exports.criarAgendamento = onCall(async (request) => {
-    const { tenantId, cpf_user, metodo_pagamento, servico, data_hora, pet_id, valor } = request.data;
+    const { tenantId, cpf_user, metodo_pagamento, servico, data_hora, pet_id, valor, taxi_dog, endereco_buscar } = request.data;
 
     if (!tenantId) throw new HttpsError("invalid-argument", "TenantId obrigatório.");
     if (!data_hora) throw new HttpsError("invalid-argument", "Data obrigatória.");
@@ -175,6 +175,8 @@ exports.criarAgendamento = onCall(async (request) => {
         servicoNorm, data_inicio: admin.firestore.Timestamp.fromDate(inicio), data_fim: admin.firestore.Timestamp.fromDate(fim),
         created_at: admin.firestore.FieldValue.serverTimestamp(), metodo_pagamento, valor: metodo_pagamento === "voucher" ? 0 : valor,
         status: metodo_pagamento === "pix" ? "aguardando_pagamento" : "agendado",
+        taxi_dog: !!taxi_dog,
+        endereco_buscar: endereco_buscar || null,
     };
 
     let resposta = { success: true };

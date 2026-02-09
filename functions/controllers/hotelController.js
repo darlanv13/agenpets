@@ -5,7 +5,7 @@ const { db, admin } = require("../config/firebase");
 exports.reservarHotel = onCall(async (request) => {
     try {
         console.log("Iniciando reserva...", request.data);
-        const { check_in, check_out, pet_id, cpf_user, tenantId } = request.data;
+        const { check_in, check_out, pet_id, cpf_user, tenantId, taxi_dog, endereco_buscar } = request.data;
 
         if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
@@ -50,7 +50,9 @@ exports.reservarHotel = onCall(async (request) => {
             status: 'reservado',
             payment_status: 'pending',
             created_at: admin.firestore.FieldValue.serverTimestamp(),
-            origem: 'app_cliente'
+            origem: 'app_cliente',
+            taxi_dog: !!taxi_dog,
+            endereco_buscar: endereco_buscar || null
         });
 
         return { success: true };
