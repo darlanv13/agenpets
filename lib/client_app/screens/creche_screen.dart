@@ -27,6 +27,11 @@ class _CrecheScreenState extends State<CrecheScreen> {
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF8F9FC);
 
+  // --- TAXI DOG ---
+  final _enderecoController = TextEditingController();
+  bool _temTaxiDog = false;
+  bool _usaTaxiDog = false;
+
   // --- ESTADO ---
   int _currentStep = 0;
   bool _isLoading = false;
@@ -48,8 +53,15 @@ class _CrecheScreenState extends State<CrecheScreen> {
   @override
   void initState() {
     super.initState();
-    _carregarPrecoCreche();
+    _carregarConfigs();
     _carregarDisponibilidade();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _enderecoController.dispose();
+    super.dispose();
   }
 
   @override
@@ -86,14 +98,17 @@ class _CrecheScreenState extends State<CrecheScreen> {
     }
   }
 
-  Future<void> _carregarPrecoCreche() async {
+  Future<void> _carregarConfigs() async {
     try {
-      final preco = await _firebaseService.getPrecoCreche();
-      setState(() {
-        _valorDiaria = preco > 0 ? preco : 60.00;
-      });
+      final config = await _firebaseService.getConfiguracoes();
+      if (mounted) {
+        setState(() {
+          _valorDiaria = (config['preco_creche'] ?? 60.00).toDouble();
+          _temTaxiDog = config['tem_taxi_dog'] == true;
+        });
+      }
     } catch (e) {
-      setState(() => _valorDiaria = 60.00);
+      if (mounted) setState(() => _valorDiaria = 60.00);
     }
   }
 
@@ -164,6 +179,11 @@ class _CrecheScreenState extends State<CrecheScreen> {
   Future<void> _fazerReserva() async {
     if (_petId == null || _selectedDays.isEmpty) return;
 
+    if (_usaTaxiDog && _enderecoController.text.trim().isEmpty) {
+      _mostrarErroDialog("Por favor, informe o endereço para o Táxi Dog.");
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -171,6 +191,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
         petId: _petId!,
         cpfUser: _userCpf!,
         dates: _selectedDays.toList(),
+        taxiDog: _usaTaxiDog,
+        endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
       );
 
       _mostrarSucessoDialog();
@@ -924,6 +946,65 @@ class _CrecheScreenState extends State<CrecheScreen> {
                   ],
                 ),
               ),
+              SizedBox(height: 25),
+
+              if (_temTaxiDog) ...[
+                Container(
+                  padding: EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: Column(
+                    children: [
+                      CheckboxListTile(
+                        activeColor: _corAcai,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          "Incluir Táxi Dog?",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "Buscaremos e entregaremos seu pet.",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        value: _usaTaxiDog,
+                        onChanged: (val) {
+                          setState(() {
+                            _usaTaxiDog = val ?? false;
+                          });
+                        },
+                      ),
+                      if (_usaTaxiDog)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: TextField(
+                            controller: _enderecoController,
+                            decoration: InputDecoration(
+                              labelText: "Endereço de Retirada/Entrega",
+                              labelStyle: GoogleFonts.poppins(fontSize: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              isDense: true,
+                              prefixIcon: Icon(Icons.location_on, size: 18),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20),
+              ],
+
               SizedBox(height: 30),
               SizedBox(
                 height: 55,

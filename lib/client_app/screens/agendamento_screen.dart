@@ -29,6 +29,11 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   final _obsController = TextEditingController();
   final PageController _pageController = PageController();
 
+  // --- TAXI DOG ---
+  final _enderecoController = TextEditingController();
+  bool _temTaxiDog = false;
+  bool _usaTaxiDog = false;
+
   // --- ESTADO ---
   int _currentStep = 0;
   String? _userCpf;
@@ -46,12 +51,26 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   @override
   void initState() {
     super.initState();
+    _carregarConfigTaxiDog();
     _gerarListaDias();
     if (_dataSelecionada.weekday == DateTime.sunday) {
       _dataSelecionada = _dataSelecionada.add(Duration(days: 1));
     }
     if (_listaDias.isNotEmpty) {
       _dataSelecionada = _listaDias.first;
+    }
+  }
+
+  Future<void> _carregarConfigTaxiDog() async {
+    try {
+      final config = await _firebaseService.getConfiguracoes();
+      if (mounted) {
+        setState(() {
+          _temTaxiDog = config['tem_taxi_dog'] == true;
+        });
+      }
+    } catch (e) {
+      print("Erro config taxi dog: $e");
     }
   }
 
@@ -68,6 +87,14 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       }
       diasPercorridos++;
     }
+  }
+
+  @override
+  void dispose() {
+    _obsController.dispose();
+    _pageController.dispose();
+    _enderecoController.dispose();
+    super.dispose();
   }
 
   @override
@@ -122,6 +149,17 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
   Future<void> _confirmarAgendamento() async {
     if (_petId == null || _horarioSelecionado == null) return;
+
+    if (_usaTaxiDog && _enderecoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, informe o endereço para o Táxi Dog."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -142,6 +180,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         petId: _petId!,
         metodoPagamento: 'na_loja',
         valor: 0,
+        taxiDog: _usaTaxiDog,
+        endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
       );
 
       _mostrarSucessoDialog();
@@ -859,6 +899,64 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             ),
           ),
           SizedBox(height: 25),
+
+          if (_temTaxiDog) ...[
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                children: [
+                  CheckboxListTile(
+                    activeColor: _corAcai,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      "Incluir Táxi Dog?",
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      "Buscaremos e entregaremos seu pet.",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    value: _usaTaxiDog,
+                    onChanged: (val) {
+                      setState(() {
+                        _usaTaxiDog = val ?? false;
+                      });
+                    },
+                  ),
+                  if (_usaTaxiDog)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: TextField(
+                        controller: _enderecoController,
+                        decoration: InputDecoration(
+                          labelText: "Endereço de Retirada/Entrega",
+                          labelStyle: GoogleFonts.poppins(fontSize: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.location_on, size: 18),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
+          ],
+
           TextField(
             controller: _obsController,
             maxLines: 3,
