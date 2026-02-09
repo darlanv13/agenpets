@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/utils/validators.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 class NovaReservaCrecheDialog extends StatefulWidget {
   const NovaReservaCrecheDialog({super.key});
@@ -42,9 +43,9 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
   String? _petIdSelecionado;
   List<Map<String, dynamic>> _petsEncontrados = [];
 
-  // Datas (Inicia: Hoje -> Amanhã)
-  DateTime _checkIn = DateTime.now();
-  DateTime _checkOut = DateTime.now().add(Duration(days: 1));
+  // Datas (Seleção Múltipla)
+  final Set<DateTime> _selectedDates = {};
+  DateTime _focusedDay = DateTime.now();
 
   double _valorDiaria = 0.0;
 
@@ -70,57 +71,22 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
 
   // --- LÓGICA DE DATAS ---
 
-  void _ajustarCheckIn(int dias) {
+  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
     setState(() {
-      _checkIn = _checkIn.add(Duration(days: dias));
-      // Validação: Não permite passado
-      if (_checkIn.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
-        _checkIn = DateTime.now();
-      }
-      // Validação: Empurra o checkout se encostar
-      if (!_checkOut.isAfter(_checkIn)) {
-        _checkOut = _checkIn.add(Duration(days: 1));
+      _focusedDay = focusedDay;
+      // Normaliza para remover hora
+      final normalized = DateTime(
+        selectedDay.year,
+        selectedDay.month,
+        selectedDay.day,
+      );
+
+      if (_selectedDates.contains(normalized)) {
+        _selectedDates.remove(normalized);
+      } else {
+        _selectedDates.add(normalized);
       }
     });
-  }
-
-  void _ajustarCheckOut(int dias) {
-    setState(() {
-      DateTime novaData = _checkOut.add(Duration(days: dias));
-      // Validação: Checkout deve ser > Checkin
-      if (novaData.isAfter(_checkIn)) {
-        _checkOut = novaData;
-      }
-    });
-  }
-
-  Future<void> _selecionarDataPopup(bool isCheckIn) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isCheckIn ? _checkIn : _checkOut,
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(primary: _corAcai),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        if (isCheckIn) {
-          _checkIn = picked;
-          if (!_checkOut.isAfter(_checkIn)) {
-            _checkOut = _checkIn.add(Duration(days: 1));
-          }
-        } else {
-          if (picked.isAfter(_checkIn)) _checkOut = picked;
-        }
-      });
-    }
   }
 
   // --- LÓGICA DE CLIENTE ---
@@ -194,12 +160,15 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
     setState(() => _enviandoReserva = true);
 
     try {
+      // Converte para lista de strings ISO8601
+      List<String> dates =
+          _selectedDates.map((d) => d.toIso8601String()).toList();
+
       await _functions.httpsCallable('reservarCreche').call({
         'tenantId': AppConfig.tenantId,
         'cpf_user': _cpfController.text.replaceAll(RegExp(r'[^0-9]'), ''),
         'pet_id': _petIdSelecionado,
-        'check_in': _checkIn.toIso8601String(),
-        'check_out': _checkOut.toIso8601String(),
+        'dates': dates, // <--- Agora enviamos array de datas
       });
 
       Navigator.pop(context);
@@ -229,15 +198,16 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
     ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
-  bool get _podeSalvar => _petIdSelecionado != null && !_enviandoReserva;
+  bool get _podeSalvar =>
+      _petIdSelecionado != null &&
+      _selectedDates.isNotEmpty &&
+      !_enviandoReserva;
 
   // --- UI ---
 
   @override
   Widget build(BuildContext context) {
-    // Cálculos em tempo real
-    int dias = _checkOut.difference(_checkIn).inDays;
-    if (dias < 1) dias = 1;
+    int dias = _selectedDates.length;
     double valorEstimado = dias * _valorDiaria;
 
     return Dialog(
@@ -245,7 +215,7 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
       backgroundColor: Colors.white,
       child: SizedBox(
         width: 900,
-        height: 550, // Altura otimizada
+        height: 600, // Aumentado um pouco para caber o calendário
         child: Column(
           children: [
             // HEADER
@@ -284,7 +254,7 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                             ),
                           ),
                           Text(
-                            "Preencha os dados da estadia",
+                            "Selecione os dias da estadia",
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
@@ -303,9 +273,9 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
             Expanded(
               child: Row(
                 children: [
-                  // --- COLUNA 1: DADOS (40%) ---
+                  // --- COLUNA 1: DADOS (35%) ---
                   Expanded(
-                    flex: 4,
+                    flex: 35,
                     child: Container(
                       padding: EdgeInsets.all(25),
                       decoration: BoxDecoration(
@@ -325,7 +295,7 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                                   child: TextField(
                                     controller: _cpfController,
                                     decoration: _inputDecoration(
-                                      "CPF (apenas números)",
+                                      "CPF",
                                       Icons.search,
                                     ),
                                     keyboardType: TextInputType.number,
@@ -478,40 +448,60 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                     ),
                   ),
 
-                  // --- COLUNA 2: DATAS E VALORES (60%) ---
+                  // --- COLUNA 2: CALENDÁRIO (65%) ---
                   Expanded(
-                    flex: 6,
+                    flex: 65,
                     child: Container(
                       color: _corFundo,
                       padding: EdgeInsets.all(25),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _label("3. Período da Estadia"),
+                          _label("3. Selecione os dias no calendário"),
                           SizedBox(height: 10),
 
-                          // NAVEGADOR DE DATAS (Compacto e Funcional)
-                          // Check-in
-                          _buildDateNavigator(
-                            "CHECK-IN (ENTRADA)",
-                            _checkIn,
-                            (d) => _ajustarCheckIn(d),
-                            () => _selecionarDataPopup(true),
-                          ),
-                          SizedBox(height: 10),
-                          // Check-out
-                          _buildDateNavigator(
-                            "CHECK-OUT (SAÍDA)",
-                            _checkOut,
-                            (d) => _ajustarCheckOut(d),
-                            () => _selecionarDataPopup(false),
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: TableCalendar(
+                                locale: 'pt_BR',
+                                firstDay: DateTime.now(),
+                                lastDay: DateTime.now().add(
+                                  Duration(days: 90),
+                                ),
+                                focusedDay: _focusedDay,
+                                selectedDayPredicate: (day) =>
+                                    _selectedDates.contains(
+                                      DateTime(day.year, day.month, day.day),
+                                    ),
+                                onDaySelected: _onDaySelected,
+                                calendarStyle: CalendarStyle(
+                                  selectedDecoration: BoxDecoration(
+                                    color: _corAcai,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  todayDecoration: BoxDecoration(
+                                    color: _corAcai.withOpacity(0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                headerStyle: HeaderStyle(
+                                  formatButtonVisible: false,
+                                  titleCentered: true,
+                                ),
+                              ),
+                            ),
                           ),
 
-                          Spacer(),
+                          SizedBox(height: 20),
 
                           // RESUMO FINANCEIRO CARD
                           Container(
-                            padding: EdgeInsets.all(20),
+                            padding: EdgeInsets.all(15),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(15),
@@ -523,18 +513,18 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                                 ),
                               ],
                             ),
-                            child: Column(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      "Duração",
+                                      "Dias Selecionados",
                                       style: TextStyle(color: Colors.grey[600]),
                                     ),
                                     Text(
-                                      "$dias diárias",
+                                      "$dias dias",
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
@@ -542,10 +532,8 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                                     ),
                                   ],
                                 ),
-                                Divider(height: 20),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
                                       "Valor Estimado",
@@ -564,7 +552,6 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                               ],
                             ),
                           ),
-                          Spacer(),
                         ],
                       ),
                     ),
@@ -629,71 +616,6 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
   }
 
   // --- WIDGETS AUXILIARES ---
-
-  Widget _buildDateNavigator(
-    String label,
-    DateTime date,
-    Function(int) onArrowClick,
-    VoidCallback onTextClick,
-  ) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 5, horizontal: 5),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: Icon(Icons.chevron_left, color: Colors.grey[600]),
-            onPressed: () => onArrowClick(-1),
-            tooltip: "-1 dia",
-          ),
-          InkWell(
-            onTap: onTextClick,
-            child: Column(
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue[800],
-                    letterSpacing: 1,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today, size: 14, color: _corAcai),
-                    SizedBox(width: 8),
-                    Text(
-                      DateFormat(
-                        "dd/MM/yyyy (EEE)",
-                        "pt_BR",
-                      ).format(date).toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.chevron_right, color: Colors.grey[600]),
-            onPressed: () => onArrowClick(1),
-            tooltip: "+1 dia",
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _label(String text) {
     return Text(
