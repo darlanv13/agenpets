@@ -85,60 +85,39 @@ class _PdvViewState extends State<PdvView> {
               padding: EdgeInsets.all(20),
               child: Column(
                 children: [
+                  // HEADER COMPACTO
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // CAIXA STATUS
                       Container(
-                        margin: EdgeInsets.only(bottom: 10),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _caixaAbertoId != null
                               ? Colors.green.withOpacity(0.1)
                               : Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: _caixaAbertoId != null
-                                ? Colors.green
-                                : Colors.red,
+                            color: _caixaAbertoId != null ? Colors.green : Colors.red,
+                            width: 0.5
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.circle,
-                              size: 12,
-                              color: _caixaAbertoId != null
-                                  ? Colors.green
-                                  : Colors.red,
-                            ),
-                            SizedBox(width: 8),
+                            Icon(Icons.circle, size: 8, color: _caixaAbertoId != null ? Colors.green : Colors.red),
+                            SizedBox(width: 6),
                             Text(
-                              _caixaAbertoId != null
-                                  ? "CAIXA ABERTO"
-                                  : "CAIXA FECHADO",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.black54,
-                              ),
+                              _caixaAbertoId != null ? "CAIXA ABERTO" : "CAIXA FECHADO",
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.black54),
                             ),
                             if (_caixaAbertoId != null)
-                              TextButton.icon(
-                                icon: Icon(Icons.lock_clock, color: Colors.red),
-                                label: Text(
-                                  "FECHAR",
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 10
-                                  ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: InkWell(
+                                  onTap: _iniciarFechamentoCaixa,
+                                  child: Icon(Icons.lock_clock, size: 14, color: Colors.red),
                                 ),
-                                onPressed: _iniciarFechamentoCaixa,
                               ),
                           ],
                         ),
@@ -150,19 +129,10 @@ class _PdvViewState extends State<PdvView> {
                           _buildTabButton("Produtos", 0),
                           SizedBox(width: 10),
                           StreamBuilder<QuerySnapshot>(
-                            stream: _db
-                                .collection('tenants')
-                                .doc(AppConfig.tenantId)
-                                .collection('comandas')
-                                .where('status', isEqualTo: 'aberta')
-                                .snapshots(),
+                            stream: _db.collection('tenants').doc(AppConfig.tenantId).collection('comandas').where('status', isEqualTo: 'aberta').snapshots(),
                             builder: (context, snapshot) {
-                              int count = 0;
-                              if (snapshot.hasData) {
-                                count = snapshot.data!.docs.length;
-                              }
-                              return _buildTabButton("Serviços", 1,
-                                  badgeCount: count);
+                              int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                              return _buildTabButton("Serviços", 1, badgeCount: count);
                             },
                           ),
                         ],
@@ -276,82 +246,61 @@ class _PdvViewState extends State<PdvView> {
                       ),
                     ),
 
-                  // TOTAL DESTAQUE GIGANTE
+                  // TOTAL COMPACTO
                   Container(
                     width: double.infinity,
-                    padding: EdgeInsets.all(30),
+                    padding: EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [_corAcai, Color(0xFF6A1B9A)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _corAcai.withValues(alpha: 0.4),
-                          blurRadius: 10,
-                          offset: Offset(0, 5),
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Column(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "TOTAL A PAGAR",
+                          "TOTAL",
                           style: TextStyle(
                             color: Colors.white70,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1.5,
                           ),
                         ),
-                        SizedBox(height: 10),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            "R\$ ${_totalCart.toStringAsFixed(2)}",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 50,
-                              fontWeight: FontWeight.w900,
-                            ),
+                        Text(
+                          "R\$ ${_totalCart.toStringAsFixed(2)}",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  SizedBox(height: 30),
+                  SizedBox(height: 15),
 
-                  // VENDEDOR MAIOR
-                  TextField(
-                    controller: _vendedorCodeCtrl,
-                    style: TextStyle(fontSize: 18),
-                    decoration: InputDecoration(
-                      labelText: "CÓDIGO DO VENDEDOR",
-                      labelStyle: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.badge,
-                        size: 28,
-                        color: Colors.grey,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
+                  // VENDEDOR COMPACTO
+                  SizedBox(
+                    height: 45,
+                    child: TextField(
+                      controller: _vendedorCodeCtrl,
+                      style: TextStyle(fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: "Código Vendedor",
+                        prefixIcon: Icon(Icons.badge, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10),
                       ),
                     ),
                   ),
 
-                  SizedBox(height: 20),
-                  Divider(),
                   SizedBox(height: 10),
+                  Divider(),
+                  SizedBox(height: 5),
 
                   // RESUMO PAGAMENTO
                   _buildCheckoutSection(),
@@ -541,38 +490,26 @@ class _PdvViewState extends State<PdvView> {
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+      height: 45,
+      padding: EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _corAcai.withValues(alpha: 0.2), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
       ),
       child: TextField(
         controller: _searchCtrl,
-        focusNode: _searchFocus, // Controle de Foco
-        textInputAction: TextInputAction.go, // Botão de ação "Ir"
-        onChanged: (val) {
-          setState(() => _filtroBusca = val);
-        },
+        focusNode: _searchFocus,
+        textInputAction: TextInputAction.go,
+        onChanged: (val) => setState(() => _filtroBusca = val),
         onSubmitted: (val) => _handleScanSubmit(val),
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
-          hintText: "ESCANEIE O CÓDIGO...",
-          hintStyle: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[400],
-            fontSize: 16,
-          ),
-          prefixIcon: Icon(Icons.qr_code_scanner, color: _corAcai, size: 30),
+          hintText: "Buscar produto ou código...",
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+          prefixIcon: Icon(Icons.search, color: _corAcai, size: 20),
           suffixIcon: IconButton(
-            icon: Icon(Icons.clear),
+            icon: Icon(Icons.clear, size: 16),
             onPressed: () {
               setState(() {
                 _searchCtrl.clear();
@@ -582,7 +519,7 @@ class _PdvViewState extends State<PdvView> {
             },
           ),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 20),
+          contentPadding: EdgeInsets.only(bottom: 12),
         ),
       ),
     );
@@ -1117,102 +1054,66 @@ class _PdvViewState extends State<PdvView> {
         _addToCart(doc.id, data);
         _clearAndRefocus();
       },
-      borderRadius: BorderRadius.circular(15),
+      borderRadius: BorderRadius.circular(8),
       child: Stack(
         children: [
           Container(
-            padding: EdgeInsets.all(15),
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
-                  offset: Offset(0, 3),
-                ),
-              ],
-              border: isBestSeller
-                  ? Border.all(color: Colors.amber, width: 3)
-                  : null,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[200]!),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 2)],
             ),
             child: Row(
               children: [
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: isBestSeller
-                        ? Colors.amber.withOpacity(0.1)
-                        : _corAcai.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
+                    color: _corAcai.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
                     child: FaIcon(
-                      FontAwesomeIcons.store,
-                      size: 35,
-                      color: isBestSeller
-                          ? Colors.amber[800]
-                          : _corAcai.withOpacity(0.5),
+                      FontAwesomeIcons.box,
+                      size: 18,
+                      color: _corAcai.withOpacity(0.6),
                     ),
                   ),
                 ),
-                SizedBox(width: 15),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (marca.isNotEmpty)
-                        Text(
-                          marca.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
                       Text(
                         nome,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 18,
+                          fontSize: 13,
                           color: Colors.grey[800],
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 5),
-                      Text(
-                        "R\$ ${preco.toStringAsFixed(2)}",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                          color: _corAcai,
-                        ),
-                      ),
+                      if (marca.isNotEmpty)
+                        Text(marca.toUpperCase(), style: TextStyle(fontSize: 10, color: Colors.grey)),
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.add_circle,
-                  size: 35,
-                  color: _corAcai.withOpacity(0.8),
+                Text(
+                  "R\$ ${preco.toStringAsFixed(2)}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: _corAcai,
+                  ),
                 ),
               ],
             ),
           ),
-          if (isBestSeller)
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Icon(
-                FontAwesomeIcons.trophy,
-                size: 16,
-                color: Colors.amber[800],
-              ),
-            ),
         ],
       ),
     );
