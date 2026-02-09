@@ -457,42 +457,54 @@ class _NovaReservaCrecheDialogState extends State<NovaReservaCrecheDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _label("3. Selecione os dias no calendário"),
-                          SizedBox(height: 10),
-
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(color: Colors.grey[300]!),
-                              ),
-                              child: TableCalendar(
-                                locale: 'pt_BR',
-                                firstDay: DateTime.now(),
-                                lastDay: DateTime.now().add(
-                                  Duration(days: 90),
-                                ),
-                                focusedDay: _focusedDay,
-                                selectedDayPredicate: (day) =>
-                                    _selectedDates.contains(
-                                      DateTime(day.year, day.month, day.day),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _label("3. Selecione os dias no calendário"),
+                                  SizedBox(height: 10),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(15),
+                                      border: Border.all(
+                                        color: Colors.grey[300]!,
+                                      ),
                                     ),
-                                onDaySelected: _onDaySelected,
-                                calendarStyle: CalendarStyle(
-                                  selectedDecoration: BoxDecoration(
-                                    color: _corAcai,
-                                    shape: BoxShape.circle,
+                                    child: TableCalendar(
+                                      locale: 'pt_BR',
+                                      firstDay: DateTime.now(),
+                                      lastDay: DateTime.now().add(
+                                        Duration(days: 90),
+                                      ),
+                                      focusedDay: _focusedDay,
+                                      selectedDayPredicate: (day) =>
+                                          _selectedDates.contains(
+                                            DateTime(
+                                              day.year,
+                                              day.month,
+                                              day.day,
+                                            ),
+                                          ),
+                                      onDaySelected: _onDaySelected,
+                                      calendarStyle: CalendarStyle(
+                                        selectedDecoration: BoxDecoration(
+                                          color: _corAcai,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        todayDecoration: BoxDecoration(
+                                          color: _corAcai.withOpacity(0.3),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      headerStyle: HeaderStyle(
+                                        formatButtonVisible: false,
+                                        titleCentered: true,
+                                      ),
+                                    ),
                                   ),
-                                  todayDecoration: BoxDecoration(
-                                    color: _corAcai.withOpacity(0.3),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                headerStyle: HeaderStyle(
-                                  formatButtonVisible: false,
-                                  titleCentered: true,
-                                ),
+                                ],
                               ),
                             ),
                           ),
