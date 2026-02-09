@@ -106,7 +106,8 @@ class _HotelScreenState extends State<HotelScreen> {
       if (mounted) {
         setState(() {
           _valorDiaria = (config['preco_hotel_diaria'] ?? 80.00).toDouble();
-          _temTaxiDog = config['tem_taxi_dog'] == true;
+          _temTaxiDog = (config['tem_taxi_dog'] == true) ||
+              (config['tem_taxi'] == true);
         });
       }
     } catch (e) {

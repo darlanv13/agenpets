@@ -104,7 +104,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
       if (mounted) {
         setState(() {
           _valorDiaria = (config['preco_creche'] ?? 60.00).toDouble();
-          _temTaxiDog = config['tem_taxi_dog'] == true;
+          _temTaxiDog = (config['tem_taxi_dog'] == true) ||
+              (config['tem_taxi'] == true);
         });
       }
     } catch (e) {

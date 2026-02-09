@@ -66,7 +66,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       final config = await _firebaseService.getConfiguracoes();
       if (mounted) {
         setState(() {
-          _temTaxiDog = config['tem_taxi_dog'] == true;
+          _temTaxiDog = (config['tem_taxi_dog'] == true) ||
+              (config['tem_taxi'] == true);
         });
       }
     } catch (e) {
