@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -5,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/services/app_database.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 
 class PdvView extends StatefulWidget {
   final bool isMaster;
@@ -43,6 +45,7 @@ class _PdvViewState extends State<PdvView> {
   String _filtroBusca = '';
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  Timer? _debounce;
 
   // Paginação
   final int _itensPorPagina = 4;
@@ -64,6 +67,7 @@ class _PdvViewState extends State<PdvView> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _cartScrollCtrl.dispose();
@@ -72,243 +76,265 @@ class _PdvViewState extends State<PdvView> {
     super.dispose();
   }
 
+  void _onSearchChanged(String val) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() => _filtroBusca = val);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _corFundo,
-      body: Row(
-        children: [
-          // ESQUERDA: PRODUTOS + LISTA
-          Expanded(
-            flex: 3,
-            child: Container(
-              padding: EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // HEADER COMPACTO
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return CallbackShortcuts(
+      bindings: {
+        SingleActivator(LogicalKeyboardKey.f2): () => _searchFocus.requestFocus(),
+        SingleActivator(LogicalKeyboardKey.escape): () {
+          _searchCtrl.clear();
+          _onSearchChanged('');
+          _searchFocus.unfocus();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: _corFundo,
+          body: Row(
+            children: [
+              // ESQUERDA: PRODUTOS + LISTA
+              Expanded(
+                flex: 3,
+                child: Container(
+                  padding: EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      // CAIXA STATUS
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _caixaAbertoId != null
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _caixaAbertoId != null ? Colors.green : Colors.red,
-                            width: 0.5
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.circle, size: 8, color: _caixaAbertoId != null ? Colors.green : Colors.red),
-                            SizedBox(width: 6),
-                            Text(
-                              _caixaAbertoId != null ? "CAIXA ABERTO" : "CAIXA FECHADO",
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.black54),
-                            ),
-                            if (_caixaAbertoId != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: InkWell(
-                                  onTap: _iniciarFechamentoCaixa,
-                                  child: Icon(Icons.lock_clock, size: 14, color: Colors.red),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-
-                      // TABS
+                      // HEADER COMPACTO
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _buildTabButton("Produtos", 0),
-                          SizedBox(width: 10),
-                          StreamBuilder<QuerySnapshot>(
-                            stream: _db.collection('tenants').doc(AppConfig.tenantId).collection('comandas').where('status', isEqualTo: 'aberta').snapshots(),
-                            builder: (context, snapshot) {
-                              int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-                              return _buildTabButton("Serviços", 1, badgeCount: count);
-                            },
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-
-                  SizedBox(height: 10),
-
-                  // CONTEUDO DA ESQUERDA (GRID ou LISTA)
-                  Expanded(
-                    flex: 4,
-                    child: _tabIndex == 0
-                      ? Column(
-                          children: [
-                            _buildHeader(), // Search Bar
-                            SizedBox(height: 10),
-                            Expanded(child: _buildProductGridWithPagination()),
-                          ],
-                        )
-                      : _buildComandasList(),
-                  ),
-
-                  Divider(height: 20, thickness: 2),
-
-                  Container(
-                    alignment: Alignment.centerLeft,
-                    padding: EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "ITENS NO CARRINHO",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        Text(
-                          "${_carrinho.length} itens",
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // LISTA DE CARRINHO
-                  Expanded(flex: 3, child: _buildCartList()),
-                ],
-              ),
-            ),
-          ),
-
-          // DIREITA: PDV / CHECKOUT (AUMENTADO)
-          Expanded(
-            flex: 2,
-            child: Container(
-              margin: EdgeInsets.all(20),
-              padding: EdgeInsets.all(25),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // HEADER: SE É COMANDA
-                  if (_currentComanda != null)
-                    Container(
-                      margin: EdgeInsets.only(bottom: 15),
-                      padding: EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.blue[200]!)
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.receipt_long, color: Colors.blue[800]),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          // CAIXA STATUS
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _caixaAbertoId != null
+                                  ? Colors.green.withOpacity(0.1)
+                                  : Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _caixaAbertoId != null ? Colors.green : Colors.red,
+                                width: 0.5
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
+                                Icon(Icons.circle, size: 8, color: _caixaAbertoId != null ? Colors.green : Colors.red),
+                                SizedBox(width: 6),
                                 Text(
-                                  "PAGANDO SERVIÇO DE:",
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                                  _caixaAbertoId != null ? "CAIXA ABERTO" : "CAIXA FECHADO",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.black54),
                                 ),
-                                Text(
-                                  _currentComanda!['cliente_nome'] ?? 'Cliente',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                )
+                                if (_caixaAbertoId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: InkWell(
+                                      onTap: _iniciarFechamentoCaixa,
+                                      child: Icon(Icons.lock_clock, size: 14, color: Colors.red),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(Icons.close, color: Colors.red),
-                            onPressed: _limparComandaAtual,
-                            tooltip: "Cancelar Comanda",
+
+                          // TABS
+                          Row(
+                            children: [
+                              _buildTabButton("Produtos", 0),
+                              SizedBox(width: 10),
+                              StreamBuilder<QuerySnapshot>(
+                                stream: _db.collection('tenants').doc(AppConfig.tenantId).collection('comandas').where('status', isEqualTo: 'aberta').snapshots(),
+                                builder: (context, snapshot) {
+                                  int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                                  return _buildTabButton("Serviços", 1, badgeCount: count);
+                                },
+                              ),
+                            ],
                           )
                         ],
                       ),
-                    ),
 
-                  // TOTAL COMPACTO
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [_corAcai, Color(0xFF6A1B9A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                      SizedBox(height: 10),
+
+                      // CONTEUDO DA ESQUERDA (GRID ou LISTA)
+                      Expanded(
+                        flex: 4,
+                        child: _tabIndex == 0
+                          ? Column(
+                              children: [
+                                _buildHeader(), // Search Bar
+                                SizedBox(height: 10),
+                                Expanded(child: _buildProductGridWithPagination()),
+                              ],
+                            )
+                          : _buildComandasList(),
                       ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "TOTAL",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          "R\$ ${_totalCart.toStringAsFixed(2)}",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
 
-                  SizedBox(height: 15),
+                      Divider(height: 20, thickness: 2),
 
-                  // VENDEDOR COMPACTO
-                  SizedBox(
-                    height: 45,
-                    child: TextField(
-                      controller: _vendedorCodeCtrl,
-                      style: TextStyle(fontSize: 14),
-                      decoration: InputDecoration(
-                        labelText: "Código Vendedor",
-                        prefixIcon: Icon(Icons.badge, size: 18),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                      Container(
+                        alignment: Alignment.centerLeft,
+                        padding: EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "ITENS NO CARRINHO",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            Text(
+                              "${_carrinho.length} itens",
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      // LISTA DE CARRINHO
+                      Expanded(flex: 3, child: _buildCartList()),
+                    ],
                   ),
-
-                  SizedBox(height: 10),
-                  Divider(),
-                  SizedBox(height: 5),
-
-                  // RESUMO PAGAMENTO
-                  _buildCheckoutSection(),
-                ],
+                ),
               ),
-            ),
+
+              // DIREITA: PDV / CHECKOUT (AUMENTADO)
+              Expanded(
+                flex: 2,
+                child: Container(
+                  margin: EdgeInsets.all(20),
+                  padding: EdgeInsets.all(25),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // HEADER: SE É COMANDA
+                      if (_currentComanda != null)
+                        Container(
+                          margin: EdgeInsets.only(bottom: 15),
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.blue[200]!)
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.receipt_long, color: Colors.blue[800]),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "PAGANDO SERVIÇO DE:",
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                                    ),
+                                    Text(
+                                      _currentComanda!['cliente_nome'] ?? 'Cliente',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    )
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.close, color: Colors.red),
+                                onPressed: _limparComandaAtual,
+                                tooltip: "Cancelar Comanda",
+                              )
+                            ],
+                          ),
+                        ),
+
+                      // TOTAL COMPACTO
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [_corAcai, Color(0xFF6A1B9A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "TOTAL",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              "R\$ ${_totalCart.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      SizedBox(height: 15),
+
+                      // VENDEDOR COMPACTO
+                      SizedBox(
+                        height: 45,
+                        child: TextField(
+                          controller: _vendedorCodeCtrl,
+                          style: TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            labelText: "Código Vendedor",
+                            prefixIcon: Icon(Icons.badge, size: 18),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: 10),
+                      Divider(),
+                      SizedBox(height: 5),
+
+                      // RESUMO PAGAMENTO
+                      _buildCheckoutSection(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -501,11 +527,11 @@ class _PdvViewState extends State<PdvView> {
         controller: _searchCtrl,
         focusNode: _searchFocus,
         textInputAction: TextInputAction.go,
-        onChanged: (val) => setState(() => _filtroBusca = val),
+        onChanged: _onSearchChanged, // USANDO DEBOUNCE
         onSubmitted: (val) => _handleScanSubmit(val),
         style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
-          hintText: "Buscar produto ou código...",
+          hintText: "Buscar produto ou código (F2)",
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
           prefixIcon: Icon(Icons.search, color: _corAcai, size: 20),
           suffixIcon: IconButton(
@@ -1048,6 +1074,7 @@ class _PdvViewState extends State<PdvView> {
     String nome = data['nome'] ?? 'Produto';
     String marca = data['marca'] ?? '';
     double preco = (data['preco'] ?? 0).toDouble();
+    String? imagemUrl = data['imagem'] ?? data['foto'];
 
     return InkWell(
       onTap: () {
@@ -1073,14 +1100,22 @@ class _PdvViewState extends State<PdvView> {
                   decoration: BoxDecoration(
                     color: _corAcai.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(6),
+                    image: imagemUrl != null && imagemUrl.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(imagemUrl),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: Center(
-                    child: FaIcon(
-                      FontAwesomeIcons.box,
-                      size: 18,
-                      color: _corAcai.withOpacity(0.6),
-                    ),
-                  ),
+                  child: (imagemUrl == null || imagemUrl.isEmpty)
+                      ? Center(
+                          child: FaIcon(
+                            FontAwesomeIcons.box,
+                            size: 18,
+                            color: _corAcai.withOpacity(0.6),
+                          ),
+                        )
+                      : null,
                 ),
                 SizedBox(width: 10),
                 Expanded(
@@ -1192,14 +1227,27 @@ class _PdvViewState extends State<PdvView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.shopping_basket_outlined,
-              size: 40,
-              color: Colors.grey[300],
+            Opacity(
+              opacity: 0.5,
+              child: Icon(
+                FontAwesomeIcons.cartPlus,
+                size: 50,
+                color: Colors.grey[300],
+              ),
             ),
+            SizedBox(height: 15),
             Text(
-              "Aguardando produtos...",
-              style: TextStyle(color: Colors.grey[400], fontSize: 16),
+              "Seu carrinho está vazio",
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+                fontWeight: FontWeight.bold
+              ),
+            ),
+            SizedBox(height: 5),
+            Text(
+              "Escaneie um produto ou selecione um serviço",
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
             ),
           ],
         ),
