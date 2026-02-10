@@ -33,6 +33,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   final _enderecoController = TextEditingController();
   bool _temTaxiDog = false;
   bool _usaTaxiDog = false;
+  double _precoTaxi = 0.0;
+  String _modalidadeTaxi = 'ida_volta'; // ida_volta, ida, volta
 
   // --- ESTADO ---
   int _currentStep = 0;
@@ -66,8 +68,9 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       final config = await _firebaseService.getConfiguracoes();
       if (mounted) {
         setState(() {
-          _temTaxiDog = (config['tem_taxi_dog'] == true) ||
-              (config['tem_taxi'] == true);
+          _temTaxiDog =
+              (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
+          _precoTaxi = (config['preco_taxi_dog'] ?? 0).toDouble();
         });
       }
     } catch (e) {
@@ -180,9 +183,10 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         cpfUser: _userCpf!,
         petId: _petId!,
         metodoPagamento: 'na_loja',
-        valor: 0,
+        valor: 0, // O valor do taxi sera cobrado na loja se for 'na_loja', ou somado se for PIX (implementar soma se necessario)
         taxiDog: _usaTaxiDog,
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
+        modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
 
       _mostrarSucessoDialog();
@@ -936,22 +940,25 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                       });
                     },
                   ),
-                  if (_usaTaxiDog)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: TextField(
-                        controller: _enderecoController,
-                        decoration: InputDecoration(
-                          labelText: "Endereço de Retirada/Entrega",
-                          labelStyle: GoogleFonts.poppins(fontSize: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          isDense: true,
-                          prefixIcon: Icon(Icons.location_on, size: 18),
+                  if (_usaTaxiDog) ...[
+                    Divider(height: 20),
+                    _buildOpcaoModalidade("Buscar e Levar", "ida_volta", 2),
+                    _buildOpcaoModalidade("Apenas Buscar (Ida)", "ida", 1),
+                    _buildOpcaoModalidade("Apenas Levar (Volta)", "volta", 1),
+                    SizedBox(height: 15),
+                    TextField(
+                      controller: _enderecoController,
+                      decoration: InputDecoration(
+                        labelText: "Endereço de Retirada/Entrega",
+                        labelStyle: GoogleFonts.poppins(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.location_on, size: 18),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
@@ -1075,6 +1082,33 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOpcaoModalidade(String label, String valor, int multiplicador) {
+    double custo = _precoTaxi * multiplicador;
+    return RadioListTile<String>(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.poppins(fontSize: 13)),
+          if (custo > 0)
+            Text(
+              "+ R\$ ${custo.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: _corAcai,
+              ),
+            ),
+        ],
+      ),
+      value: valor,
+      groupValue: _modalidadeTaxi,
+      activeColor: _corAcai,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onChanged: (val) => setState(() => _modalidadeTaxi = val!),
     );
   }
 

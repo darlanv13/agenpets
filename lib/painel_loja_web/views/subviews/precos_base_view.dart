@@ -19,6 +19,7 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
 
   final _precoHotelCtrl = TextEditingController();
   final _precoCrecheCtrl = TextEditingController();
+  final _precoTaxiDogCtrl = TextEditingController();
 
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF5F7FA);
@@ -42,6 +43,7 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
         setState(() {
           _precoHotelCtrl.text = (data['preco_hotel_diaria'] ?? 0).toString();
           _precoCrecheCtrl.text = (data['preco_creche'] ?? 0).toString();
+          _precoTaxiDogCtrl.text = (data['preco_taxi_dog'] ?? 0).toString();
         });
       }
     } catch (e) {
@@ -61,6 +63,9 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
                 double.tryParse(_precoHotelCtrl.text.replaceAll(',', '.')) ?? 0,
             'preco_creche':
                 double.tryParse(_precoCrecheCtrl.text.replaceAll(',', '.')) ??
+                0,
+            'preco_taxi_dog':
+                double.tryParse(_precoTaxiDogCtrl.text.replaceAll(',', '.')) ??
                 0,
           }, SetOptions(merge: true));
 
@@ -140,6 +145,17 @@ class _PrecosBaseViewState extends State<PrecosBaseView> {
                       _precoCrecheCtrl,
                       FontAwesomeIcons.dog,
                       Colors.orange,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 25),
+                      child: Divider(height: 1),
+                    ),
+                    _buildInput(
+                      "Táxi Dog (Trecho)",
+                      "Preço cobrado por viagem (Ida ou Volta)",
+                      _precoTaxiDogCtrl,
+                      FontAwesomeIcons.car,
+                      Colors.purple,
                     ),
                     SizedBox(height: 50),
                     SizedBox(

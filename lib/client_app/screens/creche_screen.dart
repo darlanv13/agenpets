@@ -31,6 +31,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
   final _enderecoController = TextEditingController();
   bool _temTaxiDog = false;
   bool _usaTaxiDog = false;
+  double _precoTaxi = 0.0;
+  String _modalidadeTaxi = 'ida_volta';
 
   // --- ESTADO ---
   int _currentStep = 0;
@@ -104,8 +106,9 @@ class _CrecheScreenState extends State<CrecheScreen> {
       if (mounted) {
         setState(() {
           _valorDiaria = (config['preco_creche'] ?? 60.00).toDouble();
-          _temTaxiDog = (config['tem_taxi_dog'] == true) ||
-              (config['tem_taxi'] == true);
+          _temTaxiDog =
+              (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
+          _precoTaxi = (config['preco_taxi_dog'] ?? 0).toDouble();
         });
       }
     } catch (e) {
@@ -194,6 +197,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
         dates: _selectedDays.toList(),
         taxiDog: _usaTaxiDog,
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
+        modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
 
       _mostrarSucessoDialog();
@@ -826,6 +830,13 @@ class _CrecheScreenState extends State<CrecheScreen> {
         );
         double total = diasPagantes * _valorDiaria;
 
+        if (_usaTaxiDog && _precoTaxi > 0) {
+          int mult = _modalidadeTaxi == 'ida_volta' ? 2 : 1;
+          // Taxi dog cobra por dia se for creche? Geralmente sim.
+          // Vamos assumir que cobra por dia de transporte.
+          total += (diasTotais * _precoTaxi * mult);
+        }
+
         return SingleChildScrollView(
           padding: EdgeInsets.all(20),
           child: Column(
@@ -984,22 +995,25 @@ class _CrecheScreenState extends State<CrecheScreen> {
                           });
                         },
                       ),
-                      if (_usaTaxiDog)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: TextField(
-                            controller: _enderecoController,
-                            decoration: InputDecoration(
-                              labelText: "Endereço de Retirada/Entrega",
-                              labelStyle: GoogleFonts.poppins(fontSize: 12),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              isDense: true,
-                              prefixIcon: Icon(Icons.location_on, size: 18),
+                  if (_usaTaxiDog) ...[
+                    Divider(height: 20),
+                    _buildOpcaoModalidade("Buscar e Levar", "ida_volta", 2),
+                    _buildOpcaoModalidade("Apenas Buscar (Ida)", "ida", 1),
+                    _buildOpcaoModalidade("Apenas Levar (Volta)", "volta", 1),
+                    SizedBox(height: 15),
+                    TextField(
+                      controller: _enderecoController,
+                      decoration: InputDecoration(
+                        labelText: "Endereço de Retirada/Entrega",
+                        labelStyle: GoogleFonts.poppins(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
                             ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.location_on, size: 18),
                           ),
                         ),
+                  ],
                     ],
                   ),
                 ),
@@ -1070,6 +1084,33 @@ class _CrecheScreenState extends State<CrecheScreen> {
         ),
         Icon(Icons.check_circle, color: Colors.green[400], size: 18),
       ],
+    );
+  }
+
+  Widget _buildOpcaoModalidade(String label, String valor, int multiplicador) {
+    double custo = _precoTaxi * multiplicador;
+    return RadioListTile<String>(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.poppins(fontSize: 13)),
+          if (custo > 0)
+            Text(
+              "+ R\$ ${custo.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: _corAcai,
+              ),
+            ),
+        ],
+      ),
+      value: valor,
+      groupValue: _modalidadeTaxi,
+      activeColor: _corAcai,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onChanged: (val) => setState(() => _modalidadeTaxi = val!),
     );
   }
 
