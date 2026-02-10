@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:agenpet/services/firebase_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   const AgendamentoScreen({super.key});
@@ -35,6 +37,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   bool _usaTaxiDog = false;
   double _precoTaxi = 0.0;
   String _modalidadeTaxi = 'ida_volta'; // ida_volta, ida, volta
+  double? _latitude;
+  double? _longitude;
 
   // --- ESTADO ---
   int _currentStep = 0;
@@ -162,6 +166,123 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
     }
   }
 
+  Future<void> _usarLocalizacaoAtual() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Check Permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Permissão de localização negada."),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  "Permissão de localização negada permanentemente. Habilite nas configurações."),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // 2. Get Position
+      Position position = await Geolocator.getCurrentPosition();
+
+      // 3. Confirmation Dialog
+      if (!mounted) return;
+      bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.location_on, color: _corAcai),
+              SizedBox(width: 10),
+              Text("Confirmar Localização"),
+            ],
+          ),
+          content: Text(
+              "Você está no local onde o(a) ${_petNome ?? 'pet'} será buscado?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text("Não"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _corAcai,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text("Sim", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      // 4. Reverse Geocoding
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!mounted) return;
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks.first;
+
+        String street = place.thoroughfare ?? '';
+        String number = place.subThoroughfare ?? '';
+        String neighborhood = place.subLocality ?? '';
+
+        String address = street;
+        if (number.isNotEmpty) {
+          address = address.isEmpty ? number : "$address, $number";
+        }
+        if (neighborhood.isNotEmpty) {
+          address = address.isEmpty ? neighborhood : "$address - $neighborhood";
+        }
+
+        setState(() {
+          _enderecoController.text = address;
+          _latitude = position.latitude;
+          _longitude = position.longitude;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao obter localização: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _confirmarAgendamento() async {
     if (_petId == null || _horarioSelecionado == null) return;
 
@@ -199,6 +320,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         taxiDog: _usaTaxiDog,
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
         modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
+        latitude: _usaTaxiDog ? _latitude : null,
+        longitude: _usaTaxiDog ? _longitude : null,
       );
 
       if (_usaTaxiDog) {
@@ -975,6 +1098,22 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                         ),
                         isDense: true,
                         prefixIcon: Icon(Icons.location_on, size: 18),
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _usarLocalizacaoAtual,
+                        icon: Icon(Icons.my_location, size: 18),
+                        label: Text("Usar minha localização atual"),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _corAcai,
+                          side: BorderSide(color: _corAcai),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                       ),
                     ),
                   ],

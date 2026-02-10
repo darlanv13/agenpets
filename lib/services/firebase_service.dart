@@ -167,6 +167,8 @@ class FirebaseService {
     bool? taxiDog,
     String? endereco,
     String? modalidadeTaxi,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final result = await _functions.httpsCallable('criarAgendamento').call({
@@ -180,6 +182,8 @@ class FirebaseService {
         'taxi_dog': taxiDog ?? false,
         'endereco_buscar': endereco,
         'modalidade_taxi': modalidadeTaxi,
+        'latitude': latitude,
+        'longitude': longitude,
       });
 
       return Map<String, dynamic>.from(result.data);
@@ -246,6 +250,8 @@ class FirebaseService {
     bool? taxiDog,
     String? endereco,
     String? modalidadeTaxi,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarHotel').call({
@@ -257,6 +263,8 @@ class FirebaseService {
         'taxi_dog': taxiDog ?? false,
         'endereco_buscar': endereco,
         'modalidade_taxi': modalidadeTaxi,
+        'latitude': latitude,
+        'longitude': longitude,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
@@ -296,6 +304,8 @@ class FirebaseService {
     bool? taxiDog,
     String? endereco,
     String? modalidadeTaxi,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarCreche').call({
@@ -306,6 +316,8 @@ class FirebaseService {
         'taxi_dog': taxiDog ?? false,
         'endereco_buscar': endereco,
         'modalidade_taxi': modalidadeTaxi,
+        'latitude': latitude,
+        'longitude': longitude,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
