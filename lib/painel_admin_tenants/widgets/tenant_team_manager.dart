@@ -51,11 +51,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     'gestao_precos': 'Tabela de Preços',
     'banners_app': 'Banners do App',
     'gestao_estoque': 'Gestão de Estoque',
-    // 'equipe': 'Gestão Equipe', // Removido do painel da loja, mas aqui é admin tenant... mantemos como opção de permissão?
-    // O usuário pediu para remover a gestão do painel loja. Se um usuário "Gerente" da loja tiver acesso a "equipe", ele veria a tela que acabamos de remover.
-    // Como removemos a rota/view do painel da loja, dar essa permissão não fará nada (ou quebrará se tentar acessar).
-    // Por segurança, vamos manter na lista de permissões visuais para edição, mas sabendo que no front da loja não aparece mais.
-    // Ou melhor, se removemos do painel, não faz sentido dar permissão. Vamos remover daqui também.
+    'logistica_taxi': 'Logística Táxi Dog',
     'configuracoes': 'Configs',
   };
 
@@ -84,6 +80,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
       bool temHotel = config['tem_hotel'] ?? false;
       bool temCreche = config['tem_creche'] ?? false;
+      bool temTaxiDog =
+          (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
       Map<String, String> filtered = {};
       _allPossiblePages.forEach((key, value) {
@@ -91,6 +89,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         if (key == 'banhos_tosa' && !temBanhoTosa) return;
         if (key == 'hotel' && !temHotel) return;
         if (key == 'creche' && !temCreche) return;
+        if (key == 'logistica_taxi' && !temTaxiDog) return;
         filtered[key] = value;
       });
 
@@ -153,6 +152,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       'tosa': ['banhos_tosa'],
       'vendedor': ['loja_pdv', 'venda_planos'],
       'caixa': ['loja_pdv'],
+      'motorista': ['logistica_taxi'],
     };
 
     if (map.containsKey(role)) {
@@ -450,6 +450,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 _buildChip("Tosador", "tosa"),
                 _buildChip("Vendedor", "vendedor"),
                 _buildChip("Caixa", "caixa"),
+                _buildChip("Motorista", "motorista"),
                 _buildChip("Gerente", "master", color: Colors.amber[800]),
               ],
             ),
