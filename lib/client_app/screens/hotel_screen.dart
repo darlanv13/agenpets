@@ -58,7 +58,18 @@ class _HotelScreenState extends State<HotelScreen> {
   void initState() {
     super.initState();
     _carregarConfigs();
+    _carregarEnderecoSalvo();
     _carregarDisponibilidade();
+  }
+
+  Future<void> _carregarEnderecoSalvo() async {
+    if (_userCpf == null) return;
+    final end = await _firebaseService.getUserAddress(_userCpf!);
+    if (end != null && mounted) {
+      setState(() {
+        _enderecoController.text = end;
+      });
+    }
   }
 
   @override
@@ -218,6 +229,10 @@ class _HotelScreenState extends State<HotelScreen> {
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
         modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
+
+      if (_usaTaxiDog) {
+        _firebaseService.saveUserAddress(_userCpf!, _enderecoController.text.trim());
+      }
 
       _mostrarSucessoDialog();
     } catch (e) {

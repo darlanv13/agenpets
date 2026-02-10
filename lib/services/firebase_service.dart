@@ -122,6 +122,22 @@ class FirebaseService {
   ) async {
     await _db.collection('users').doc(cpf).update(dados);
   }
+
+  // --- ENDEREÇO CLIENTE ---
+  Future<void> saveUserAddress(String cpf, String endereco) async {
+    await _db.collection('users').doc(cpf).set({
+      'endereco_padrao': endereco,
+    }, SetOptions(merge: true));
+  }
+
+  Future<String?> getUserAddress(String cpf) async {
+    final doc = await _db.collection('users').doc(cpf).get();
+    if (doc.exists) {
+      return doc.data()?['endereco_padrao'];
+    }
+    return null;
+  }
+
   // --- AGENDAMENTOS (Via Cloud Functions) ---
 
   Future<List<Map<String, dynamic>>> buscarHorariosDisponiveis(

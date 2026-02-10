@@ -54,12 +54,23 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   void initState() {
     super.initState();
     _carregarConfigTaxiDog();
+    _carregarEnderecoSalvo();
     _gerarListaDias();
     if (_dataSelecionada.weekday == DateTime.sunday) {
       _dataSelecionada = _dataSelecionada.add(Duration(days: 1));
     }
     if (_listaDias.isNotEmpty) {
       _dataSelecionada = _listaDias.first;
+    }
+  }
+
+  Future<void> _carregarEnderecoSalvo() async {
+    if (_userCpf == null) return;
+    final end = await _firebaseService.getUserAddress(_userCpf!);
+    if (end != null && mounted) {
+      setState(() {
+        _enderecoController.text = end;
+      });
     }
   }
 
@@ -188,6 +199,10 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
         modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
+
+      if (_usaTaxiDog) {
+        _firebaseService.saveUserAddress(_userCpf!, _enderecoController.text.trim());
+      }
 
       _mostrarSucessoDialog();
     } catch (e) {
