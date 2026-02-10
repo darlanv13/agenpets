@@ -111,9 +111,11 @@ exports.salvarCredenciaisGateway = onCall(async (request) => {
   const {
     tenantId,
     gateway_pagamento,
-
     mercadopago_access_token,
-
+    efipay_client_id,
+    efipay_client_secret,
+    chave_pix,
+    efipay_sandbox,
   } = request.data;
 
   if (!tenantId) {

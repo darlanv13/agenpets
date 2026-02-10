@@ -51,11 +51,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     'gestao_precos': 'Tabela de Preços',
     'banners_app': 'Banners do App',
     'gestao_estoque': 'Gestão de Estoque',
-    // 'equipe': 'Gestão Equipe', // Removido do painel da loja, mas aqui é admin tenant... mantemos como opção de permissão?
-    // O usuário pediu para remover a gestão do painel loja. Se um usuário "Gerente" da loja tiver acesso a "equipe", ele veria a tela que acabamos de remover.
-    // Como removemos a rota/view do painel da loja, dar essa permissão não fará nada (ou quebrará se tentar acessar).
-    // Por segurança, vamos manter na lista de permissões visuais para edição, mas sabendo que no front da loja não aparece mais.
-    // Ou melhor, se removemos do painel, não faz sentido dar permissão. Vamos remover daqui também.
+    'logistica_taxi': 'Logística Táxi Dog',
     'configuracoes': 'Configs',
   };
 
@@ -84,6 +80,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
       bool temHotel = config['tem_hotel'] ?? false;
       bool temCreche = config['tem_creche'] ?? false;
+      bool temTaxiDog =
+          (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
       Map<String, String> filtered = {};
       _allPossiblePages.forEach((key, value) {
@@ -91,6 +89,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         if (key == 'banhos_tosa' && !temBanhoTosa) return;
         if (key == 'hotel' && !temHotel) return;
         if (key == 'creche' && !temCreche) return;
+        if (key == 'logistica_taxi' && !temTaxiDog) return;
         filtered[key] = value;
       });
 
@@ -153,6 +152,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       'tosa': ['banhos_tosa'],
       'vendedor': ['loja_pdv', 'venda_planos'],
       'caixa': ['loja_pdv'],
+      'motorista': ['logistica_taxi'],
     };
 
     if (map.containsKey(role)) {
@@ -211,7 +211,8 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         await _functions.httpsCallable('criarContaProfissional').call({
           'nome': _nomeController.text.trim(),
           'documento': _docController.text, // Envia formatado
-          'cpf': _docController.text, // Mantemos backward compatibility se necessário, mas backend deve usar 'documento'
+          'cpf': _docController
+              .text, // Mantemos backward compatibility se necessário, mas backend deve usar 'documento'
           'senha': _senhaController.text.trim(),
           'habilidades': _rolesSelecionadas.toList(),
           'acessos': acessos,
@@ -285,14 +286,14 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     setState(() {
       _editingUid = uid;
       _nomeController.text = data['nome'] ?? '';
-      
+
       // Detecta se é CNPJ ou CPF baseado no tamanho do documento salvo
       String doc = data['documento'] ?? (data['cpf'] ?? '');
       String docClean = doc.replaceAll(RegExp(r'[^0-9]'), '');
-      
+
       _isCnpj = docClean.length > 11;
       _docController.text = doc;
-      
+
       _senhaController.clear(); // Não exibimos senha
 
       // Habilidades
@@ -389,20 +390,27 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
             SizedBox(height: 20),
             _buildInput(_nomeController, "Nome Completo", Icons.person),
             SizedBox(height: 15),
-            
+
             // Toggle CPF/CNPJ
             Row(
               children: [
-                Text("Tipo de Documento: ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                Text(
+                  "Tipo de Documento: ",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                ),
                 SizedBox(width: 10),
                 ChoiceChip(
                   label: Text("CPF"),
                   selected: !_isCnpj,
                   onSelected: (v) {
-                    if(v) setState(() {
-                      _isCnpj = false;
-                      _docController.clear();
-                    });
+                    if (v)
+                      setState(() {
+                        _isCnpj = false;
+                        _docController.clear();
+                      });
                   },
                 ),
                 SizedBox(width: 10),
@@ -410,16 +418,17 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                   label: Text("CNPJ"),
                   selected: _isCnpj,
                   onSelected: (v) {
-                    if(v) setState(() {
-                      _isCnpj = true;
-                      _docController.clear();
-                    });
+                    if (v)
+                      setState(() {
+                        _isCnpj = true;
+                        _docController.clear();
+                      });
                   },
                 ),
               ],
             ),
             SizedBox(height: 10),
-            
+
             _buildInput(
               _docController,
               _isCnpj ? "CNPJ (Login)" : "CPF (Login)",
@@ -450,6 +459,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 _buildChip("Tosador", "tosa"),
                 _buildChip("Vendedor", "vendedor"),
                 _buildChip("Caixa", "caixa"),
+                _buildChip("Motorista", "motorista"),
                 _buildChip("Gerente", "master", color: Colors.amber[800]),
               ],
             ),
@@ -590,8 +600,9 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                     );
 
                     final skills = List<String>.from(data['habilidades'] ?? []);
-                    final docExibido = data['documento'] ?? (data['cpf'] ?? '---');
-                    
+                    final docExibido =
+                        data['documento'] ?? (data['cpf'] ?? '---');
+
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(

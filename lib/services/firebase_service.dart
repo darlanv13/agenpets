@@ -122,6 +122,22 @@ class FirebaseService {
   ) async {
     await _db.collection('users').doc(cpf).update(dados);
   }
+
+  // --- ENDEREÇO CLIENTE ---
+  Future<void> saveUserAddress(String cpf, String endereco) async {
+    await _db.collection('users').doc(cpf).set({
+      'endereco_padrao': endereco,
+    }, SetOptions(merge: true));
+  }
+
+  Future<String?> getUserAddress(String cpf) async {
+    final doc = await _db.collection('users').doc(cpf).get();
+    if (doc.exists) {
+      return doc.data()?['endereco_padrao'];
+    }
+    return null;
+  }
+
   // --- AGENDAMENTOS (Via Cloud Functions) ---
 
   Future<List<Map<String, dynamic>>> buscarHorariosDisponiveis(
@@ -148,6 +164,9 @@ class FirebaseService {
     required String petId,
     required String metodoPagamento,
     required double valor,
+    bool? taxiDog,
+    String? endereco,
+    String? modalidadeTaxi,
   }) async {
     try {
       final result = await _functions.httpsCallable('criarAgendamento').call({
@@ -158,6 +177,9 @@ class FirebaseService {
         'pet_id': petId,
         'metodo_pagamento': metodoPagamento,
         'valor': valor,
+        'taxi_dog': taxiDog ?? false,
+        'endereco_buscar': endereco,
+        'modalidade_taxi': modalidadeTaxi,
       });
 
       return Map<String, dynamic>.from(result.data);
@@ -182,9 +204,18 @@ class FirebaseService {
           return {
             // Note que removi o prefixo "vouchers_" dos nomes dos campos para ficar mais limpo
             // mas você pode manter se preferir, desde que alinhe com o servidor.
-            'banho': (data['vouchers_banho'] as num?)?.toInt() ?? (data['banho'] as num?)?.toInt() ?? 0,
-            'tosa': (data['vouchers_tosa'] as num?)?.toInt() ?? (data['tosa'] as num?)?.toInt() ?? 0,
-            'creche': (data['vouchers_creche'] as num?)?.toInt() ?? (data['creche'] as num?)?.toInt() ?? 0,
+            'banho':
+                (data['vouchers_banho'] as num?)?.toInt() ??
+                (data['banho'] as num?)?.toInt() ??
+                0,
+            'tosa':
+                (data['vouchers_tosa'] as num?)?.toInt() ??
+                (data['tosa'] as num?)?.toInt() ??
+                0,
+            'creche':
+                (data['vouchers_creche'] as num?)?.toInt() ??
+                (data['creche'] as num?)?.toInt() ??
+                0,
           };
         });
   }
@@ -212,6 +243,9 @@ class FirebaseService {
     required String cpfUser,
     required DateTime checkIn,
     required DateTime checkOut,
+    bool? taxiDog,
+    String? endereco,
+    String? modalidadeTaxi,
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarHotel').call({
@@ -220,6 +254,9 @@ class FirebaseService {
         'cpf_user': cpfUser,
         'check_in': checkIn.toIso8601String(),
         'check_out': checkOut.toIso8601String(),
+        'taxi_dog': taxiDog ?? false,
+        'endereco_buscar': endereco,
+        'modalidade_taxi': modalidadeTaxi,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
@@ -256,6 +293,9 @@ class FirebaseService {
     required String petId,
     required String cpfUser,
     required List<DateTime> dates,
+    bool? taxiDog,
+    String? endereco,
+    String? modalidadeTaxi,
   }) async {
     try {
       final result = await _functions.httpsCallable('reservarCreche').call({
@@ -263,6 +303,9 @@ class FirebaseService {
         'pet_id': petId,
         'cpf_user': cpfUser,
         'dates': dates.map((d) => d.toIso8601String()).toList(),
+        'taxi_dog': taxiDog ?? false,
+        'endereco_buscar': endereco,
+        'modalidade_taxi': modalidadeTaxi,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {

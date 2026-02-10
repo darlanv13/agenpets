@@ -27,6 +27,13 @@ class _HotelScreenState extends State<HotelScreen> {
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF8F9FC);
 
+  // --- TAXI DOG ---
+  final _enderecoController = TextEditingController();
+  bool _temTaxiDog = false;
+  bool _usaTaxiDog = false;
+  double _precoTaxi = 0.0;
+  String _modalidadeTaxi = 'ida_volta';
+
   // --- ESTADO ---
   int _currentStep = 0;
   bool _isLoading = false;
@@ -50,8 +57,26 @@ class _HotelScreenState extends State<HotelScreen> {
   @override
   void initState() {
     super.initState();
-    _carregarPrecoHotel();
+    _carregarConfigs();
+    _carregarEnderecoSalvo();
     _carregarDisponibilidade();
+  }
+
+  Future<void> _carregarEnderecoSalvo() async {
+    if (_userCpf == null) return;
+    final end = await _firebaseService.getUserAddress(_userCpf!);
+    if (end != null && mounted) {
+      setState(() {
+        _enderecoController.text = end;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _enderecoController.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,12 +113,15 @@ class _HotelScreenState extends State<HotelScreen> {
     }
   }
 
-  Future<void> _carregarPrecoHotel() async {
+  Future<void> _carregarConfigs() async {
     try {
       final config = await _firebaseService.getConfiguracoes();
       if (mounted) {
         setState(() {
           _valorDiaria = (config['preco_hotel_diaria'] ?? 80.00).toDouble();
+          _temTaxiDog =
+              (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
+          _precoTaxi = (config['preco_taxi_dog'] ?? 0).toDouble();
         });
       }
     } catch (e) {
@@ -181,6 +209,11 @@ class _HotelScreenState extends State<HotelScreen> {
   Future<void> _fazerReserva() async {
     if (_petId == null || _rangeStart == null) return;
 
+    if (_usaTaxiDog && _enderecoController.text.trim().isEmpty) {
+      _mostrarErroDialog("Por favor, informe o endereço para o Táxi Dog.");
+      return;
+    }
+
     DateTime checkIn = _rangeStart!;
     DateTime checkOut = _rangeEnd ?? _rangeStart!;
 
@@ -192,7 +225,17 @@ class _HotelScreenState extends State<HotelScreen> {
         cpfUser: _userCpf!,
         checkIn: checkIn,
         checkOut: checkOut,
+        taxiDog: _usaTaxiDog,
+        endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
+        modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
+
+      if (_usaTaxiDog) {
+        _firebaseService.saveUserAddress(
+          _userCpf!,
+          _enderecoController.text.trim(),
+        );
+      }
 
       _mostrarSucessoDialog();
     } catch (e) {
@@ -820,6 +863,11 @@ class _HotelScreenState extends State<HotelScreen> {
       total = dias * _valorDiaria;
     }
 
+    if (_usaTaxiDog && _precoTaxi > 0) {
+      int mult = _modalidadeTaxi == 'ida_volta' ? 2 : 1;
+      total += (_precoTaxi * mult);
+    }
+
     return SingleChildScrollView(
       padding: EdgeInsets.all(20),
       child: Column(
@@ -942,6 +990,68 @@ class _HotelScreenState extends State<HotelScreen> {
               ],
             ),
           ),
+          SizedBox(height: 25),
+
+          if (_temTaxiDog) ...[
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                children: [
+                  CheckboxListTile(
+                    activeColor: _corAcai,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      "Incluir Táxi Dog?",
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      "Buscaremos e entregaremos seu pet.",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    value: _usaTaxiDog,
+                    onChanged: (val) {
+                      setState(() {
+                        _usaTaxiDog = val ?? false;
+                      });
+                    },
+                  ),
+                  if (_usaTaxiDog) ...[
+                    Divider(height: 20),
+                    _buildOpcaoModalidade("Buscar e Levar", "ida_volta", 2),
+                    _buildOpcaoModalidade("Apenas Buscar (Ida)", "ida", 1),
+                    _buildOpcaoModalidade("Apenas Levar (Volta)", "volta", 1),
+                    SizedBox(height: 15),
+                    TextField(
+                      controller: _enderecoController,
+                      decoration: InputDecoration(
+                        labelText: "Endereço de Retirada/Entrega",
+                        labelStyle: GoogleFonts.poppins(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.location_on, size: 18),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
+          ],
+
           SizedBox(height: 30),
           SizedBox(
             height: 55,
@@ -1004,6 +1114,33 @@ class _HotelScreenState extends State<HotelScreen> {
         ),
         Icon(Icons.check_circle, color: Colors.green[400], size: 18),
       ],
+    );
+  }
+
+  Widget _buildOpcaoModalidade(String label, String valor, int multiplicador) {
+    double custo = _precoTaxi * multiplicador;
+    return RadioListTile<String>(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.poppins(fontSize: 13)),
+          if (custo > 0)
+            Text(
+              "+ R\$ ${custo.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: _corAcai,
+              ),
+            ),
+        ],
+      ),
+      value: valor,
+      groupValue: _modalidadeTaxi,
+      activeColor: _corAcai,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onChanged: (val) => setState(() => _modalidadeTaxi = val!),
     );
   }
 

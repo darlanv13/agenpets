@@ -41,7 +41,7 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
   bool _temLoja = false; // "Loja (App)"
   bool _temPdv = false; // "PDV (Caixa)"
   bool _temVeterinario = false;
-  bool _temTaxi = false;
+  bool _temTaxiDog = false;
 
   String _gatewayPagamento = 'efipay';
   bool _efipaySandbox = false;
@@ -95,7 +95,8 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           _temLoja = data['tem_loja'] ?? false;
           _temPdv = data['tem_pdv'] ?? false; // Novo
           _temVeterinario = data['tem_veterinario'] ?? false;
-          _temTaxi = data['tem_taxi'] ?? false;
+          // Carrega tem_taxi_dog (preferencial) ou fallback para tem_taxi
+          _temTaxiDog = data['tem_taxi_dog'] ?? (data['tem_taxi'] ?? false);
 
           _gatewayPagamento = data['gateway_pagamento'] ?? 'efipay';
         });
@@ -124,7 +125,9 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
             'tem_loja': _temLoja,
             'tem_pdv': _temPdv, // Novo
             'tem_veterinario': _temVeterinario,
-            'tem_taxi': _temTaxi,
+            'tem_taxi_dog': _temTaxiDog,
+            'tem_taxi':
+                _temTaxiDog, // Mantém compatibilidade com Home Screen antiga
             // Mantém compatibilidade reversa se necessário, ou removemos fields antigos
             'tem_banho': _temBanhoTosa,
             'tem_tosa': _temBanhoTosa,
@@ -355,8 +358,8 @@ class _GestaoTenantDetalheViewState extends State<GestaoTenantDetalheView>
           _buildSwitch(
             "Táxi Dog",
             "Gestão de Transporte",
-            _temTaxi,
-            (v) => setState(() => _temTaxi = v),
+            _temTaxiDog,
+            (v) => setState(() => _temTaxiDog = v),
           ),
         ],
       ),

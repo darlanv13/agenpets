@@ -17,6 +17,7 @@ import '../views/gestao_banners_view.dart';
 import '../views/pdv_view.dart';
 import '../views/creche_view.dart';
 import '../views/gestao_estoque_view.dart';
+import '../views/logistica_taxi_dog_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminModule {
@@ -127,6 +128,8 @@ class AdminAccessManager {
     bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
     bool temHotel = config['tem_hotel'] ?? false;
     bool temCreche = config['tem_creche'] ?? false;
+    bool temTaxiDog =
+        (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
     // Lista Mestra de Todos os Módulos Possíveis
     final allModules = [
@@ -164,6 +167,13 @@ class AdminAccessManager {
           title: "Creche",
           icon: FontAwesomeIcons.dog,
           widget: CrecheView(),
+        ),
+      if (temTaxiDog)
+        AdminModule(
+          id: 'logistica_taxi',
+          title: "Logística Táxi",
+          icon: FontAwesomeIcons.car,
+          widget: LogisticaTaxiDogView(),
         ),
       AdminModule(
         id: 'venda_planos',

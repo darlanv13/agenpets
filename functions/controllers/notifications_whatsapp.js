@@ -5,7 +5,7 @@ const axios = require("axios");
 // --- CONFIGURAÇÃO MANUAL (Hardcoded) ---
 const META_TOKEN = "EAALnGvHDVQ0BQhZBeXoA6CE9EmF8yKK4DuZAmx8aVZByBpSLRGpZCNga53HsFjACXO8C8LRg6xNnTZCVtynUSO7vDCISWn5Nrz3vTZBBfSUukZAOZAKchCn97yZAlcZCQxzh2uxZB7RCVkoxqyPr0uxZC6pYbCZCA50TB7jyxCbg5X16UUj9EszWUVkVuILSyrQwECGX5jAZDZD";
 const PHONE_NUMBER_ID = "1013501445171579";
-const VERSION = "v22.0";
+const VERSION = "v24.0";
 
 /**
  * GATILHO: Confirmação de Agendamento

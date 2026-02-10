@@ -29,6 +29,13 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   final _obsController = TextEditingController();
   final PageController _pageController = PageController();
 
+  // --- TAXI DOG ---
+  final _enderecoController = TextEditingController();
+  bool _temTaxiDog = false;
+  bool _usaTaxiDog = false;
+  double _precoTaxi = 0.0;
+  String _modalidadeTaxi = 'ida_volta'; // ida_volta, ida, volta
+
   // --- ESTADO ---
   int _currentStep = 0;
   String? _userCpf;
@@ -46,12 +53,39 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   @override
   void initState() {
     super.initState();
+    _carregarConfigTaxiDog();
+    _carregarEnderecoSalvo();
     _gerarListaDias();
     if (_dataSelecionada.weekday == DateTime.sunday) {
       _dataSelecionada = _dataSelecionada.add(Duration(days: 1));
     }
     if (_listaDias.isNotEmpty) {
       _dataSelecionada = _listaDias.first;
+    }
+  }
+
+  Future<void> _carregarEnderecoSalvo() async {
+    if (_userCpf == null) return;
+    final end = await _firebaseService.getUserAddress(_userCpf!);
+    if (end != null && mounted) {
+      setState(() {
+        _enderecoController.text = end;
+      });
+    }
+  }
+
+  Future<void> _carregarConfigTaxiDog() async {
+    try {
+      final config = await _firebaseService.getConfiguracoes();
+      if (mounted) {
+        setState(() {
+          _temTaxiDog =
+              (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
+          _precoTaxi = (config['preco_taxi_dog'] ?? 0).toDouble();
+        });
+      }
+    } catch (e) {
+      print("Erro config taxi dog: $e");
     }
   }
 
@@ -68,6 +102,14 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
       }
       diasPercorridos++;
     }
+  }
+
+  @override
+  void dispose() {
+    _obsController.dispose();
+    _pageController.dispose();
+    _enderecoController.dispose();
+    super.dispose();
   }
 
   @override
@@ -122,6 +164,17 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
 
   Future<void> _confirmarAgendamento() async {
     if (_petId == null || _horarioSelecionado == null) return;
+
+    if (_usaTaxiDog && _enderecoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Por favor, informe o endereço para o Táxi Dog."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -141,8 +194,19 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         cpfUser: _userCpf!,
         petId: _petId!,
         metodoPagamento: 'na_loja',
-        valor: 0,
+        valor:
+            0, // O valor do taxi sera cobrado na loja se for 'na_loja', ou somado se for PIX (implementar soma se necessario)
+        taxiDog: _usaTaxiDog,
+        endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
+        modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
       );
+
+      if (_usaTaxiDog) {
+        _firebaseService.saveUserAddress(
+          _userCpf!,
+          _enderecoController.text.trim(),
+        );
+      }
 
       _mostrarSucessoDialog();
     } catch (e) {
@@ -859,6 +923,67 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
             ),
           ),
           SizedBox(height: 25),
+
+          if (_temTaxiDog) ...[
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                children: [
+                  CheckboxListTile(
+                    activeColor: _corAcai,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      "Incluir Táxi Dog?",
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    subtitle: Text(
+                      "Buscaremos e entregaremos seu pet.",
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    value: _usaTaxiDog,
+                    onChanged: (val) {
+                      setState(() {
+                        _usaTaxiDog = val ?? false;
+                      });
+                    },
+                  ),
+                  if (_usaTaxiDog) ...[
+                    Divider(height: 20),
+                    _buildOpcaoModalidade("Buscar e Levar", "ida_volta", 2),
+                    _buildOpcaoModalidade("Apenas Buscar (Ida)", "ida", 1),
+                    _buildOpcaoModalidade("Apenas Levar (Volta)", "volta", 1),
+                    SizedBox(height: 15),
+                    TextField(
+                      controller: _enderecoController,
+                      decoration: InputDecoration(
+                        labelText: "Endereço de Retirada/Entrega",
+                        labelStyle: GoogleFonts.poppins(fontSize: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.location_on, size: 18),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: 20),
+          ],
+
           TextField(
             controller: _obsController,
             maxLines: 3,
@@ -976,6 +1101,33 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOpcaoModalidade(String label, String valor, int multiplicador) {
+    double custo = _precoTaxi * multiplicador;
+    return RadioListTile<String>(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.poppins(fontSize: 13)),
+          if (custo > 0)
+            Text(
+              "+ R\$ ${custo.toStringAsFixed(2)}",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: _corAcai,
+              ),
+            ),
+        ],
+      ),
+      value: valor,
+      groupValue: _modalidadeTaxi,
+      activeColor: _corAcai,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      onChanged: (val) => setState(() => _modalidadeTaxi = val!),
     );
   }
 
