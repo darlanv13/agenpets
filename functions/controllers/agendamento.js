@@ -102,7 +102,7 @@ exports.buscarHorarios = onCall(async (request) => {
 
 // --- 2. CRIAR AGENDAMENTO ---
 exports.criarAgendamento = onCall(async (request) => {
-    const { tenantId, cpf_user, metodo_pagamento, servico, data_hora, pet_id, valor, taxi_dog, endereco_buscar, modalidade_taxi } = request.data;
+    const { tenantId, cpf_user, metodo_pagamento, servico, data_hora, pet_id, valor, taxi_dog, endereco_buscar, modalidade_taxi, latitude, longitude } = request.data;
 
     if (!tenantId) throw new HttpsError("invalid-argument", "TenantId obrigatório.");
     if (!data_hora) throw new HttpsError("invalid-argument", "Data obrigatória.");
@@ -178,6 +178,8 @@ exports.criarAgendamento = onCall(async (request) => {
         taxi_dog: !!taxi_dog,
         endereco_buscar: endereco_buscar || null,
         modalidade_taxi: modalidade_taxi || 'ida_volta',
+        latitude: latitude || null,
+        longitude: longitude || null,
     };
 
     let resposta = { success: true };

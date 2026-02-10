@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:agenpet/services/firebase_service.dart';
+import 'package:agenpet/services/geolocation_service.dart';
 
 class AgendamentoScreen extends StatefulWidget {
   const AgendamentoScreen({super.key});
@@ -20,6 +21,7 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   );
 
   final _firebaseService = FirebaseService();
+  final _geolocationService = GeolocationService();
 
   // --- CORES ---
   final Color _corAcai = Color(0xFF4A148C);
@@ -35,6 +37,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
   bool _usaTaxiDog = false;
   double _precoTaxi = 0.0;
   String _modalidadeTaxi = 'ida_volta'; // ida_volta, ida, volta
+  double? _latitude;
+  double? _longitude;
 
   // --- ESTADO ---
   int _currentStep = 0;
@@ -199,6 +203,8 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         taxiDog: _usaTaxiDog,
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
         modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
+        latitude: _usaTaxiDog ? _latitude : null,
+        longitude: _usaTaxiDog ? _longitude : null,
       );
 
       if (_usaTaxiDog) {
@@ -977,6 +983,18 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
                         prefixIcon: Icon(Icons.location_on, size: 18),
                       ),
                     ),
+                    SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _usarLocalizacaoAtual,
+                      icon: Icon(Icons.my_location, color: _corAcai),
+                      label: Text(
+                        "Usar minha localização atual",
+                        style: GoogleFonts.poppins(
+                          color: _corAcai,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -1102,6 +1120,59 @@ class _AgendamentoScreenState extends State<AgendamentoScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _usarLocalizacaoAtual() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final position = await _geolocationService.determinePosition();
+
+      if (!mounted) return;
+
+      // Show confirmation dialog
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Confirmar Localização"),
+          content: Text(
+              "Você está no local onde ${_petNome ?? 'o pet'} será buscado?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text("Não"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text("Sim"),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        final address =
+            await _geolocationService.getAddressFromPosition(position);
+        if (mounted) {
+          setState(() {
+            _latitude = position.latitude;
+            _longitude = position.longitude;
+            if (address != null) {
+              _enderecoController.text = address;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildOpcaoModalidade(String label, String valor, int multiplicador) {
