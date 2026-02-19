@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/utils/validators.dart';
 
 class ClientSearchService {
-  final _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
 
   /// Busca um cliente pelo CPF. Retorna null se não encontrar.
   Future<Map<String, dynamic>?> searchClientByCpf(String cpf) async {
