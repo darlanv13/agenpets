@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,7 +23,10 @@ class ProntuarioPetScreen extends StatefulWidget {
 
 class _ProntuarioPetScreenState extends State<ProntuarioPetScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
 
   final Color _corAcai = const Color(0xFF4A148C);
 

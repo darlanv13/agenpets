@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/config/app_config.dart';
 
 class ServicosSelectDialog extends StatefulWidget {
@@ -12,7 +13,10 @@ class ServicosSelectDialog extends StatefulWidget {
 }
 
 class _ServicosSelectDialogState extends State<ServicosSelectDialog> {
-  final _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _selectedItems = [];
   String _searchTerm = "";

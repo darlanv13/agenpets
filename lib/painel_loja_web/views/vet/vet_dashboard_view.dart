@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/painel_loja_web/views/vet/nova_consulta_screen.dart';
@@ -16,7 +17,10 @@ class VetDashboardView extends StatefulWidget {
 }
 
 class _VetDashboardViewState extends State<VetDashboardView> {
-  final _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
   late Stream<QuerySnapshot> _agendamentosStream;
 
   String? _selectedAgendamentoId;

@@ -1,9 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:agenpet/config/app_config.dart';
 
 class VetService {
-  final _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'agenpets',
+  );
 
   // Busca fila de espera
   Stream<QuerySnapshot> getFilaEspera() {
