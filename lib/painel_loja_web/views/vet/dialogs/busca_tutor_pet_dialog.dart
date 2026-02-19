@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import 'package:cpf_cnpj_validator/cpf_validator.dart';
-import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/painel_loja_web/views/components/cadastro_rapido_dialog.dart';
+import 'package:agenpet/painel_loja_web/services/client_search_service.dart';
 
 class BuscaTutorPetDialog extends StatefulWidget {
   const BuscaTutorPetDialog({super.key});
@@ -14,121 +13,75 @@ class BuscaTutorPetDialog extends StatefulWidget {
 }
 
 class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
-  final _db = FirebaseFirestore.instance;
+  final _searchService = ClientSearchService();
   final _searchCtrl = TextEditingController();
   final _cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
 
   bool _isLoading = false;
-  List<DocumentSnapshot> _tutoresEncontrados = [];
-  DocumentSnapshot? _tutorSelecionado;
-  List<DocumentSnapshot> _petsDoTutor = [];
-  DocumentSnapshot? _petSelecionado;
+  Map<String, dynamic>? _tutorEncontrado;
+  List<Map<String, dynamic>> _petsDoTutor = [];
+  String? _petIdSelecionado;
 
   Future<void> _buscarTutor() async {
     if (_searchCtrl.text.isEmpty) return;
 
     setState(() {
       _isLoading = true;
-      _tutoresEncontrados = [];
-      _tutorSelecionado = null;
+      _tutorEncontrado = null;
       _petsDoTutor = [];
-      _petSelecionado = null;
+      _petIdSelecionado = null;
     });
 
     try {
       final termo = _searchCtrl.text.trim();
-      QuerySnapshot query;
 
-      // Se parece CPF (contém números)
-      if (termo.contains(RegExp(r'[0-9]'))) {
-        final cpfLimpo = termo.replaceAll(RegExp(r'[^0-9]'), '');
-        // Tenta buscar pelo ID direto (CPF limpo) ou pelo campo 'cpf'
-        final docById = await _db.collection('users').doc(cpfLimpo).get();
-        if (docById.exists) {
-           setState(() {
-             _tutoresEncontrados = [docById];
-             _isLoading = false;
-           });
-           // Auto-select se for único
-           _selecionarTutor(docById);
-           return;
-        } else {
-           // Fallback query
-           query = await _db.collection('users').where('cpf', isEqualTo: cpfLimpo).get();
-        }
+      // A lógica do Hotel/Creche é baseada estritamente em CPF.
+      // Adaptamos para usar o novo serviço que valida e busca por CPF.
+      // Se o usuário digitar nome, isso falhará na validação de CPF do serviço,
+      // mas como o requisito é "usar o mesmo serviço do hotel", seguimos o padrão CPF.
+
+      final cliente = await _searchService.searchClientByCpf(termo);
+
+      if (cliente != null) {
+        final pets = await _searchService.getClientPets(cliente['cpf'] ?? termo);
+        setState(() {
+          _tutorEncontrado = cliente;
+          _petsDoTutor = pets;
+          _isLoading = false;
+        });
       } else {
-        // Busca por nome (prefixo simples)
-        // Nota: Firestore não tem full-text search nativo bom para 'contains',
-        // idealmente usar Algolia ou similar. Aqui usamos isGreaterThanOrEqualTo para prefixo.
-        query = await _db.collection('users')
-            .where('nome', isGreaterThanOrEqualTo: termo)
-            .where('nome', isLessThan: '${termo}z')
-            .limit(5)
-            .get();
+        setState(() => _isLoading = false);
       }
 
-      setState(() {
-        _tutoresEncontrados = query.docs;
-        _isLoading = false;
-      });
-
     } catch (e) {
+      // Se não for CPF válido ou der erro
       debugPrint("Erro busca: $e");
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _selecionarTutor(DocumentSnapshot tutor) async {
-    setState(() {
-      _tutorSelecionado = tutor;
-      _isLoading = true;
-    });
-
-    try {
-      // Busca Pets do Tutor (subcoleção)
-      // Ajuste para usar a subcoleção correta conforme estrutura do projeto
-      // Baseado em `meus_pets_screen.dart`, a estrutura é `users/{uid}/pets`
-      final petsQuery = await _db.collection('users').doc(tutor.id).collection('pets').get();
-
-      setState(() {
-        _petsDoTutor = petsQuery.docs;
-        _isLoading = false;
-      });
-
-    } catch (e) {
-      debugPrint("Erro busca pets: $e");
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _selecionarPet(DocumentSnapshot pet) {
-    setState(() => _petSelecionado = pet);
-  }
-
   void _confirmarSelecao() {
-    if (_tutorSelecionado == null || _petSelecionado == null) return;
+    if (_tutorEncontrado == null || _petIdSelecionado == null) return;
 
-    final tutorData = _tutorSelecionado!.data() as Map<String, dynamic>;
-    final petData = _petSelecionado!.data() as Map<String, dynamic>;
+    final petSelecionado = _petsDoTutor.firstWhere((p) => p['id'] == _petIdSelecionado);
 
     Navigator.pop(context, {
-      'id': _petSelecionado!.id,
-      'nome': petData['nome'],
-      'raca': petData['raca'],
-      'tutor_nome': tutorData['nome'],
-      'tutor_id': _tutorSelecionado!.id, // UID/CPF
-      'tutor_cpf': tutorData['cpf'] ?? _tutorSelecionado!.id,
+      'id': petSelecionado['id'],
+      'nome': petSelecionado['nome'],
+      'raca': petSelecionado['raca'],
+      'tutor_nome': _tutorEncontrado!['nome'],
+      'tutor_id': _tutorEncontrado!['uid'] ?? _tutorEncontrado!['cpf'],
+      'tutor_cpf': _tutorEncontrado!['cpf'],
     });
   }
 
   void _abrirCadastroRapido() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => const CadastroRapidoDialog(),
+      builder: (_) => CadastroRapidoDialog(cpfInicial: _searchCtrl.text),
     );
 
     if (result != null && result['sucesso'] == true) {
-       // Auto-buscar o novo tutor pelo CPF retornado
        _searchCtrl.text = result['cpf'];
        _buscarTutor();
     }
@@ -143,16 +96,19 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
         height: 500,
         child: Column(
           children: [
-            // BUSCA
+            // BUSCA (CPF)
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
+                    inputFormatters: [_cpfMask], // Força formato CPF como no Hotel
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: "Buscar Tutor (CPF ou Nome)",
+                      labelText: "CPF do Tutor",
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
+                      hintText: "000.000.000-00",
                     ),
                     onSubmitted: (_) => _buscarTutor(),
                   ),
@@ -170,9 +126,10 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
             ),
 
             const SizedBox(height: 10),
+
             if (_isLoading)
               const LinearProgressIndicator(color: Color(0xFF4A148C))
-            else if (_tutoresEncontrados.isEmpty && _searchCtrl.text.isNotEmpty && _tutorSelecionado == null)
+            else if (_tutorEncontrado == null && _searchCtrl.text.isNotEmpty && !_isLoading)
               Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
@@ -188,50 +145,39 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
                 ),
               ),
 
-            // LISTA DE TUTORES
-            if (_tutorSelecionado == null && _tutoresEncontrados.isNotEmpty)
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _tutoresEncontrados.length,
-                  itemBuilder: (ctx, i) {
-                    final t = _tutoresEncontrados[i];
-                    final d = t.data() as Map<String, dynamic>;
-                    return ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text(d['nome'] ?? 'Sem Nome'),
-                      subtitle: Text("CPF: ${d['cpf'] ?? t.id}"),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () => _selecionarTutor(t),
-                    );
-                  },
+            // DADOS DO TUTOR E PETS
+            if (_tutorEncontrado != null) ...[
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green[200]!)
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_tutorEncontrado!['nome'] ?? 'Nome não inf.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text("CPF: ${_tutorEncontrado!['cpf']}", style: TextStyle(color: Colors.green[800], fontSize: 12)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
 
-            // SELEÇÃO DE PET (QUANDO TUTOR SELECIONADO)
-            if (_tutorSelecionado != null) ...[
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.check, color: Colors.white)),
-                title: Text((_tutorSelecionado!.data() as Map)['nome']),
-                subtitle: const Text("Tutor Selecionado"),
-                trailing: TextButton(
-                  onPressed: () => setState(() {
-                    _tutorSelecionado = null;
-                    _petsDoTutor = [];
-                    _petSelecionado = null;
-                  }),
-                  child: const Text("Trocar"),
-                ),
-              ),
-              const Divider(),
-              const Text("Selecione o Paciente:", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              const Align(alignment: Alignment.centerLeft, child: Text("Selecione o Paciente:", style: TextStyle(fontWeight: FontWeight.bold))),
               const SizedBox(height: 10),
 
-              if (_petsDoTutor.isEmpty && !_isLoading)
+              if (_petsDoTutor.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Text("Este tutor não possui pets cadastrados. Cadastre pelo App ou Painel Admin.", style: TextStyle(color: Colors.orange)),
+                  child: Text("Este tutor não possui pets cadastrados.", style: TextStyle(color: Colors.orange)),
                 )
               else
                 Expanded(
@@ -239,18 +185,17 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
                     itemCount: _petsDoTutor.length,
                     itemBuilder: (ctx, i) {
                       final p = _petsDoTutor[i];
-                      final d = p.data() as Map<String, dynamic>;
-                      final isSelected = _petSelecionado?.id == p.id;
+                      final isSelected = _petIdSelecionado == p['id'];
 
                       return Card(
                         color: isSelected ? const Color(0xFFE1BEE7) : Colors.white,
                         elevation: isSelected ? 4 : 1,
                         child: ListTile(
                           leading: const Icon(FontAwesomeIcons.dog),
-                          title: Text(d['nome']),
-                          subtitle: Text("${d['raca'] ?? 'SRD'} • ${d['sexo'] ?? ''}"),
+                          title: Text(p['nome']),
+                          subtitle: Text("${p['raca'] ?? 'SRD'} • ${p['tipo'] ?? ''}"),
                           trailing: isSelected ? const Icon(Icons.check_circle, color: Color(0xFF4A148C)) : null,
-                          onTap: () => _selecionarPet(p),
+                          onTap: () => setState(() => _petIdSelecionado = p['id']),
                         ),
                       );
                     },
@@ -263,7 +208,7 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
         ElevatedButton(
-          onPressed: _petSelecionado != null ? _confirmarSelecao : null,
+          onPressed: _petIdSelecionado != null ? _confirmarSelecao : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF4A148C),
             disabledBackgroundColor: Colors.grey[300]
