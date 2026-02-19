@@ -9,7 +9,13 @@ import 'services/vet_service.dart';
 
 class NovaConsultaScreen extends StatefulWidget {
   final Map<String, dynamic> petData;
-  const NovaConsultaScreen({super.key, required this.petData});
+  final VoidCallback onVoltar; // Callback para voltar ao dashboard
+
+  const NovaConsultaScreen({
+    super.key,
+    required this.petData,
+    required this.onVoltar,
+  });
 
   @override
   State<NovaConsultaScreen> createState() => _NovaConsultaScreenState();
@@ -51,167 +57,187 @@ class _NovaConsultaScreenState extends State<NovaConsultaScreen> {
             backgroundColor: Colors.red,
           ),
         );
-        Navigator.pop(context);
+        widget.onVoltar();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 1,
-        title: Row(
-          children: [
-            const Icon(
-              FontAwesomeIcons.fileMedical,
-              size: 20,
-              color: Color(0xFF4A148C),
+    // Usamos Container/Column pois será embutido no VetDashboardView
+    return Container(
+      color: const Color(0xFFF5F7FA),
+      child: Column(
+        children: [
+          // --- HEADER CUSTOMIZADO (Substitui AppBar) ---
+          Container(
+            height: 60,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  widget.petData['nome'] ?? 'Paciente',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.grey),
+                      onPressed: widget.onVoltar,
+                      tooltip: "Voltar para Fila",
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(
+                      FontAwesomeIcons.fileMedical,
+                      size: 20,
+                      color: Color(0xFF4A148C),
+                    ),
+                    const SizedBox(width: 15),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.petData['nome'] ?? 'Paciente',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "Tutor: ${widget.petData['tutor_nome'] ?? 'Desconhecido'}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                Text(
-                  "Tutor: ${widget.petData['tutor_nome'] ?? 'Desconhecido'}",
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ElevatedButton.icon(
+                  onPressed: _finalizarConsulta,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle, size: 18),
+                  label: const Text("FINALIZAR ATENDIMENTO"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: _finalizarConsulta,
-            icon: const Icon(Icons.check_circle, color: Colors.green),
-            label: const Text(
-              "FINALIZAR",
-              style: TextStyle(
-                color: Colors.green,
-                fontWeight: FontWeight.bold,
+          ),
+
+          // --- CONTEÚDO SCROLLÁVEL ---
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  // 1. ANAMNESE
+                  _buildSectionHeader(
+                    "1. Anamnese & Queixa Principal",
+                    FontAwesomeIcons.clipboardQuestion,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildCard(
+                    child: Column(
+                      children: [
+                        _buildTextField(
+                          "Queixa Principal (Motivo da Consulta)",
+                          _queixaCtrl,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 15),
+                        _buildTextField(
+                          "Histórico da Moléstia Atual (HMA)",
+                          _historicoCtrl,
+                          maxLines: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+
+                  // 2. EXAME FÍSICO
+                  _buildSectionHeader(
+                    "2. Exame Físico",
+                    FontAwesomeIcons.stethoscope,
+                  ),
+                  const SizedBox(height: 10),
+                  VitalsWidget(onChanged: (data) => _vitalsData = data),
+                  const SizedBox(height: 15),
+                  SystemsReviewWidget(onChanged: (data) => _systemsData = data),
+                  const SizedBox(height: 25),
+
+                  // 3. DIAGNÓSTICO & PLANO
+                  _buildSectionHeader(
+                    "3. Avaliação Clínica",
+                    FontAwesomeIcons.userDoctor,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildCard(
+                    child: Column(
+                      children: [
+                        _buildTextField(
+                          "Suspeita Clínica (Diferencial)",
+                          _suspeitaCtrl,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 15),
+                        _buildTextField(
+                          "Diagnóstico Definitivo",
+                          _diagnosticoCtrl,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 15),
+                        _buildTextField(
+                          "Plano Diagnóstico/Terapêutico",
+                          _planoCtrl,
+                          maxLines: 3,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+
+                  // 4. PRESCRIÇÃO & VACINAS
+                  _buildSectionHeader(
+                    "4. Conduta, Prescrição e Vacinas",
+                    FontAwesomeIcons.prescriptionBottleMedical,
+                  ),
+                  const SizedBox(height: 10),
+                  PrescriptionWidget(
+                      onChanged: (data) => _prescriptionData = data),
+                  const SizedBox(height: 15),
+                  VaccineWidget(onChanged: (data) => _vaccineData = data),
+                  const SizedBox(height: 25),
+
+                  // 5. SERVIÇOS & COBRANÇA
+                  _buildSectionHeader(
+                    "5. Serviços Realizados (Cobrança)",
+                    FontAwesomeIcons.fileInvoiceDollar,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildBillingCard(),
+
+                  const SizedBox(height: 80),
+                ],
               ),
             ),
           ),
         ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // 1. ANAMNESE
-            _buildSectionHeader(
-              "1. Anamnese & Queixa Principal",
-              FontAwesomeIcons.clipboardQuestion,
-            ),
-            const SizedBox(height: 10),
-            _buildCard(
-              child: Column(
-                children: [
-                  _buildTextField(
-                    "Queixa Principal (Motivo da Consulta)",
-                    _queixaCtrl,
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 15),
-                  _buildTextField(
-                    "Histórico da Moléstia Atual (HMA)",
-                    _historicoCtrl,
-                    maxLines: 4,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 25),
-
-            // 2. EXAME FÍSICO
-            _buildSectionHeader(
-              "2. Exame Físico",
-              FontAwesomeIcons.stethoscope,
-            ),
-            const SizedBox(height: 10),
-            VitalsWidget(onChanged: (data) => _vitalsData = data),
-            const SizedBox(height: 15),
-            SystemsReviewWidget(onChanged: (data) => _systemsData = data),
-            const SizedBox(height: 25),
-
-            // 3. DIAGNÓSTICO & PLANO
-            _buildSectionHeader(
-              "3. Avaliação Clínica",
-              FontAwesomeIcons.userDoctor,
-            ),
-            const SizedBox(height: 10),
-            _buildCard(
-              child: Column(
-                children: [
-                  _buildTextField(
-                    "Suspeita Clínica (Diferencial)",
-                    _suspeitaCtrl,
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 15),
-                  _buildTextField(
-                    "Diagnóstico Definitivo",
-                    _diagnosticoCtrl,
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 15),
-                  _buildTextField(
-                    "Plano Diagnóstico/Terapêutico",
-                    _planoCtrl,
-                    maxLines: 3,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 25),
-
-            // 4. PRESCRIÇÃO & VACINAS
-            _buildSectionHeader(
-              "4. Conduta, Prescrição e Vacinas",
-              FontAwesomeIcons.prescriptionBottleMedical,
-            ),
-            const SizedBox(height: 10),
-            PrescriptionWidget(onChanged: (data) => _prescriptionData = data),
-            const SizedBox(height: 15),
-            VaccineWidget(onChanged: (data) => _vaccineData = data),
-            const SizedBox(height: 25),
-
-            // 5. SERVIÇOS & COBRANÇA
-            _buildSectionHeader(
-              "5. Serviços Realizados (Cobrança)",
-              FontAwesomeIcons.fileInvoiceDollar,
-            ),
-            const SizedBox(height: 10),
-            _buildBillingCard(),
-
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _finalizarConsulta,
-        backgroundColor: _primaryColor,
-        icon: _isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Icon(Icons.save),
-        label: const Text("SALVAR PRONTUÁRIO"),
       ),
     );
   }
@@ -395,7 +421,7 @@ class _NovaConsultaScreenState extends State<NovaConsultaScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        widget.onVoltar(); // Chama callback de sucesso
       }
     } catch (e) {
       if (mounted) {
