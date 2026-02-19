@@ -56,7 +56,6 @@ class _VetDashboardViewState extends State<VetDashboardView> {
         .collection('tenants')
         .doc(AppConfig.tenantId)
         .collection('agendamentos')
-        .where('servico', isEqualTo: 'veterinario')
         .where(
           'data_inicio',
           isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
@@ -214,8 +213,11 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                             stream: _agendamentosStream,
                             builder: (context, snapshot) {
                               if (snapshot.hasError) {
-                                return const Center(
-                                  child: Text("Erro ao carregar"),
+                                return Center(
+                                  child: SelectableText(
+                                    "Erro: ${snapshot.error}",
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
                                 );
                               }
                               if (!snapshot.hasData) {
@@ -224,7 +226,17 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                                 );
                               }
 
-                              final docs = snapshot.data!.docs;
+                              // Filter clients locally to avoid composite index error
+                              final allDocs = snapshot.data!.docs;
+                              final docs = allDocs
+                                  .where(
+                                    (doc) =>
+                                        (doc.data()
+                                            as Map<String, dynamic>)['servico'] ==
+                                        'veterinario',
+                                  )
+                                  .toList();
+
                               if (docs.isEmpty) {
                                 return const Center(
                                   child: Text(
