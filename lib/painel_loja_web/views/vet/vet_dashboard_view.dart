@@ -4,6 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/painel_loja_web/views/vet/nova_consulta_screen.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/painel_loja_web/widgets/product_editor_dialog.dart'; // Placeholder for customer dialog
+import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart'; // Placeholder
+
+// NEW: Dialog for Client/Pet Search
+import 'dialogs/busca_tutor_pet_dialog.dart';
 
 class VetDashboardView extends StatefulWidget {
   const VetDashboardView({super.key});
@@ -49,6 +54,25 @@ class _VetDashboardViewState extends State<VetDashboardView> {
         .snapshots();
   }
 
+  void _iniciarNovoAtendimento() async {
+    // 1. Abre Dialog de Busca de Tutor e Pet
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => const BuscaTutorPetDialog(),
+    );
+
+    if (result != null) {
+      // 2. Se selecionado, inicia consulta com dados reais
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NovaConsultaScreen(petData: result),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,23 +111,9 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                   ],
                 ),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    // Start emergency/walk-in consultation
-                     Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => NovaConsultaScreen(
-                          petData: {
-                            'id': 'walk-in-${DateTime.now().millisecondsSinceEpoch}',
-                            'nome': 'Paciente Avulso',
-                            'tutor_nome': 'Tutor não cadastrado',
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: _iniciarNovoAtendimento,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text("ATENDIMENTO AVULSO"),
+                  label: const Text("NOVO ATENDIMENTO"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _corAcai,
                     foregroundColor: Colors.white,
@@ -303,6 +313,7 @@ class _VetDashboardViewState extends State<VetDashboardView> {
       'nome': data['pet_nome'],
       'raca': data['pet_raca'],
       'tutor_nome': data['tutor_nome'],
+      'tutor_id': data['userId'], // Ensure we pass userId as tutor_id
       'agendamento_id': doc.id,
     };
 

@@ -36,6 +36,24 @@ class _NovaConsultaScreenState extends State<NovaConsultaScreen> {
   final Color _primaryColor = const Color(0xFF4A148C);
 
   @override
+  void initState() {
+    super.initState();
+    _validarDadosIniciais();
+  }
+
+  void _validarDadosIniciais() {
+    // Enforce required fields from Dashboard selection
+    if (widget.petData['id'] == null || widget.petData['tutor_id'] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Erro: Dados do Paciente incompletos."), backgroundColor: Colors.red),
+        );
+        Navigator.pop(context);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),

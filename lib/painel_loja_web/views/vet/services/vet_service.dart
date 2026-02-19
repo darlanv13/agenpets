@@ -27,23 +27,71 @@ class VetService {
     required List<Map<String, dynamic>> itensCobranca,
   }) async {
     final batch = _db.batch();
+
+    // Identificadores obrigatórios
+    final String tutorId = petData['tutor_id']; // This is the userId (CPF)
+    final String petId = petData['id'];
+
+    // --- 1. REFERÊNCIAS ---
     final tenantRef = _db.collection('tenants').doc(AppConfig.tenantId);
 
-    // 1. Cria Consulta (Prontuário)
-    final consultaRef = tenantRef.collection('consultas_vet').doc();
-    batch.set(consultaRef, {
+    // Referência dentro do Pet (Prontuário Unificado)
+    // users/{cpf}/pets/{petId}/prontuario/{consultaId}
+    final prontuarioRef = _db
+        .collection('users')
+        .doc(tutorId)
+        .collection('pets')
+        .doc(petId)
+        .collection('prontuario')
+        .doc();
+
+    final consultaData = {
+      'tenantId': AppConfig.tenantId,
       'pet': petData,
       'anamnese': anamnese,
       'fisico': fisico,
       'diagnostico': diagnostico,
       'receita': receita,
-      'vacinas': vacinas,
+      'vacinas': vacinas, // Vacinas dentro do prontuário
       'data': FieldValue.serverTimestamp(),
       'veterinario_uid': FirebaseAuth.instance.currentUser?.uid,
-      'status': 'finalizada',
-    });
+      'tipo': 'consulta',
+    };
 
-    // 2. Atualiza status do agendamento se existir
+    batch.set(prontuarioRef, consultaData);
+
+    // --- 2. VACINAS (Subcoleção separada para facilitar busca) ---
+    // users/{cpf}/pets/{petId}/vacinas/{vacinaId}
+    if (vacinas.isNotEmpty) {
+      final vacinasRef = _db
+          .collection('users')
+          .doc(tutorId)
+          .collection('pets')
+          .doc(petId)
+          .collection('vacinas');
+
+      for (var vac in vacinas) {
+        final docVac = vacinasRef.doc();
+        batch.set(docVac, {
+          'tenantId': AppConfig.tenantId,
+          'nome': vac['nome'],
+          'lab': vac['lab'],
+          'lote': vac['lote'],
+          'revac_data': vac['revac_data'],
+          'aplicacao_data': FieldValue.serverTimestamp(),
+          'veterinario_uid': FirebaseAuth.instance.currentUser?.uid,
+          'origem_prontuario': prontuarioRef.id,
+        });
+      }
+    }
+
+    // --- 3. Cópia para Tenant (Opcional, mas útil para relatórios da loja) ---
+    // tenants/{tenantId}/consultas_vet/{consultaId}
+    // Mantemos uma cópia ou referência para o admin da loja ver histórico
+    final tenantConsultaRef = tenantRef.collection('consultas_vet').doc(prontuarioRef.id);
+    batch.set(tenantConsultaRef, consultaData);
+
+    // --- 4. Atualiza Agendamento ---
     if (petData['agendamento_id'] != null) {
       final agendamentoRef = tenantRef.collection('agendamentos').doc(petData['agendamento_id']);
       batch.update(agendamentoRef, {
@@ -52,7 +100,7 @@ class VetService {
       });
     }
 
-    // 3. Cria Comanda no PDV (se tiver cobrança)
+    // --- 5. Cria Comanda no PDV ---
     if (itensCobranca.isNotEmpty) {
       double total = itensCobranca.fold(
         0,
@@ -62,7 +110,7 @@ class VetService {
       batch.set(comandaRef, {
         'cliente_nome': petData['tutor_nome'],
         'origem_tipo': 'Veterinária',
-        'origem_id': consultaRef.id,
+        'origem_id': prontuarioRef.id,
         'status': 'aberta',
         'created_at': FieldValue.serverTimestamp(),
         'valor_total': total,

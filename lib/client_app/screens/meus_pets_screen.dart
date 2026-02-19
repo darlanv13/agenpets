@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:agenpet/client_app/screens/prontuario_pet_screen.dart';
 
 class MeusPetsScreen extends StatefulWidget {
   const MeusPetsScreen({super.key});
@@ -268,6 +269,23 @@ class _MeusPetsScreenState extends State<MeusPetsScreen> {
                   ),
                 ),
 
+                // Botão de Prontuário
+                IconButton(
+                  icon: Icon(FontAwesomeIcons.notesMedical, color: _corAcai),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProntuarioPetScreen(
+                          userId: _userCpf!,
+                          petId: petId,
+                          petNome: nome,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(width: 5),
                 // Ícone de Seta/Editar
                 Icon(
                   Icons.arrow_forward_ios_rounded,
