@@ -20,6 +20,53 @@ class VetService {
         .snapshots();
   }
 
+  // Adiciona agendamento diretamente na fila (Check-in rápido)
+  Future<void> adicionarNaFila(Map<String, dynamic> petData) async {
+    final ref = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .doc();
+
+    await ref.set({
+      'pet_id': petData['id'],
+      'pet_nome': petData['nome'],
+      'pet_raca': petData['raca'],
+      'tutor_nome': petData['tutor_nome'],
+      'userId': petData['tutor_id'],
+      'servico': 'veterinario',
+      'status': 'aguardando_atendimento',
+      'data_inicio': FieldValue.serverTimestamp(),
+      'created_at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Faz check-in de um agendamento existente
+  Future<void> checkIn(String agendamentoId) async {
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .doc(agendamentoId)
+        .update({
+      'status': 'aguardando_atendimento',
+      'checkin_time': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Inicia atendimento (Muda status para em_atendimento)
+  Future<void> iniciarAtendimento(String agendamentoId) async {
+    await _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('agendamentos')
+        .doc(agendamentoId)
+        .update({
+      'status': 'em_atendimento',
+      'inicio_atendimento': FieldValue.serverTimestamp(),
+    });
+  }
+
   // Salva consulta direto no banco
   Future<void> salvarConsultaCompleta({
     required Map<String, dynamic> petData,
