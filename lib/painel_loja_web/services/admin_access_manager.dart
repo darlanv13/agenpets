@@ -18,6 +18,7 @@ import '../views/pdv/pdv_view.dart';
 import '../views/creche/creche_view.dart';
 import '../views/estoque/gestao_estoque_view.dart';
 import '../views/taxi_dog/logistica_taxi_dog_view.dart';
+import '../views/vet/vet_dashboard_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminModule {
@@ -128,6 +129,7 @@ class AdminAccessManager {
     bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
     bool temHotel = config['tem_hotel'] ?? false;
     bool temCreche = config['tem_creche'] ?? false;
+    bool temVeterinario = config['tem_veterinario'] ?? false;
     bool temTaxiDog =
         (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
@@ -167,6 +169,13 @@ class AdminAccessManager {
           title: "Creche",
           icon: FontAwesomeIcons.dog,
           widget: CrecheView(),
+        ),
+      if (temVeterinario)
+        AdminModule(
+          id: 'veterinario',
+          title: "Veterinário",
+          icon: FontAwesomeIcons.userDoctor,
+          widget: VetDashboardView(),
         ),
       if (temTaxiDog)
         AdminModule(
