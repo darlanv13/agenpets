@@ -4,8 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/painel_loja_web/views/vet/nova_consulta_screen.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:agenpet/painel_loja_web/widgets/product_editor_dialog.dart'; // Placeholder for customer dialog
-import 'package:agenpet/painel_loja_web/widgets/servicos_select_dialog.dart'; // Placeholder
 
 // NEW: Dialog for Client/Pet Search
 import 'dialogs/busca_tutor_pet_dialog.dart';

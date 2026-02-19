@@ -4,7 +4,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:cpf_cnpj_validator/cpf_validator.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:agenpet/painel_loja_web/views/vet/dialogs/fast_client_registration_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/components/cadastro_rapido_dialog.dart';
 
 class BuscaTutorPetDialog extends StatefulWidget {
   const BuscaTutorPetDialog({super.key});
@@ -122,14 +122,14 @@ class _BuscaTutorPetDialogState extends State<BuscaTutorPetDialog> {
   }
 
   void _abrirCadastroRapido() async {
-    final novoTutor = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => const FastClientRegistrationDialog(),
+      builder: (_) => const CadastroRapidoDialog(),
     );
 
-    if (novoTutor != null) {
-       // Auto-buscar o novo tutor
-       _searchCtrl.text = novoTutor['cpf'];
+    if (result != null && result['sucesso'] == true) {
+       // Auto-buscar o novo tutor pelo CPF retornado
+       _searchCtrl.text = result['cpf'];
        _buscarTutor();
     }
   }
