@@ -131,7 +131,7 @@ class _BanhosTosaViewState extends State<BanhosTosaView> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => NovoAgendamentoDialog(),
+      builder: (ctx) => AgendBanhoTosa(),
     );
   }
 

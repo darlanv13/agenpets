@@ -4,14 +4,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 
-class ConfiguracaoAgendaView extends StatefulWidget {
-  const ConfiguracaoAgendaView({super.key});
+class ConfiguracaoView extends StatefulWidget {
+  const ConfiguracaoView({super.key});
 
   @override
-  _ConfiguracaoAgendaViewState createState() => _ConfiguracaoAgendaViewState();
+  _ConfiguracaoViewState createState() => _ConfiguracaoViewState();
 }
 
-class _ConfiguracaoAgendaViewState extends State<ConfiguracaoAgendaView> {
+class _ConfiguracaoViewState extends State<ConfiguracaoView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',

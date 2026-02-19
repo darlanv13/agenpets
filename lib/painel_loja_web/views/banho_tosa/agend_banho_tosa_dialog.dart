@@ -8,14 +8,14 @@ import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/utils/validators.dart';
 import 'package:agenpet/painel_loja_web/views/components/cadastro_rapido_dialog.dart';
 
-class NovoAgendamentoDialog extends StatefulWidget {
-  const NovoAgendamentoDialog({super.key});
+class AgendBanhoTosa extends StatefulWidget {
+  const AgendBanhoTosa({super.key});
 
   @override
-  _NovoAgendamentoDialogState createState() => _NovoAgendamentoDialogState();
+  _AgendBanhoTosaState createState() => _AgendBanhoTosaState();
 }
 
-class _NovoAgendamentoDialogState extends State<NovoAgendamentoDialog> {
+class _AgendBanhoTosaState extends State<AgendBanhoTosa> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',

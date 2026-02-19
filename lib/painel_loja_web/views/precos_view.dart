@@ -4,14 +4,14 @@ import 'subviews/precos_base_view.dart';
 import 'subviews/servicos_view.dart';
 import 'subviews/pacotes_view.dart';
 
-class GestaoPrecosView extends StatefulWidget {
-  const GestaoPrecosView({super.key});
+class PrecosView extends StatefulWidget {
+  const PrecosView({super.key});
 
   @override
-  _GestaoPrecosViewState createState() => _GestaoPrecosViewState();
+  _PrecosViewState createState() => _PrecosViewState();
 }
 
-class _GestaoPrecosViewState extends State<GestaoPrecosView> {
+class _PrecosViewState extends State<PrecosView> {
   int _selectedIndex = 0;
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corFundo = Color(0xFFF5F7FA);

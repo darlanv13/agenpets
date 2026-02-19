@@ -47,6 +47,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     'banhos_tosa': 'Agenda Banho/Tosa',
     'hotel': 'Agenda Hotel',
     'creche': 'Agenda Creche',
+    'veterinario': 'Agenda Veterinária',
     'venda_planos': 'Venda de Planos',
     'gestao_precos': 'Tabela de Preços',
     'banners_app': 'Banners do App',
@@ -80,6 +81,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
       bool temHotel = config['tem_hotel'] ?? false;
       bool temCreche = config['tem_creche'] ?? false;
+      bool temVeterinario = config['tem_veterinario'] ?? false;
       bool temTaxiDog =
           (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
@@ -89,6 +91,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
         if (key == 'banhos_tosa' && !temBanhoTosa) return;
         if (key == 'hotel' && !temHotel) return;
         if (key == 'creche' && !temCreche) return;
+        if (key == 'veterinario' && !temVeterinario) return;
         if (key == 'logistica_taxi' && !temTaxiDog) return;
         filtered[key] = value;
       });
@@ -153,6 +156,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       'vendedor': ['loja_pdv', 'venda_planos'],
       'caixa': ['loja_pdv'],
       'motorista': ['logistica_taxi'],
+      'veterinario': ['veterinario'],
     };
 
     if (map.containsKey(role)) {
@@ -457,6 +461,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
               children: [
                 _buildChip("Banhista", "banho"),
                 _buildChip("Tosador", "tosa"),
+                _buildChip("Veterinário", "veterinario"),
                 _buildChip("Vendedor", "vendedor"),
                 _buildChip("Caixa", "caixa"),
                 _buildChip("Motorista", "motorista"),

@@ -6,14 +6,14 @@ import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
 import '../../widgets/product_editor_dialog.dart';
 
-class GestaoEstoqueView extends StatefulWidget {
-  const GestaoEstoqueView({super.key});
+class EstoqueView extends StatefulWidget {
+  const EstoqueView({super.key});
 
   @override
-  _GestaoEstoqueViewState createState() => _GestaoEstoqueViewState();
+  _EstoqueViewState createState() => _EstoqueViewState();
 }
 
-class _GestaoEstoqueViewState extends State<GestaoEstoqueView> {
+class _EstoqueViewState extends State<EstoqueView> {
   final _db = FirebaseFirestore.instanceFor(
     app: Firebase.app(),
     databaseId: 'agenpets',

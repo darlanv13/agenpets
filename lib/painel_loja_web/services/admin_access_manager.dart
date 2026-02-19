@@ -10,14 +10,15 @@ import 'package:agenpet/services/app_database.dart';
 import '../views/dashboards/dashboard_view.dart';
 import '../views/banho_tosa/banho_tosa_view.dart';
 import '../views/hotel/hotel_view.dart';
-import '../views/gestao_precos_view.dart';
-import '../views/configuracao_agenda_view.dart';
+import '../views/precos_view.dart';
+import '../views/configuracao.dart';
 import '../views/assinaturas/venda_assinatura_view.dart';
 import '../views/banners/gestao_banners_view.dart';
 import '../views/pdv/pdv_view.dart';
 import '../views/creche/creche_view.dart';
-import '../views/estoque/gestao_estoque_view.dart';
+import '../views/estoque/estoque_view.dart';
 import '../views/taxi_dog/logistica_taxi_dog_view.dart';
+import '../views/vet/vet_dashboard_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminModule {
@@ -128,6 +129,7 @@ class AdminAccessManager {
     bool temBanhoTosa = config['tem_banho_tosa'] ?? true;
     bool temHotel = config['tem_hotel'] ?? false;
     bool temCreche = config['tem_creche'] ?? false;
+    bool temVeterinario = config['tem_veterinario'] ?? false;
     bool temTaxiDog =
         (config['tem_taxi_dog'] == true) || (config['tem_taxi'] == true);
 
@@ -168,6 +170,13 @@ class AdminAccessManager {
           icon: FontAwesomeIcons.dog,
           widget: CrecheView(),
         ),
+      if (temVeterinario)
+        AdminModule(
+          id: 'veterinario',
+          title: "Veterinário",
+          icon: FontAwesomeIcons.userDoctor,
+          widget: VetDashboardView(),
+        ),
       if (temTaxiDog)
         AdminModule(
           id: 'logistica_taxi',
@@ -186,7 +195,7 @@ class AdminAccessManager {
         id: 'gestao_precos',
         title: "Tabela de Preços",
         icon: Icons.price_change_rounded,
-        widget: GestaoPrecosView(),
+        widget: PrecosView(),
       ),
       AdminModule(
         id: 'banners_app',
@@ -198,13 +207,13 @@ class AdminAccessManager {
         id: 'configuracoes',
         title: "Configurações",
         icon: Icons.settings_rounded,
-        widget: ConfiguracaoAgendaView(),
+        widget: ConfiguracaoView(),
       ),
       AdminModule(
         id: 'gestao_estoque',
         title: "Gestão de Estoque",
         icon: Icons.inventory_rounded,
-        widget: GestaoEstoqueView(),
+        widget: EstoqueView(),
       ),
       AdminModule(
         id: 'gestao_tenants',
