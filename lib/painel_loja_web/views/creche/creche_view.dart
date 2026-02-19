@@ -1,6 +1,6 @@
 import 'package:agenpet/painel_loja_web/services/comanda_service.dart';
 import 'package:agenpet/painel_loja_web/widgets/unified_checkout_dialog.dart';
-import 'package:agenpet/painel_loja_web/views/components/nova_reserva_creche_dialog.dart';
+import 'package:agenpet/painel_loja_web/views/creche/reserva_creche_dialog.dart';
 import 'package:agenpet/painel_loja_web/views/components/registrar_pagamento_creche_dialog.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';

@@ -22,6 +22,10 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
     databaseId: 'agenpets',
   );
 
+  Future<List<DocumentSnapshot>>? _userAndPetFuture;
+  String? _currentUserId;
+  String? _currentPetId;
+
   final Color _corAcai = Color(0xFF4A148C);
   final Color _corLilas = Color(0xFFF3E5F5);
 
@@ -78,7 +82,10 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
           .doc(AppConfig.tenantId)
           .collection('agendamentos')
           .doc(widget.agendamentoId)
-          .update({'status': 'pronto', 'fim_servico': FieldValue.serverTimestamp()});
+          .update({
+            'status': 'pronto',
+            'fim_servico': FieldValue.serverTimestamp(),
+          });
       Navigator.pop(context); // Retorna para a tela anterior
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -358,6 +365,23 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
               status != 'concluido' &&
               status != 'cancelado';
 
+          // Memoização do Future para evitar leituras redundantes no Firestore
+          if (_userAndPetFuture == null ||
+              _currentUserId != userId ||
+              _currentPetId != petId) {
+            _currentUserId = userId;
+            _currentPetId = petId;
+            _userAndPetFuture = Future.wait([
+              _db.collection('users').doc(userId).get(),
+              _db
+                  .collection('users')
+                  .doc(userId)
+                  .collection('pets')
+                  .doc(petId)
+                  .get(),
+            ]);
+          }
+
           return Column(
             children: [
               // HEADER (CLIENTE & PET)
@@ -365,15 +389,7 @@ class _DetalhesAgendamentoViewState extends State<DetalhesAgendamentoView> {
                 color: _corAcai,
                 padding: EdgeInsets.fromLTRB(20, 0, 20, 30),
                 child: FutureBuilder<List<DocumentSnapshot>>(
-                  future: Future.wait([
-                    _db.collection('users').doc(userId).get(),
-                    _db
-                        .collection('users')
-                        .doc(userId)
-                        .collection('pets')
-                        .doc(petId)
-                        .get(),
-                  ]),
+                  future: _userAndPetFuture,
                   builder: (context, userSnap) {
                     if (!userSnap.hasData) return SizedBox(height: 100);
 

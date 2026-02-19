@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:intl/intl.dart';
-import '../widgets/product_editor_dialog.dart';
+import '../../widgets/product_editor_dialog.dart';
 
 class GestaoEstoqueView extends StatefulWidget {
   const GestaoEstoqueView({super.key});

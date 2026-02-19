@@ -7,17 +7,17 @@ import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/services/app_database.dart';
 
 // Imports das Views
-import '../views/dashboard_view.dart';
-import '../views/banho_tosa_view.dart';
-import '../views/hotel_view.dart';
+import '../views/dashboards/dashboard_view.dart';
+import '../views/banho_tosa/banho_tosa_view.dart';
+import '../views/hotel/hotel_view.dart';
 import '../views/gestao_precos_view.dart';
 import '../views/configuracao_agenda_view.dart';
-import '../views/venda_assinatura_view.dart';
-import '../views/gestao_banners_view.dart';
-import '../views/pdv_view.dart';
-import '../views/creche_view.dart';
-import '../views/gestao_estoque_view.dart';
-import '../views/logistica_taxi_dog_view.dart';
+import '../views/assinaturas/venda_assinatura_view.dart';
+import '../views/banners/gestao_banners_view.dart';
+import '../views/pdv/pdv_view.dart';
+import '../views/creche/creche_view.dart';
+import '../views/estoque/gestao_estoque_view.dart';
+import '../views/taxi_dog/logistica_taxi_dog_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminModule {

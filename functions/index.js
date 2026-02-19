@@ -25,7 +25,7 @@ const notificationsWhatsapp = require("./controllers/notifications_whatsapp");
 const adminController = require("./controllers/adminController");
 const paymentController = require("./controllers/paymentController");
 const adminTenantsController = require("./controllers/adminTenantsController");
-
+const vetController = require("./controllers/vetController");
 
 // 4. EXPORTAÇÕES (API PUBLICADA)
 
@@ -35,6 +35,7 @@ const adminTenantsController = require("./controllers/adminTenantsController");
 exports.buscarHorarios = agendamento.buscarHorarios;
 exports.criarAgendamento = agendamento.criarAgendamento;
 exports.salvarChecklistPet = agendamento.salvarChecklistPet;
+exports.salvarConsultaVet = onRequest(vetController.salvarConsulta);
 
 // Vendas e Assinaturas
 // Nota: 'realizarVendaAssinatura' agora vem do módulo 'vendas'
