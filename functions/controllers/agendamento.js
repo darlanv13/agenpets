@@ -21,15 +21,22 @@ exports.buscarHorarios = onCall(async (request) => {
         const prosSnapshot = await db.collection("tenants").doc(tenantId).collection("profissionais").where("ativo", "==", true).get();
         const banhistas = [];
         const tosadores = [];
+        const veterinarios = [];
 
         prosSnapshot.forEach((doc) => {
             const p = { id: doc.id, ...doc.data() };
             const skills = (p.habilidades || []).map((h) => h.toLowerCase());
             if (skills.includes("tosa")) tosadores.push(p);
             else if (skills.includes("banho")) banhistas.push(p);
+            if (skills.includes("veterinario")) veterinarios.push(p);
         });
 
-        const duracaoServico = servicoNorm === "tosa" ? (config.tempo_tosa_min || 90) : (config.tempo_banho_min || 60);
+        // Define Duração
+        let duracaoServico = 0;
+        if (servicoNorm === "tosa") duracaoServico = config.tempo_tosa_min || 90;
+        else if (servicoNorm === "banho") duracaoServico = config.tempo_banho_min || 60;
+        else if (servicoNorm === "consulta" || servicoNorm === "vacina") duracaoServico = config.tempo_consulta_min || 30;
+        else duracaoServico = 30; // Default fallback
 
         // Busca Agendamentos
         const startOfDay = new Date(`${dataConsulta}T00:00:00`);
@@ -84,6 +91,8 @@ exports.buscarHorarios = onCall(async (request) => {
                         if (podeTrocar) temVaga = true;
                     }
                 }
+            } else if (servicoNorm === "consulta" || servicoNorm === "vacina") {
+                if (veterinarios.some((v) => !isOcupado(v.id))) temVaga = true;
             }
 
             const hStr = horaAtual.getHours().toString().padStart(2, "0");
@@ -125,7 +134,11 @@ exports.criarAgendamento = onCall(async (request) => {
     // Configuração e Profissionais
     const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
     const config = configDoc.exists ? configDoc.data() : { tempo_tosa_min: 60, tempo_banho_min: 40 };
-    const duracao = servicoNorm === "tosa" ? config.tempo_tosa_min : config.tempo_banho_min;
+
+    let duracao = 30;
+    if (servicoNorm === "tosa") duracao = config.tempo_tosa_min;
+    else if (servicoNorm === "banho") duracao = config.tempo_banho_min;
+    else if (servicoNorm === "consulta" || servicoNorm === "vacina") duracao = config.tempo_consulta_min || 30;
 
     const inicio = new Date(data_hora);
     const fim = addMinutes(inicio, duracao);
@@ -133,10 +146,14 @@ exports.criarAgendamento = onCall(async (request) => {
     const prosSnapshot = await db.collection("tenants").doc(tenantId).collection("profissionais").where("ativo", "==", true).get();
     const banhistas = [];
     const tosadores = [];
+    const veterinarios = [];
+
     prosSnapshot.forEach((doc) => {
         const p = { id: doc.id, ...doc.data() };
-        if ((p.habilidades || []).includes("tosa")) tosadores.push(p);
-        else banhistas.push(p);
+        const skills = (p.habilidades || []).map(h => h.toLowerCase());
+        if (skills.includes("tosa")) tosadores.push(p);
+        else if (skills.includes("banho")) banhistas.push(p);
+        if (skills.includes("veterinario")) veterinarios.push(p);
     });
 
     // Conflitos
@@ -166,13 +183,17 @@ exports.criarAgendamento = onCall(async (request) => {
                 }
             }
         }
+    } else if (servicoNorm === "consulta" || servicoNorm === "vacina") {
+        profissionalEscolhido = veterinarios.find((v) => !agendamentosNoHorario.find((ag) => ag.profissional_id === v.id));
     }
 
     if (!profissionalEscolhido) throw new HttpsError("aborted", "Horário indisponível.");
 
     const novoAgendamento = {
         tenantId, userId: cpf_user, pet_id, profissional_id: profissionalEscolhido.id, profissional_nome: profissionalEscolhido.nome,
-        servicoNorm, data_inicio: admin.firestore.Timestamp.fromDate(inicio), data_fim: admin.firestore.Timestamp.fromDate(fim),
+        servicoNorm,
+        servico: servicoNorm === 'consulta' || servicoNorm === 'vacina' ? 'veterinario' : servicoNorm, // Save 'veterinario' for admin dashboard filter
+        data_inicio: admin.firestore.Timestamp.fromDate(inicio), data_fim: admin.firestore.Timestamp.fromDate(fim),
         created_at: admin.firestore.FieldValue.serverTimestamp(), metodo_pagamento, valor: metodo_pagamento === "voucher" ? 0 : valor,
         status: metodo_pagamento === "pix" ? "aguardando_pagamento" : "agendado",
         taxi_dog: !!taxi_dog,

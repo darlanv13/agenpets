@@ -1,4 +1,5 @@
 import 'package:agenpet/client_app/screens/minhas_agendas.dart';
+import 'package:agenpet/client_app/screens/vet_agendamento_screen.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -123,6 +124,17 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    if (rota == '/vet_agendamento') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          settings: RouteSettings(arguments: {'cpf': _dadosUsuario!['cpf']}),
+          builder: (context) => const VetAgendamentoScreen(),
+        ),
+      );
+      return;
+    }
+
     // Funcionalidades ainda não implementadas
     if (rota == '/em_breve') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -240,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       FontAwesomeIcons.userDoctor,
                       Colors.green,
                       Colors.white,
-                      () => _navegar('/em_breve'),
+                      () => _navegar('/vet_agendamento'),
                     ),
                   if (_temTaxi)
                     _buildMenuCard(
