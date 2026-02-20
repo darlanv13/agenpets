@@ -107,3 +107,6 @@ async function enviarWhatsApp(telefone, templateName, parametros, token, phoneId
         console.error("Erro WhatsApp API:", error.response ? error.response.data : error.message);
     }
 }
+
+// Exporta a função auxiliar para uso em outros controllers (ex: Marketing)
+exports.enviarWhatsApp = enviarWhatsApp;

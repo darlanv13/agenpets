@@ -22,6 +22,7 @@ const crecheController = require("./controllers/crecheController");
 // const checkoutsAgenpets = require("./controllers/checkouts_agenpets"); // Desativado
 const notificationsApp = require("./controllers/notifications_app");
 const notificationsWhatsapp = require("./controllers/notifications_whatsapp");
+const marketingController = require("./controllers/marketingController");
 const adminController = require("./controllers/adminController");
 const paymentController = require("./controllers/paymentController");
 const adminTenantsController = require("./controllers/adminTenantsController");
@@ -84,6 +85,7 @@ exports.registrarPagamentoCreche = crecheController.registrarPagamentoCreche;
 exports.notificarPetPronto = notificationsApp.notificarPetPronto;
 exports.whatsappConfirmacaoAgendamento = notificationsWhatsapp.whatsappConfirmacaoAgendamento;
 exports.whatsappPetPronto = notificationsWhatsapp.whatsappPetPronto;
+exports.enviarLembreteVacinas = marketingController.enviarLembreteVacinas;
 
 
 // MÓDULO ADMIN (Profissionais)
