@@ -22,6 +22,9 @@
         ],
         "adminpanel": [
           "adminpanel"
+        ],
+        "lapets": [
+          "lapets"
         ]
       }
     }

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:agenpet/config/app_config.dart';
 import 'package:agenpet/painel_loja_web/views/vet/nova_consulta_screen.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:agenpet/painel_loja_web/views/vet/services/vet_service.dart';
 
 // NEW: Dialog for Client/Pet Search
 import 'dialogs/busca_tutor_pet_dialog.dart';
@@ -21,11 +22,17 @@ class _VetDashboardViewState extends State<VetDashboardView> {
     app: Firebase.app(),
     databaseId: 'agenpets',
   );
+  final _vetService = VetService();
+
   late Stream<QuerySnapshot> _agendamentosStream;
 
   String? _selectedAgendamentoId;
   String _termoBusca = "";
   final TextEditingController _searchController = TextEditingController();
+
+  // Estado da Consulta
+  bool _modoConsulta = false;
+  Map<String, dynamic>? _pacienteEmAtendimento;
 
   // Cores
   final Color _corAcai = const Color(0xFF4A148C);
@@ -49,7 +56,6 @@ class _VetDashboardViewState extends State<VetDashboardView> {
         .collection('tenants')
         .doc(AppConfig.tenantId)
         .collection('agendamentos')
-        .where('servico', isEqualTo: 'veterinario')
         .where(
           'data_inicio',
           isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
@@ -67,17 +73,34 @@ class _VetDashboardViewState extends State<VetDashboardView> {
     );
 
     if (result != null) {
-      // 2. Se selecionado, inicia consulta com dados reais
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => NovaConsultaScreen(petData: result)),
-      );
+      // 2. Adiciona na fila (Reception Flow)
+      await _vetService.adicionarNaFila(result);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Paciente adicionado à Fila de Atendimento!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Se estiver em modo consulta, exibe a tela de consulta EMBUTIDA
+    if (_modoConsulta && _pacienteEmAtendimento != null) {
+      return NovaConsultaScreen(
+        petData: _pacienteEmAtendimento!,
+        onVoltar: () {
+          setState(() {
+            _modoConsulta = false;
+            _pacienteEmAtendimento = null;
+          });
+        },
+      );
+    }
+
     return Scaffold(
       backgroundColor: _corFundo,
       body: Column(
@@ -130,7 +153,7 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                 ElevatedButton.icon(
                   onPressed: _iniciarNovoAtendimento,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text("NOVO ATENDIMENTO"),
+                  label: const Text("NOVO ATENDIMENTO (Check-in)"),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _corAcai,
                     foregroundColor: Colors.white,
@@ -189,16 +212,34 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                           child: StreamBuilder<QuerySnapshot>(
                             stream: _agendamentosStream,
                             builder: (context, snapshot) {
-                              if (snapshot.hasError)
-                                return const Center(
-                                  child: Text("Erro ao carregar"),
+                              if (snapshot.hasError) {
+                                return Center(
+                                  child: SelectableText(
+                                    "Erro: ${snapshot.error}",
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
                                 );
-                              if (!snapshot.hasData)
+                              }
+                              if (!snapshot.hasData) {
                                 return const Center(
                                   child: CircularProgressIndicator(),
                                 );
+                              }
 
-                              final docs = snapshot.data!.docs;
+                              // Filter clients locally to avoid composite index error
+                              final allDocs = snapshot.data!.docs;
+                              final docs = allDocs
+                                  .where(
+                                    (doc) =>
+                                        (doc.data()
+                                            as Map<
+                                              String,
+                                              dynamic
+                                            >)['servico'] ==
+                                        'veterinario',
+                                  )
+                                  .toList();
+
                               if (docs.isEmpty) {
                                 return const Center(
                                   child: Text(
@@ -208,17 +249,37 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                                 );
                               }
 
+                              // Ordenar: Aguardando primeiro
+                              // (Firestore já ordena por data, mas vamos reordenar por status na UI)
+                              List<DocumentSnapshot> sortedDocs = List.from(
+                                docs,
+                              );
+                              sortedDocs.sort((a, b) {
+                                String statusA = a['status'] ?? '';
+                                String statusB = b['status'] ?? '';
+                                if (statusA == 'aguardando_atendimento' &&
+                                    statusB != 'aguardando_atendimento') {
+                                  return -1;
+                                }
+                                if (statusB == 'aguardando_atendimento' &&
+                                    statusA != 'aguardando_atendimento') {
+                                  return 1;
+                                }
+                                return 0;
+                              });
+
                               // Auto-select first if none selected
                               if (_selectedAgendamentoId == null &&
-                                  docs.isNotEmpty) {
+                                  sortedDocs.isNotEmpty) {
                                 WidgetsBinding.instance.addPostFrameCallback((
                                   _,
                                 ) {
-                                  if (mounted)
+                                  if (mounted) {
                                     setState(
                                       () => _selectedAgendamentoId =
-                                          docs.first.id,
+                                          sortedDocs.first.id,
                                     );
+                                  }
                                 });
                               }
 
@@ -226,9 +287,9 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                 ),
-                                itemCount: docs.length,
+                                itemCount: sortedDocs.length,
                                 itemBuilder: (context, index) =>
-                                    _buildListItem(docs[index]),
+                                    _buildListItem(sortedDocs[index]),
                               );
                             },
                           ),
@@ -254,10 +315,11 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                               .doc(_selectedAgendamentoId)
                               .snapshots(),
                           builder: (context, snapshot) {
-                            if (!snapshot.hasData)
+                            if (!snapshot.hasData) {
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
+                            }
                             if (!snapshot.data!.exists)
                               return _buildEmptyDetails();
                             return _buildDetailsPanel(snapshot.data!);
@@ -288,9 +350,23 @@ class _VetDashboardViewState extends State<VetDashboardView> {
 
     final status = data['status'] ?? 'agendado';
     Color statusColor = Colors.grey;
-    if (status == 'em_atendimento') statusColor = _corProcesso;
-    if (status == 'concluido') statusColor = _corSucesso;
-    if (status == 'cancelado') statusColor = Colors.red;
+    String statusText = "";
+
+    if (status == 'em_atendimento') {
+      statusColor = _corProcesso;
+      statusText = "Em Atendimento";
+    } else if (status == 'concluido') {
+      statusColor = _corSucesso;
+      statusText = "Concluído";
+    } else if (status == 'cancelado') {
+      statusColor = Colors.red;
+      statusText = "Cancelado";
+    } else if (status == 'aguardando_atendimento') {
+      statusColor = _corAtencao;
+      statusText = "Na Fila";
+    } else {
+      statusText = "Agendado";
+    }
 
     final hora = (data['data_inicio'] as Timestamp).toDate();
 
@@ -358,8 +434,22 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                 ],
               ),
             ),
-            if (status == 'concluido')
-              const Icon(Icons.check_circle, size: 16, color: Colors.green),
+            // Status Badge mini
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -384,6 +474,7 @@ class _VetDashboardViewState extends State<VetDashboardView> {
 
   Widget _buildDetailsPanel(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final status = data['status'] ?? 'agendado';
     final petData = {
       'id': data['pet_id'],
       'nome': data['pet_nome'],
@@ -441,15 +532,9 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                       Row(
                         children: [
                           _buildTag(
-                            "Peso: -- kg",
-                            Colors.blue[50]!,
-                            Colors.blue[800]!,
-                          ),
-                          const SizedBox(width: 10),
-                          _buildTag(
-                            "Idade: -- anos",
-                            Colors.orange[50]!,
-                            Colors.orange[800]!,
+                            "Status: ${status.toString().toUpperCase()}",
+                            Colors.grey[200]!,
+                            Colors.black87,
                           ),
                         ],
                       ),
@@ -458,31 +543,90 @@ class _VetDashboardViewState extends State<VetDashboardView> {
                 ),
                 Column(
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                NovaConsultaScreen(petData: petData),
+                    // LOGICA DE BOTOES POR STATUS
+
+                    // 1. Check-in (Agendado -> Fila)
+                    if (status == 'agendado')
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await _vetService.checkIn(doc.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Check-in realizado com sucesso!"),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.assignment_turned_in, size: 18),
+                        label: const Text("FAZER CHECK-IN"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 30,
+                            vertical: 20,
                           ),
-                        );
-                      },
-                      icon: const Icon(FontAwesomeIcons.stethoscope, size: 18),
-                      label: const Text("INICIAR CONSULTA"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _corAcai,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 30,
-                          vertical: 20,
-                        ),
-                        textStyle: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
                         ),
                       ),
-                    ),
+
+                    // 2. Iniciar Consulta (Fila -> Em Atendimento)
+                    if (status == 'aguardando_atendimento')
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await _vetService.iniciarAtendimento(doc.id);
+                          setState(() {
+                            _pacienteEmAtendimento = petData;
+                            _modoConsulta = true;
+                          });
+                        },
+                        icon: const Icon(
+                          FontAwesomeIcons.stethoscope,
+                          size: 18,
+                        ),
+                        label: const Text("CHAMAR / INICIAR"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _corAcai,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 30,
+                            vertical: 20,
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+
+                    // 3. Continuar Consulta (Se já estiver em atendimento)
+                    if (status == 'em_atendimento')
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _pacienteEmAtendimento = petData;
+                            _modoConsulta = true;
+                          });
+                        },
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text("CONTINUAR ATENDIMENTO"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 30,
+                            vertical: 20,
+                          ),
+                        ),
+                      ),
+
+                    if (status == 'concluido')
+                      const Text(
+                        "Atendimento Concluído",
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: () {

@@ -99,6 +99,21 @@
           "destination": "/index.html"
         }
       ]
+    },
+    {
+      "target": "lapets",
+      "public": "build/web_lapets",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
     }
   ]
 }
