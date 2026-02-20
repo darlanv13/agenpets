@@ -16,7 +16,7 @@ exports.criarContaProfissional = onCall({
 
     // Agora aceita 'documento' que pode ser CPF ou CNPJ.
     // Mantemos 'cpf' para compatibilidade se vier, mas preferimos 'documento'.
-    const { nome, cpf, documento, senha, habilidades, perfil, tenantId, acessos } = request.data;
+    const { nome, cpf, documento, senha, habilidades, perfil, tenantId, acessos, crmv } = request.data;
 
     const docFinal = documento || cpf;
 
@@ -106,6 +106,10 @@ exports.criarContaProfissional = onCall({
             tenantId: tenantId,
         };
 
+        if (crmv) {
+            dadosProfissional.crmv = crmv;
+        }
+
         if (codigoVendedor) {
             dadosProfissional.codigo_vendedor = codigoVendedor;
         }
@@ -136,7 +140,7 @@ exports.atualizarContaProfissional = onCall({
     maxInstances: 10,
     cors: true,
 }, async (request) => {
-    const { uid, nome, habilidades, acessos, perfil, tenantId } = request.data;
+    const { uid, nome, habilidades, acessos, perfil, tenantId, crmv } = request.data;
 
     if (!uid || !tenantId) {
         throw new HttpsError("invalid-argument", "UID e TenantId são obrigatórios.");
@@ -165,6 +169,10 @@ exports.atualizarContaProfissional = onCall({
             perfil: perfil || "padrao",
             atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
         };
+
+        if (crmv !== undefined) {
+            updateData.crmv = crmv;
+        }
 
         // Remove campos undefined/null para não apagar dados véios sem querer
         Object.keys(updateData).forEach((key) => updateData[key] === undefined && delete updateData[key]);

@@ -24,6 +24,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
   final _nomeController = TextEditingController();
   final _docController = TextEditingController(); // Renamed from _cpfController
   final _senhaController = TextEditingController();
+  final _crmvController = TextEditingController();
 
   var maskCpf = MaskTextInputFormatter(
     mask: '###.###.###-##',
@@ -200,6 +201,12 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
       return;
     }
 
+    if (_rolesSelecionadas.contains('veterinario') &&
+        _crmvController.text.trim().isEmpty) {
+      _showSnack("CRMV é obrigatório para veterinários.", Colors.orange);
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       List<String> acessos = _selectedAccess.entries
@@ -223,6 +230,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
           'perfil': perfil,
           'tenantId': widget.tenantId,
           'tipo_documento': _isCnpj ? 'cnpj' : 'cpf', // Informa o tipo
+          'crmv': _crmvController.text.trim(),
         });
         if (mounted) _showSnack("Adicionado!", Colors.green);
       } else {
@@ -235,6 +243,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
           'acessos': acessos,
           'perfil': perfil,
           'tenantId': widget.tenantId,
+          'crmv': _crmvController.text.trim(),
         });
         if (mounted) _showSnack("Atualizado!", Colors.green);
       }
@@ -290,6 +299,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     setState(() {
       _editingUid = uid;
       _nomeController.text = data['nome'] ?? '';
+      _crmvController.text = data['crmv'] ?? '';
 
       // Detecta se é CNPJ ou CPF baseado no tamanho do documento salvo
       String doc = data['documento'] ?? (data['cpf'] ?? '');
@@ -317,6 +327,7 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     _nomeController.clear();
     _docController.clear();
     _senhaController.clear();
+    _crmvController.clear();
     setState(() {
       _isCnpj = false; // Reset p/ CPF default
       _rolesSelecionadas.clear();
@@ -468,6 +479,14 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
                 _buildChip("Gerente", "master", color: Colors.amber[800]),
               ],
             ),
+            if (_rolesSelecionadas.contains('veterinario')) ...[
+              SizedBox(height: 15),
+              _buildInput(
+                _crmvController,
+                "CRMV (Obrigatório)",
+                FontAwesomeIcons.userDoctor,
+              ),
+            ],
             if (!_rolesSelecionadas.contains('master')) ...[
               Divider(height: 30),
               Text(
