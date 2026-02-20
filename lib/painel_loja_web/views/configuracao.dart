@@ -30,6 +30,7 @@ class _ConfiguracaoViewState extends State<ConfiguracaoView> {
   TimeOfDay? _fechamento;
   final _tempoBanhoController = TextEditingController();
   final _tempoTosaController = TextEditingController();
+  final _tempoConsultaController = TextEditingController();
 
   // Dias da Semana (1 = Seg, 7 = Dom)
   List<int> _diasFuncionamento = [1, 2, 3, 4, 5, 6];
@@ -64,6 +65,8 @@ class _ConfiguracaoViewState extends State<ConfiguracaoView> {
           _tempoBanhoController.text = (data['tempo_banho_min'] ?? 60)
               .toString();
           _tempoTosaController.text = (data['tempo_tosa_min'] ?? 90).toString();
+          _tempoConsultaController.text = (data['tempo_consulta_min'] ?? 30)
+              .toString();
           if (data['dias_funcionamento'] != null) {
             _diasFuncionamento = List<int>.from(data['dias_funcionamento']);
           }
@@ -96,6 +99,8 @@ class _ConfiguracaoViewState extends State<ConfiguracaoView> {
             'horario_fechamento': _timeToString(_fechamento),
             'tempo_banho_min': int.tryParse(_tempoBanhoController.text) ?? 60,
             'tempo_tosa_min': int.tryParse(_tempoTosaController.text) ?? 90,
+            'tempo_consulta_min':
+                int.tryParse(_tempoConsultaController.text) ?? 30,
             'dias_funcionamento': _diasFuncionamento,
             // Módulos são gerenciados apenas pelo Super Admin (Admin Tenants)
             // Não salvamos 'tem_*' aqui para evitar sobrescrita acidental
@@ -326,8 +331,10 @@ class _ConfiguracaoViewState extends State<ConfiguracaoView> {
                       SizedBox(height: 30),
 
                       // 4. DURAÇÃO DOS SERVIÇOS
-                      if (_temBanhoTosa) ...[
+                      if (_temBanhoTosa || _temVeterinario)
                         _buildSectionTitle("Duração dos Serviços"),
+
+                      if (_temBanhoTosa) ...[
                         Row(
                           children: [
                             Expanded(
@@ -349,7 +356,24 @@ class _ConfiguracaoViewState extends State<ConfiguracaoView> {
                             ),
                           ],
                         ),
+                        SizedBox(height: 20),
                       ],
+
+                      if (_temVeterinario)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDurationCard(
+                                "Consulta Veterinária",
+                                FontAwesomeIcons.userDoctor,
+                                Colors.green,
+                                _tempoConsultaController,
+                              ),
+                            ),
+                            SizedBox(width: 20),
+                            Spacer(), // Placeholder para manter alinhamento
+                          ],
+                        ),
                     ],
                   ),
                 ),

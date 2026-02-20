@@ -16,6 +16,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nomeCtrl;
   late TextEditingController _cpfCtrl;
+  late TextEditingController _crmvCtrl;
 
   // Skills
   bool fazBanho = false;
@@ -23,6 +24,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
   bool fazVendas = false;
   bool fazCaixa = false;
   bool fazMaster = false;
+  bool fazVeterinario = false;
 
   bool ativo = true;
   bool _isLoading = false;
@@ -53,6 +55,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
     final data = widget.profissional.data() as Map<String, dynamic>;
     _nomeCtrl = TextEditingController(text: data['nome'] ?? '');
     _cpfCtrl = TextEditingController(text: data['cpf'] ?? '');
+    _crmvCtrl = TextEditingController(text: data['crmv'] ?? '');
     ativo = data['ativo'] ?? true;
 
     final List<dynamic> skills = data['habilidades'] ?? [];
@@ -61,6 +64,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
     fazVendas = skills.contains('vendedor');
     fazCaixa = skills.contains('caixa');
     fazMaster = skills.contains('master');
+    fazVeterinario = skills.contains('veterinario');
 
     // Init Access
     final List<dynamic> currentAccess = data['acessos'] ?? [];
@@ -81,6 +85,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
       if (fazVendas) habs.add('vendedor');
       if (fazCaixa) habs.add('caixa');
       if (fazMaster) habs.add('master');
+      if (fazVeterinario) habs.add('veterinario');
 
       String perfil = fazMaster ? 'master' : 'padrao';
 
@@ -102,6 +107,7 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
         'perfil': perfil,
         'ativo': ativo,
         'acessos': acessos,
+        'crmv': fazVeterinario ? _crmvCtrl.text.trim() : null,
         // CPF não atualiza pois é chave/login
       });
 
@@ -292,6 +298,30 @@ class _ProfessionalEditorDialogState extends State<ProfessionalEditorDialog> {
                   fazCaixa,
                   (v) => setState(() => fazCaixa = v!),
                 ),
+                _buildCheckbox(
+                  "Veterinário",
+                  FontAwesomeIcons.userDoctor,
+                  fazVeterinario,
+                  (v) => setState(() => fazVeterinario = v!),
+                ),
+                if (fazVeterinario)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 40, top: 5, bottom: 10),
+                    child: TextFormField(
+                      controller: _crmvCtrl,
+                      decoration: InputDecoration(
+                        labelText: "Número CRMV (Obrigatório)",
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      validator: (v) {
+                        if (fazVeterinario && (v == null || v.isEmpty)) {
+                          return 'Informe o CRMV do veterinário.';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
                 Divider(),
                 _buildCheckbox(
                   "Master (Gerente/Admin)",
