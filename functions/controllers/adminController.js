@@ -8,11 +8,10 @@ exports.criarContaProfissional = onCall({
     cors: true,
 }, async (request) => {
     // 1. Segurança: (Descomente depois de ter o primeiro Master criado)
-    /*
+    
       if (!request.auth || request.auth.token.admin !== true) {
           throw new HttpsError('permission-denied', 'Apenas Admin/Master pode criar contas.');
       }
-      */
 
     // Agora aceita 'documento' que pode ser CPF ou CNPJ.
     // Mantemos 'cpf' para compatibilidade se vier, mas preferimos 'documento'.
