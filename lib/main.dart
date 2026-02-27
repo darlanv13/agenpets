@@ -1,32 +1,27 @@
-import 'package:agenpet/painel_loja_web/admin_web_screen.dart';
-import 'package:agenpet/client_app/screens/assinatura_screen.dart';
-import 'package:agenpet/client_app/screens/minhas_agendas.dart'; // Ensure this file contains MinhasAgendasScreen
-import 'package:agenpet/client_app/screens/hotel_screen.dart';
-import 'package:agenpet/client_app/screens/creche_screen.dart';
-import 'package:agenpet/client_app/screens/meus_pets_screen.dart';
-import 'package:agenpet/client_app/screens/perfil_screen.dart';
-import 'package:agenpet/profissional_app/profissional_screen.dart';
+import 'package:agenpet/features/store/presentation/views/admin_web_screen.dart';
+import 'package:agenpet/features/subscription/presentation/screens/assinatura_screen.dart';
+import 'package:agenpet/features/scheduling/presentation/screens/minhas_agendas.dart';
+import 'package:agenpet/features/hotel/presentation/screens/hotel_screen.dart';
+import 'package:agenpet/features/creche/presentation/screens/creche_screen.dart';
+import 'package:agenpet/features/pets/presentation/screens/meus_pets_screen.dart';
+import 'package:agenpet/features/auth/presentation/screens/perfil_screen.dart';
+import 'package:agenpet/features/professional/presentation/views/profissional_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_localizations/flutter_localizations.dart'; // Para calendário em PT-BR
-import 'firebase_options.dart'; // Gerado pelo flutterfire configure
-import 'config/app_config.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:agenpet/core/config/firebase_options.dart';
+import 'package:agenpet/core/config/app_config.dart';
 
-// Import das telas
-import 'login_screen.dart';
-import 'profissional_app/login_profissional_screen.dart'; // Import da nova tela
-import 'client_app/screens/home_screen.dart';
-import 'client_app/screens/agendamento_screen.dart';
-import 'client_app/screens/pagamento_screen.dart';
-import 'client_app/screens/cadastro_screen.dart'; // Vamos criar abaixo
+import 'package:agenpet/features/auth/presentation/screens/login_screen.dart';
+import 'package:agenpet/features/professional/presentation/views/login_profissional_screen.dart';
+import 'package:agenpet/features/auth/presentation/screens/home_screen.dart';
+import 'package:agenpet/features/scheduling/presentation/screens/agendamento_screen.dart';
+import 'package:agenpet/features/payment/presentation/screens/pagamento_screen.dart';
+import 'package:agenpet/features/auth/presentation/screens/cadastro_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inicializa o Firebase
-  // Se der erro aqui, lembre de rodar: flutterfire configure
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(MyApp());
 }
 
@@ -38,13 +33,11 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
-
-      // Configuração de Tema (Cores do App)
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        primaryColor: Color(0xFF0056D2), // Azul Petshop
+        primaryColor: Color(0xFF0056D2),
         scaffoldBackgroundColor: Colors.grey[50],
-        useMaterial3: false, // Mantém estilo clássico por enquanto
+        useMaterial3: false,
         appBarTheme: AppBarTheme(
           backgroundColor: Color(0xFF0056D2),
           centerTitle: true,
@@ -60,21 +53,16 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-
-      // Configuração de Idioma (Para datas em Português)
       localizationsDelegates: [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: [const Locale('pt', 'BR')],
-
-      // Rotas de Navegação
       initialRoute: '/login',
       routes: {
         '/login': (context) => LoginScreen(),
-        '/login_profissional': (context) =>
-            LoginProfissionalScreen(), // Rota nova
+        '/login_profissional': (context) => LoginProfissionalScreen(),
         '/cadastro': (context) => CadastroScreen(),
         '/home': (context) => HomeScreen(),
         '/agendamento': (context) => AgendamentoScreen(),
