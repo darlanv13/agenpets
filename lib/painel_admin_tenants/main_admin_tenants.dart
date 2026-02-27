@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:agenpet/firebase_options.dart';
+import 'package:agenpet/core/config/firebase_options.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/login_admin_tenants_view.dart';
 

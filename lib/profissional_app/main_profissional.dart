@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:agenpet/firebase_options.dart';
-import 'package:agenpet/profissional_app/login_profissional_screen.dart';
-import 'package:agenpet/profissional_app/profissional_screen.dart';
-import 'package:agenpet/painel_loja_web/admin_web_screen.dart';
+import 'package:agenpet/core/config/firebase_options.dart';
+import 'package:agenpet/features/professional/presentation/views/login_profissional_screen.dart';
+import 'package:agenpet/features/professional/presentation/views/profissional_screen.dart';
+import 'package:agenpet/features/store/presentation/views/admin_web_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
