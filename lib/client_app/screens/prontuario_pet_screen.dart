@@ -71,7 +71,7 @@ class _ProntuarioPetScreenState extends State<ProntuarioPetScreen>
           .doc(widget.userId)
           .collection('pets')
           .doc(widget.petId)
-          .collection('prontuario')
+          .collection('prontuario_pet')
           .orderBy('data', descending: true)
           .snapshots(),
       builder: (context, snapshot) {

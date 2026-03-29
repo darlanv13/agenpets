@@ -66,6 +66,15 @@ class _TenantTeamManagerState extends State<TenantTeamManager> {
     _loadTenantConfig();
   }
 
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _docController.dispose();
+    _senhaController.dispose();
+    _crmvController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadTenantConfig() async {
     try {
       final doc = await _db

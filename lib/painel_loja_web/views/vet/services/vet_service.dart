@@ -93,7 +93,7 @@ class VetService {
         .doc(tutorId)
         .collection('pets')
         .doc(petId)
-        .collection('prontuario')
+        .collection('prontuario_pet')
         .doc();
 
     final consultaData = {
