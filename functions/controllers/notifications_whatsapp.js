@@ -1,10 +1,13 @@
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const { db } = require("../config/firebase");
 const axios = require("axios");
 
-// --- CONFIGURAÇÃO MANUAL (Hardcoded) ---
-const META_TOKEN = "EAALnGvHDVQ0BQhZBeXoA6CE9EmF8yKK4DuZAmx8aVZByBpSLRGpZCNga53HsFjACXO8C8LRg6xNnTZCVtynUSO7vDCISWn5Nrz3vTZBBfSUukZAOZAKchCn97yZAlcZCQxzh2uxZB7RCVkoxqyPr0uxZC6pYbCZCA50TB7jyxCbg5X16UUj9EszWUVkVuILSyrQwECGX5jAZDZD";
-const PHONE_NUMBER_ID = "1013501445171579";
+// --- CONFIGURAÇÃO (Segura) ---
+// Para configurar o segredo: firebase functions:secrets:set META_TOKEN
+const metaToken = defineSecret("META_TOKEN");
+// Pode ser configurado via params ou manter default
+const phoneNumberId = defineString("PHONE_NUMBER_ID", { default: "1013501445171579" });
 const VERSION = "v24.0";
 
 /**
@@ -14,7 +17,8 @@ const VERSION = "v24.0";
 exports.whatsappConfirmacaoAgendamento = onDocumentCreated({
     document: "agendamentos/{id}",
     region: "southamerica-east1",
-    database: "agenpets"
+    database: "agenpets",
+    secrets: [metaToken] // Garante acesso ao segredo
 }, async (event) => {
     const agendamento = event.data.data();
 
@@ -32,7 +36,9 @@ exports.whatsappConfirmacaoAgendamento = onDocumentCreated({
             await enviarWhatsApp(
                 userData.telefone,
                 "confirmacao_agendamento",
-                [agendamento.pet_nome || "seu pet", dataFormatada, horaFormatada]
+                [agendamento.pet_nome || "seu pet", dataFormatada, horaFormatada],
+                metaToken.value(),
+                phoneNumberId.value()
             );
         }
     }
@@ -45,7 +51,8 @@ exports.whatsappConfirmacaoAgendamento = onDocumentCreated({
 exports.whatsappPetPronto = onDocumentUpdated({
     document: "agendamentos/{id}",
     region: "southamerica-east1",
-    database: "agenpets"
+    database: "agenpets",
+    secrets: [metaToken] // Garante acesso ao segredo
 }, async (event) => {
     if (!event.data.after.exists) return null;
 
@@ -62,7 +69,9 @@ exports.whatsappPetPronto = onDocumentUpdated({
             await enviarWhatsApp(
                 userData.telefone,
                 "pet_pronto",
-                [novo.pet_nome || "seu pet"]
+                [novo.pet_nome || "seu pet"],
+                metaToken.value(),
+                phoneNumberId.value()
             );
         }
     }
@@ -71,8 +80,8 @@ exports.whatsappPetPronto = onDocumentUpdated({
 /**
  * Função Auxiliar de Envio (Axios)
  */
-async function enviarWhatsApp(telefone, templateName, parametros) {
-    const url = `https://graph.facebook.com/${VERSION}/${PHONE_NUMBER_ID}/messages`;
+async function enviarWhatsApp(telefone, templateName, parametros, token, phoneId) {
+    const url = `https://graph.facebook.com/${VERSION}/${phoneId}/messages`;
 
     try {
         await axios.post(url, {
@@ -89,7 +98,7 @@ async function enviarWhatsApp(telefone, templateName, parametros) {
             }
         }, {
             headers: {
-                'Authorization': `Bearer ${META_TOKEN}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -98,3 +107,6 @@ async function enviarWhatsApp(telefone, templateName, parametros) {
         console.error("Erro WhatsApp API:", error.response ? error.response.data : error.message);
     }
 }
+
+// Exporta a função auxiliar para uso em outros controllers (ex: Marketing)
+exports.enviarWhatsApp = enviarWhatsApp;

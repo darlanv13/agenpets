@@ -19,6 +19,7 @@ import '../views/creche/creche_view.dart';
 import '../views/estoque/estoque_view.dart';
 import '../views/taxi_dog/logistica_taxi_dog_view.dart';
 import '../views/vet/vet_dashboard_view.dart';
+import '../views/financeiro/financeiro_view.dart';
 import 'package:agenpet/painel_admin_tenants/views/gestao_tenants_view.dart';
 
 class AdminModule {
@@ -208,6 +209,13 @@ class AdminAccessManager {
         title: "Configurações",
         icon: Icons.settings_rounded,
         widget: ConfiguracaoView(),
+      ),
+      AdminModule(
+        id: 'financeiro',
+        title: "Financeiro",
+        icon: Icons.attach_money,
+        section: "GESTÃO",
+        widget: FinanceiroView(),
       ),
       AdminModule(
         id: 'gestao_estoque',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,6 +25,57 @@ class _EstoqueViewState extends State<EstoqueView> {
 
   String _filtroBusca = '';
   String _filtroStatus = 'Todos'; // Todos, Baixo Estoque, Sem Estoque
+  String _tipoBusca = 'nome'; // nome, codigo_barras, marca
+
+  Timer? _debounce;
+  Stream<QuerySnapshot>? _produtoStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupStream();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _setupStream() {
+    Query query = _db
+        .collection('tenants')
+        .doc(AppConfig.tenantId)
+        .collection('produtos');
+
+    if (_filtroBusca.isNotEmpty) {
+      // Busca específica pelo campo selecionado (case-sensitive)
+      query = query
+          .orderBy(_tipoBusca)
+          .startAt([_filtroBusca]).endAt([_filtroBusca + '\uf8ff']);
+    } else {
+      // Ordenação padrão por nome
+      query = query.orderBy('nome');
+    }
+
+    // Limite para evitar leitura excessiva
+    // Aumentamos o limite se for busca específica, mas mantemos 100 para listagem geral
+    query = query.limit(100);
+
+    setState(() {
+      _produtoStream = query.snapshots();
+    });
+  }
+
+  void _onSearchChanged(String val) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      setState(() {
+        _filtroBusca = val;
+        _setupStream();
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,12 +97,7 @@ class _EstoqueViewState extends State<EstoqueView> {
 
   Widget _buildContent() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _db
-          .collection('tenants')
-          .doc(AppConfig.tenantId)
-          .collection('produtos')
-          .orderBy('nome')
-          .snapshots(),
+      stream: _produtoStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: _corAcai));
@@ -58,20 +105,7 @@ class _EstoqueViewState extends State<EstoqueView> {
 
         var docs = snapshot.data!.docs;
 
-        // Filtros
-        if (_filtroBusca.isNotEmpty) {
-          docs = docs.where((doc) {
-            var data = doc.data() as Map<String, dynamic>;
-            String nome = (data['nome'] ?? '').toString().toLowerCase();
-            String codigo = (data['codigo_barras'] ?? '').toString();
-            String marca = (data['marca'] ?? '').toString().toLowerCase();
-            String busca = _filtroBusca.toLowerCase();
-            return nome.contains(busca) ||
-                codigo.contains(busca) ||
-                marca.contains(busca);
-          }).toList();
-        }
-
+        // Filtro de Status ainda é client-side (nos 100 itens retornados)
         if (_filtroStatus != 'Todos') {
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
@@ -204,7 +238,7 @@ class _EstoqueViewState extends State<EstoqueView> {
             );
           },
         ),
-        // Filter Dropdown
+        // Filter Status Dropdown
         Container(
           padding: EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
@@ -224,12 +258,39 @@ class _EstoqueViewState extends State<EstoqueView> {
             ),
           ),
         ),
+        // Search Type Dropdown
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _tipoBusca,
+              items: [
+                {'val': 'nome', 'label': 'Nome'},
+                {'val': 'codigo_barras', 'label': 'Cód. Barras'},
+                {'val': 'marca', 'label': 'Marca'},
+              ]
+                  .map((e) => DropdownMenuItem(
+                      value: e['val'], child: Text(e['label']!)))
+                  .toList(),
+              onChanged: (v) {
+                setState(() {
+                  _tipoBusca = v!;
+                  _setupStream();
+                });
+              },
+            ),
+          ),
+        ),
         SizedBox(
-          width: isSmall ? double.infinity : 300,
+          width: isSmall ? double.infinity : 200,
           child: TextField(
-            onChanged: (val) => setState(() => _filtroBusca = val),
+            onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              hintText: "Buscar produto...",
+              hintText: "Buscar...",
               prefixIcon: Icon(Icons.search, color: Colors.grey),
               filled: true,
               fillColor: Colors.white,
