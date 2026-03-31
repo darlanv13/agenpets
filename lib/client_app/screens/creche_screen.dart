@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../../services/firebase_service.dart';
+import 'package:agenpet/services/geolocation_service.dart';
 
 class CrecheScreen extends StatefulWidget {
   const CrecheScreen({super.key});
@@ -21,6 +22,7 @@ class _CrecheScreenState extends State<CrecheScreen> {
   );
 
   final _firebaseService = FirebaseService();
+  final _geolocationService = GeolocationService();
   final PageController _pageController = PageController();
 
   // --- CORES ---
@@ -33,6 +35,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
   bool _usaTaxiDog = false;
   double _precoTaxi = 0.0;
   String _modalidadeTaxi = 'ida_volta';
+  double? _latitude;
+  double? _longitude;
 
   // --- ESTADO ---
   int _currentStep = 0;
@@ -209,6 +213,8 @@ class _CrecheScreenState extends State<CrecheScreen> {
         taxiDog: _usaTaxiDog,
         endereco: _usaTaxiDog ? _enderecoController.text.trim() : null,
         modalidadeTaxi: _usaTaxiDog ? _modalidadeTaxi : null,
+        latitude: _usaTaxiDog ? _latitude : null,
+        longitude: _usaTaxiDog ? _longitude : null,
       );
 
       if (_usaTaxiDog) {
@@ -1035,6 +1041,18 @@ class _CrecheScreenState extends State<CrecheScreen> {
                             prefixIcon: Icon(Icons.location_on, size: 18),
                           ),
                         ),
+                    SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: _usarLocalizacaoAtual,
+                      icon: Icon(Icons.my_location, color: _corAcai),
+                      label: Text(
+                        "Usar minha localização atual",
+                        style: GoogleFonts.poppins(
+                          color: _corAcai,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                       ],
                     ],
                   ),
@@ -1071,6 +1089,58 @@ class _CrecheScreenState extends State<CrecheScreen> {
         );
       },
     );
+  }
+
+  Future<void> _usarLocalizacaoAtual() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final position = await _geolocationService.determinePosition();
+
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Confirmar Localização"),
+          content: Text(
+              "Você está no local onde ${_petNome ?? 'o pet'} será buscado?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text("Não"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text("Sim"),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        final address =
+            await _geolocationService.getAddressFromPosition(position);
+        if (mounted) {
+          setState(() {
+            _latitude = position.latitude;
+            _longitude = position.longitude;
+            if (address != null) {
+              _enderecoController.text = address;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildSummaryRow(IconData icon, String label, String value) {
