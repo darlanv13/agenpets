@@ -1,5 +1,5 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { eachDayOfInterval, format, isWithinInterval, startOfDay, addDays, differenceInCalendarDays } = require("date-fns");
+const { eachDayOfInterval, format, startOfDay, addDays } = require("date-fns");
 const { db, admin } = require("../config/firebase");
 
 exports.reservarCreche = onCall(async (request) => {
@@ -32,27 +32,57 @@ exports.reservarCreche = onCall(async (request) => {
             vouchersAUsar = Math.min(dates.length, vouchersDisponiveis);
         }
 
-        // 2. Processar disponibilidade para cada data
+        // 2. Processar disponibilidade de forma agregada (Otimizado: evita N+1)
+        const sortedDates = [...dates].map((d) => new Date(d)).sort((a, b) => a - b);
+        const minDate = startOfDay(sortedDates[0]);
+        const maxDate = startOfDay(sortedDates[sortedDates.length - 1]);
+
+        // Busca Configuração da Loja (Capacidade Dinâmica)
+        const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
+        const capacidadeMax = configDoc.exists ? (configDoc.data().capacidade_creche || 60) : 60;
+
+        // Busca todas as reservas ativas no período
+        // check_out > minDate: reservas que terminam após o início do nosso período
+        // check_in <= maxDate: reservas que começam antes do fim do nosso período
+        const snapshot = await reservasRef
+            .where("status", "in", ["reservado", "hospedado"])
+            .where("check_out", ">", minDate)
+            .where("check_in", "<=", addDays(maxDate, 1))
+            .get();
+
+        // Mapa de Ocupação em Memória
+        const ocupacaoDiaria = {};
+        snapshot.forEach((doc) => {
+            const r = doc.data();
+            const rIn = r.check_in.toDate();
+            const rOut = r.check_out.toDate();
+
+            try {
+                // Considera o intervalo da reserva
+                const diasEstadia = eachDayOfInterval({
+                    start: startOfDay(rIn),
+                    end: startOfDay(rOut),
+                });
+                diasEstadia.forEach((dia) => {
+                    const diaStr = format(dia, "yyyy-MM-dd");
+                    ocupacaoDiaria[diaStr] = (ocupacaoDiaria[diaStr] || 0) + 1;
+                });
+            } catch (e) {
+                console.warn("Erro ao processar intervalo de reserva:", e.message);
+            }
+        });
+
+        // Validação em memória para cada data solicitada
         for (const dateStr of dates) {
-            const dayStart = startOfDay(new Date(dateStr));
-            const dayEnd = addDays(dayStart, 1);
+            const targetDate = startOfDay(new Date(dateStr));
+            const diaStr = format(targetDate, "yyyy-MM-dd");
+            const ocupacao = ocupacaoDiaria[diaStr] || 0;
 
-            const snapshot = await reservasRef
-                .where("status", "in", ["reservado", "hospedado"])
-                .where("check_out", ">", dayStart)
-                .get();
-
-            let vagasOcupadas = 0;
-            snapshot.forEach(doc => {
-                const r = doc.data();
-                const rIn = r.check_in.toDate();
-                if (rIn < dayEnd) {
-                    vagasOcupadas++;
-                }
-            });
-
-            if (vagasOcupadas >= 60) {
-                throw new HttpsError('resource-exhausted', `Creche lotada para o dia ${format(dayStart, 'dd/MM/yyyy')}.`);
+            if (ocupacao >= capacidadeMax) {
+                throw new HttpsError(
+                    "resource-exhausted",
+                    `Creche lotada para o dia ${format(targetDate, "dd/MM/yyyy")}.`,
+                );
             }
         }
 
@@ -116,7 +146,9 @@ exports.obterDiasLotadosCreche = onCall(async (request) => {
     if (!tenantId) throw new HttpsError('invalid-argument', 'ID da loja (tenantId) é obrigatório.');
 
     // 1. Configurações
-    const CAPACIDADE_MAXIMA = 60; // Ou busque do banco config
+    const configDoc = await db.collection("tenants").doc(tenantId).collection("config").doc("parametros").get();
+    const CAPACIDADE_MAXIMA = configDoc.exists ? (configDoc.data().capacidade_creche || 60) : 60;
+
     const hoje = startOfDay(new Date());
     const limiteFuturo = addDays(hoje, 60); // Verifica os próximos 60 dias
 
