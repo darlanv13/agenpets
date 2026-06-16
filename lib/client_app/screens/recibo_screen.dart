@@ -458,27 +458,32 @@ class ReciboScreen extends StatelessWidget {
     // Preparar imagens do checklist
     List<pw.Widget> fotosWidgets = [];
     if (checklist['fotos_lesoes_paths'] != null) {
-      for (String url in checklist['fotos_lesoes_paths']) {
+      final List<String> urls =
+          List<String>.from(checklist['fotos_lesoes_paths']);
+
+      final imageFutures = urls.map((url) async {
         try {
           final netImage = await networkImage(url);
-          fotosWidgets.add(
-            pw.Container(
-              margin: const pw.EdgeInsets.only(right: 10),
-              width: 100,
-              height: 100,
-              decoration: pw.BoxDecoration(
-                borderRadius: pw.BorderRadius.circular(8),
-                image: pw.DecorationImage(
-                  image: netImage,
-                  fit: pw.BoxFit.cover,
-                ),
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(right: 10),
+            width: 100,
+            height: 100,
+            decoration: pw.BoxDecoration(
+              borderRadius: pw.BorderRadius.circular(8),
+              image: pw.DecorationImage(
+                image: netImage,
+                fit: pw.BoxFit.cover,
               ),
             ),
           );
         } catch (e) {
-          debugPrint("Erro ao carregar imagem para PDF: $e");
+          debugPrint("Erro ao carregar imagem para PDF ($url): $e");
+          return null;
         }
-      }
+      });
+
+      final results = await Future.wait(imageFutures);
+      fotosWidgets = results.whereType<pw.Widget>().toList();
     }
 
     doc.addPage(
